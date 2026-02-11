@@ -1,8 +1,10 @@
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import { supabase } from '../config/supabase.js'
 import { env } from '../config/env.js'
 import { BadRequestError, UnauthorizedError, ConflictError } from '../utils/errors.js'
 import { membersService } from './members.service.js'
+import { emailService } from './email.service.js'
 
 /**
  * Auth service - handles user authentication
@@ -10,13 +12,14 @@ import { membersService } from './members.service.js'
 export const authService = {
   /**
    * Register a new user
+   * Now requires email verification before login
    */
   async signup({ email, password, role = 'candidate', firstName = '', lastName = '', companyName = '', industry = '' }) {
-    // Create user in Supabase Auth (without relying on trigger)
+    // Create user in Supabase Auth (email NOT confirmed - requires verification)
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true,
+      email_confirm: false, // Changed: user must verify email
       user_metadata: {
         first_name: firstName,
         last_name: lastName,
@@ -46,7 +49,7 @@ export const authService = {
     if (existingProfile) {
       profile = existingProfile
     } else {
-      // Create profile manually
+      // Create profile manually with email_verified = false
       const { data: newProfile, error: profileError } = await supabase
         .from('profiles')
         .insert({
@@ -55,7 +58,8 @@ export const authService = {
           first_name: firstName || '',
           last_name: lastName || '',
           role: role,
-          status: 'pending'
+          status: 'pending',
+          email_verified: false
         })
         .select()
         .single()
@@ -93,12 +97,11 @@ export const authService = {
       } else {
         organization = orgData
 
-        // Update profile with organization_id and mark as active
+        // Update profile with organization_id (but status stays pending until verified)
         const { error: updateError } = await supabase
           .from('profiles')
           .update({
             organization_id: orgData.id,
-            status: 'active',
             onboarding_completed: true
           })
           .eq('id', authData.user.id)
@@ -107,7 +110,6 @@ export const authService = {
           console.error('Profile update error:', updateError)
         } else if (profile) {
           profile.organization_id = orgData.id
-          profile.status = 'active'
           profile.onboarding_completed = true
         }
 
@@ -128,15 +130,191 @@ export const authService = {
       }
     }
 
-    // Generate JWT
-    const token = this.generateToken(authData.user.id)
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex')
+    const tokenHash = crypto.createHash('sha256').update(verificationToken).digest('hex')
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
 
+    // Store verification token
+    const { error: tokenError } = await supabase
+      .from('email_verification_tokens')
+      .insert({
+        user_id: authData.user.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt
+      })
+
+    if (tokenError) {
+      console.error('[AuthService] Failed to store verification token:', tokenError)
+    }
+
+    // Send verification email (don't block on failure)
+    try {
+      await emailService.sendVerificationEmail(email, verificationToken, firstName)
+    } catch (emailError) {
+      console.error('[AuthService] Failed to send verification email:', emailError)
+      // Don't throw - account was created, email just failed
+    }
+
+    // Don't generate JWT - user must verify email first
     return {
       user: authData.user,
       profile,
       organization,
-      token
+      token: null, // No token until verified
+      requiresVerification: true
     }
+  },
+
+  /**
+   * Verify email with token
+   */
+  async verifyEmail(token) {
+    // Hash the incoming token
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+    // Find the token in database
+    const { data: verifyRecord, error: fetchError } = await supabase
+      .from('email_verification_tokens')
+      .select('id, user_id, expires_at, verified_at')
+      .eq('token_hash', tokenHash)
+      .single()
+
+    if (fetchError || !verifyRecord) {
+      throw new BadRequestError('Invalid or expired verification link')
+    }
+
+    // Check if already verified - return success instead of error
+    // This handles duplicate requests gracefully (e.g., user clicking link twice)
+    if (verifyRecord.verified_at) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', verifyRecord.user_id)
+        .single()
+
+      return {
+        alreadyVerified: true,
+        role: profile?.role || 'candidate'
+      }
+    }
+
+    // Check if token is expired
+    if (new Date(verifyRecord.expires_at) < new Date()) {
+      throw new BadRequestError('Verification link has expired. Please request a new one.')
+    }
+
+    // Get profile to determine role and organization
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*, organization:organizations!fk_profiles_organization(*)')
+      .eq('id', verifyRecord.user_id)
+      .single()
+
+    if (profileError || !profile) {
+      throw new BadRequestError('User not found')
+    }
+
+    // Mark profile as verified and active
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        email_verified: true,
+        status: 'active'
+      })
+      .eq('id', verifyRecord.user_id)
+
+    if (updateError) {
+      console.error('[AuthService] Failed to update profile:', updateError)
+      throw new BadRequestError('Failed to verify email')
+    }
+
+    // Confirm email in Supabase Auth
+    const { error: authUpdateError } = await supabase.auth.admin.updateUserById(
+      verifyRecord.user_id,
+      { email_confirm: true }
+    )
+
+    if (authUpdateError) {
+      console.error('[AuthService] Failed to confirm email in auth:', authUpdateError)
+    }
+
+    // Mark token as used
+    await supabase
+      .from('email_verification_tokens')
+      .update({ verified_at: new Date().toISOString() })
+      .eq('id', verifyRecord.id)
+
+    // Send welcome email based on role (don't block on failure)
+    try {
+      if (profile.role === 'employer') {
+        await emailService.sendWelcomeEmployerEmail(
+          profile.email,
+          profile.first_name,
+          profile.organization?.name || 'your company'
+        )
+      } else {
+        await emailService.sendWelcomeCandidateEmail(
+          profile.email,
+          profile.first_name
+        )
+      }
+    } catch (emailError) {
+      console.error('[AuthService] Failed to send welcome email:', emailError)
+    }
+
+    return { success: true, role: profile.role }
+  },
+
+  /**
+   * Resend verification email
+   */
+  async resendVerificationEmail(email) {
+    // Find user by email
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, first_name, email, email_verified')
+      .eq('email', email.toLowerCase())
+      .single()
+
+    // Always return success to not reveal if email exists
+    if (!profile) {
+      console.log('[AuthService] Resend verification requested for non-existent email:', email)
+      return { success: true }
+    }
+
+    // Check if already verified
+    if (profile.email_verified) {
+      throw new BadRequestError('Email is already verified. Please log in.')
+    }
+
+    // Generate new verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex')
+    const tokenHash = crypto.createHash('sha256').update(verificationToken).digest('hex')
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+
+    // Store new verification token
+    const { error: tokenError } = await supabase
+      .from('email_verification_tokens')
+      .insert({
+        user_id: profile.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt
+      })
+
+    if (tokenError) {
+      console.error('[AuthService] Failed to store verification token:', tokenError)
+      return { success: true }
+    }
+
+    // Send verification email
+    try {
+      await emailService.sendVerificationEmail(email, verificationToken, profile.first_name)
+    } catch (emailError) {
+      console.error('[AuthService] Failed to send verification email:', emailError)
+    }
+
+    return { success: true }
   },
 
   /**
@@ -228,6 +406,12 @@ export const authService = {
     }
 
     console.log('[AuthService] Profile fetched - role:', profile.role, 'email:', profile.email)
+
+    // Check if email is verified
+    if (profile.email_verified === false) {
+      console.log('[AuthService] Email not verified for:', profile.email)
+      throw new UnauthorizedError('EMAIL_NOT_VERIFIED')
+    }
 
     // Validate expected role if provided
     if (expectedRole && profile.role !== expectedRole) {
@@ -343,31 +527,143 @@ export const authService = {
   },
 
   /**
-   * Request password reset
+   * Request password reset - generates token, stores hash, sends email
    */
   async forgotPassword(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${env.frontendUrl}/reset-password`
-    })
+    // Find user by email
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, first_name, email')
+      .eq('email', email.toLowerCase())
+      .single()
 
-    if (error) {
-      // Don't reveal if email exists
-      console.error('Password reset error:', error)
+    // Always return success to not reveal if email exists
+    if (!profile) {
+      console.log('[AuthService] Password reset requested for non-existent email:', email)
+      return { success: true }
+    }
+
+    // Generate random token (32 bytes = 64 hex characters)
+    const token = crypto.randomBytes(32).toString('hex')
+
+    // Hash the token for storage
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+    // Set expiry to 1 hour from now
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+
+    // Store the token hash in database
+    const { error: insertError } = await supabase
+      .from('password_reset_tokens')
+      .insert({
+        user_id: profile.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt
+      })
+
+    if (insertError) {
+      console.error('[AuthService] Failed to store reset token:', insertError)
+      // Don't reveal the error to the user
+      return { success: true }
+    }
+
+    // Send password reset email
+    try {
+      await emailService.sendPasswordResetEmail(
+        profile.email,
+        token,
+        profile.first_name
+      )
+    } catch (emailError) {
+      console.error('[AuthService] Failed to send reset email:', emailError)
+      // Don't reveal the error to the user
     }
 
     return { success: true }
   },
 
   /**
-   * Reset password with token
+   * Reset password with token - validates token and updates password
    */
   async resetPassword(token, newPassword) {
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
+    // Hash the incoming token
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+    // Find the token in database
+    const { data: resetRecord, error: fetchError } = await supabase
+      .from('password_reset_tokens')
+      .select('id, user_id, expires_at, used_at')
+      .eq('token_hash', tokenHash)
+      .single()
+
+    if (fetchError || !resetRecord) {
+      throw new BadRequestError('Invalid or expired reset token')
+    }
+
+    // Check if token was already used
+    if (resetRecord.used_at) {
+      throw new BadRequestError('This reset link has already been used')
+    }
+
+    // Check if token is expired
+    if (new Date(resetRecord.expires_at) < new Date()) {
+      throw new BadRequestError('This reset link has expired')
+    }
+
+    // Update the user's password via Supabase Admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      resetRecord.user_id,
+      { password: newPassword }
+    )
+
+    if (updateError) {
+      console.error('[AuthService] Failed to update password:', updateError)
+      throw new BadRequestError('Failed to reset password')
+    }
+
+    // Mark token as used
+    await supabase
+      .from('password_reset_tokens')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', resetRecord.id)
+
+    return { success: true }
+  },
+
+  /**
+   * Change password for authenticated user
+   */
+  async changePassword(userId, currentPassword, newPassword) {
+    // Get user's email
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) {
+      throw new BadRequestError('User not found')
+    }
+
+    // Verify current password by attempting to sign in
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: profile.email,
+      password: currentPassword
     })
 
-    if (error) {
-      throw new BadRequestError('Failed to reset password')
+    if (authError) {
+      throw new UnauthorizedError('Current password is incorrect')
+    }
+
+    // Update to new password
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      userId,
+      { password: newPassword }
+    )
+
+    if (updateError) {
+      console.error('[AuthService] Failed to change password:', updateError)
+      throw new BadRequestError('Failed to change password')
     }
 
     return { success: true }

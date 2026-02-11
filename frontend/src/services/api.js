@@ -11,6 +11,20 @@ const getAuthStore = async () => {
   return authStore
 }
 
+// Flag to prevent logout loop - when true, we're already logging out
+let isLoggingOut = false
+
+// Public endpoints that don't need auth headers
+const publicEndpoints = [
+  '/auth/verify-email',
+  '/auth/login',
+  '/auth/signup',
+  '/auth/check-email',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/resend-verification'
+]
+
 /**
  * API client for communicating with the Node.js backend
  */
@@ -24,11 +38,16 @@ const api = axios.create({
 
 /**
  * Request interceptor - adds auth token to requests
+ * Skips auth header for public endpoints to avoid stale token issues
  */
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token')
-    if (token) {
+
+    // Check if this is a public endpoint that shouldn't send auth header
+    const isPublicEndpoint = publicEndpoints.some(ep => config.url?.includes(ep))
+
+    if (token && !isPublicEndpoint) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -40,6 +59,7 @@ api.interceptors.request.use(
 
 /**
  * Response interceptor - handles auth errors and formats responses
+ * Includes loop prevention for logout scenarios
  */
 api.interceptors.response.use(
   (response) => {
@@ -55,7 +75,8 @@ api.interceptors.response.use(
 
     // Only clear token for actual authentication failures
     // Don't clear for authorization issues like "No organization associated"
-    if (error.response?.status === 401) {
+    // Also skip if we're already in the process of logging out (prevents infinite loop)
+    if (error.response?.status === 401 && !isLoggingOut) {
       const authFailureMessages = [
         'No token provided',
         'Invalid token',
@@ -72,14 +93,17 @@ api.interceptors.response.use(
         console.log('[API] Auth failure detected, clearing token and syncing store:', message)
         localStorage.removeItem('access_token')
 
-        // Sync with Zustand auth store
+        // Sync with Zustand auth store (with loop prevention)
+        isLoggingOut = true
         try {
           const store = await getAuthStore()
           if (store) {
-            store.getState().logout()
+            await store.getState().logout()
           }
         } catch (e) {
           console.error('[API] Failed to sync auth store:', e)
+        } finally {
+          isLoggingOut = false
         }
       }
     }
@@ -98,7 +122,10 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (data) => api.post('/auth/reset-password', data),
-  checkEmail: (email) => api.post('/auth/check-email', { email })
+  changePassword: (data) => api.post('/auth/change-password', data),
+  checkEmail: (email) => api.post('/auth/check-email', { email }),
+  verifyEmail: (token) => api.get(`/auth/verify-email?token=${token}`),
+  resendVerification: (email) => api.post('/auth/resend-verification', { email })
 }
 
 /**

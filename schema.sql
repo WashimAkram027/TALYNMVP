@@ -3,35 +3,33 @@
 -- Version: 3.0 (Full MVP Schema)
 -- Run this in Supabase SQL Editor
 -- =============================================
-
 -- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+create extension IF not exists "uuid-ossp";
 
 -- =============================================
 -- 1. ENUMS (Custom Types)
 -- Using DO blocks to handle "already exists" errors
 -- =============================================
-
 -- Existing enums
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE user_role AS ENUM ('employer', 'candidate');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE account_status AS ENUM ('pending', 'active', 'suspended', 'deactivated');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE org_status AS ENUM ('pending_verification', 'active', 'suspended');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE industry_type AS ENUM (
         'mep_engineering',
         'energy_consulting',
@@ -52,19 +50,19 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE member_role AS ENUM ('owner', 'admin', 'manager', 'employee', 'contractor');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE member_status AS ENUM ('invited', 'pending', 'active', 'inactive', 'offboarded');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE employment_type AS ENUM ('full_time', 'part_time', 'contract', 'freelance');
 EXCEPTION
     WHEN duplicate_object THEN null;
@@ -73,148 +71,167 @@ END $$;
 -- =============================================
 -- NEW ENUMS FOR MVP FEATURES
 -- =============================================
-
 -- Payroll enums
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE payroll_status AS ENUM ('draft', 'processing', 'completed', 'cancelled');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE payroll_item_status AS ENUM ('pending', 'paid', 'failed');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 -- Time off enums
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE time_off_request_status AS ENUM ('pending', 'approved', 'rejected', 'cancelled');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 -- Job posting enums
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE job_posting_status AS ENUM ('draft', 'open', 'closed', 'filled');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE application_stage AS ENUM ('applied', 'screening', 'interview', 'assessment', 'offer', 'hired', 'rejected');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 -- Compliance enums
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE compliance_item_type AS ENUM ('contract', 'tax_form', 'id_verification', 'background_check', 'work_permit', 'insurance', 'other');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE compliance_status AS ENUM ('pending', 'submitted', 'approved', 'rejected', 'expired');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE alert_type AS ENUM ('info', 'warning', 'critical');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 -- Invoice enums
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE invoice_status AS ENUM ('draft', 'pending', 'paid', 'overdue', 'cancelled');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 -- Document enums
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE document_category AS ENUM ('contract', 'policy', 'tax', 'identity', 'payslip', 'other');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 -- Benefits enrollment status
-DO $$ BEGIN
+do $$ BEGIN
     CREATE TYPE benefits_status AS ENUM ('not_enrolled', 'pending', 'active', 'cancelled', 'expired');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-
 -- =============================================
 -- 2. INDUSTRIES LOOKUP TABLE (for dropdown)
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS industries (
-    id SERIAL PRIMARY KEY,
-    code TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    display_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE
+create table if not exists industries (
+  id SERIAL primary key,
+  code TEXT unique not null,
+  name TEXT not null,
+  display_order INT default 0,
+  is_active BOOLEAN default true
 );
 
 -- Insert industry options (ignore duplicates)
-INSERT INTO industries (code, name, display_order) VALUES
-    ('mep_engineering', 'MEP Engineering', 1),
-    ('energy_consulting', 'Energy Consulting', 2),
-    ('building_information_modeling', 'Building Information Modeling', 3),
-    ('architectural_designs', 'Architectural Designs', 4),
-    ('product_design', 'Product Design', 5),
-    ('engineering_analysis', 'Engineering Analysis', 6),
-    ('accounting', 'Accounting', 7),
-    ('construction_management', 'Construction Management', 8),
-    ('legal_services', 'Legal Services', 9),
-    ('healthcare_services', 'Healthcare Services', 10),
-    ('it_consulting', 'IT Consulting', 11),
-    ('software_development', 'Software Development', 12),
-    ('office_administration', 'Office Administration', 13),
-    ('other', 'Other', 99)
-ON CONFLICT (code) DO NOTHING;
-
+insert into
+  industries (code, name, display_order)
+values
+  ('mep_engineering', 'MEP Engineering', 1),
+  ('energy_consulting', 'Energy Consulting', 2),
+  (
+    'building_information_modeling',
+    'Building Information Modeling',
+    3
+  ),
+  (
+    'architectural_designs',
+    'Architectural Designs',
+    4
+  ),
+  ('product_design', 'Product Design', 5),
+  ('engineering_analysis', 'Engineering Analysis', 6),
+  ('accounting', 'Accounting', 7),
+  (
+    'construction_management',
+    'Construction Management',
+    8
+  ),
+  ('legal_services', 'Legal Services', 9),
+  ('healthcare_services', 'Healthcare Services', 10),
+  ('it_consulting', 'IT Consulting', 11),
+  (
+    'software_development',
+    'Software Development',
+    12
+  ),
+  (
+    'office_administration',
+    'Office Administration',
+    13
+  ),
+  ('other', 'Other', 99)
+on conflict (code) do nothing;
 
 -- =============================================
 -- 3. PROFILES TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    email TEXT NOT NULL,
-    first_name TEXT NOT NULL DEFAULT '',
-    last_name TEXT NOT NULL DEFAULT '',
-    full_name TEXT GENERATED ALWAYS AS (
-        TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))
-    ) STORED,
-    phone TEXT,
-    avatar_url TEXT,
-    role user_role NOT NULL,
-    status account_status NOT NULL DEFAULT 'pending',
-    resume_url TEXT,
-    resume_filename TEXT,
-    linkedin_url TEXT,
-    organization_id UUID,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_login_at TIMESTAMPTZ,
-    onboarding_completed BOOLEAN DEFAULT FALSE,
-    email_verified BOOLEAN DEFAULT FALSE
+create table if not exists profiles (
+  id UUID primary key references auth.users (id) on delete CASCADE,
+  email TEXT not null,
+  first_name TEXT not null default '',
+  last_name TEXT not null default '',
+  full_name TEXT GENERATED ALWAYS as (
+    TRIM(
+      COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')
+    )
+  ) STORED,
+  phone TEXT,
+  avatar_url TEXT,
+  role user_role not null,
+  status account_status not null default 'pending',
+  resume_url TEXT,
+  resume_filename TEXT,
+  linkedin_url TEXT,
+  organization_id UUID,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW(),
+  last_login_at TIMESTAMPTZ,
+  onboarding_completed BOOLEAN default false,
+  email_verified BOOLEAN default false
 );
 
 -- Add constraints if they don't exist
-DO $$ BEGIN
+do $$ BEGIN
     ALTER TABLE profiles ADD CONSTRAINT valid_email
     CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     ALTER TABLE profiles ADD CONSTRAINT valid_linkedin
     CHECK (
         linkedin_url IS NULL OR
@@ -225,43 +242,41 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-
 -- =============================================
 -- 4. ORGANIZATIONS TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS organizations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT,
-    industry industry_type NOT NULL,
-    industry_other TEXT,
-    email TEXT NOT NULL,
-    phone TEXT,
-    website TEXT,
-    legal_name TEXT,
-    registration_number TEXT,
-    address_line1 TEXT,
-    address_line2 TEXT,
-    city TEXT,
-    state TEXT,
-    postal_code TEXT,
-    country TEXT DEFAULT 'NP',
-    logo_url TEXT,
-    status org_status NOT NULL DEFAULT 'pending_verification',
-    verified_at TIMESTAMPTZ,
-    owner_id UUID NOT NULL,
-    settings JSONB DEFAULT '{
+create table if not exists organizations (
+  id UUID primary key default uuid_generate_v4 (),
+  name TEXT,
+  industry industry_type not null,
+  industry_other TEXT,
+  email TEXT not null,
+  phone TEXT,
+  website TEXT,
+  legal_name TEXT,
+  registration_number TEXT,
+  address_line1 TEXT,
+  address_line2 TEXT,
+  city TEXT,
+  state TEXT,
+  postal_code TEXT,
+  country TEXT default 'NP',
+  logo_url TEXT,
+  status org_status not null default 'pending_verification',
+  verified_at TIMESTAMPTZ,
+  owner_id UUID not null,
+  settings JSONB default '{
         "payment_terms": 30,
         "default_currency": "NPR",
         "invoice_prefix": "INV",
         "timezone": "Asia/Kathmandu"
     }'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
 
 -- Add constraint for industry_other
-DO $$ BEGIN
+do $$ BEGIN
     ALTER TABLE organizations ADD CONSTRAINT industry_other_required
     CHECK (
         (industry != 'other') OR
@@ -272,7 +287,7 @@ EXCEPTION
 END $$;
 
 -- Add foreign keys (if not exist)
-DO $$ BEGIN
+do $$ BEGIN
     ALTER TABLE profiles
     ADD CONSTRAINT fk_profiles_organization
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
@@ -280,7 +295,7 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
+do $$ BEGIN
     ALTER TABLE organizations
     ADD CONSTRAINT fk_organizations_owner
     FOREIGN KEY (owner_id) REFERENCES profiles(id) ON DELETE RESTRICT;
@@ -288,451 +303,486 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-
 -- =============================================
 -- 5. ORGANIZATION MEMBERS TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS organization_members (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    member_role member_role NOT NULL DEFAULT 'employee',
-    job_title TEXT,
-    department TEXT,
-    employment_type employment_type DEFAULT 'full_time',
-    status member_status NOT NULL DEFAULT 'invited',
-    invited_at TIMESTAMPTZ DEFAULT NOW(),
-    invited_by UUID REFERENCES profiles(id),
-    joined_at TIMESTAMPTZ,
-    offboarded_at TIMESTAMPTZ,
-    salary_amount DECIMAL(12,2),
-    salary_currency TEXT DEFAULT 'NPR',
-    pay_frequency TEXT DEFAULT 'monthly',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(organization_id, profile_id)
+create table if not exists organization_members (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  profile_id UUID not null references profiles (id) on delete CASCADE,
+  member_role member_role not null default 'employee',
+  job_title TEXT,
+  department TEXT,
+  employment_type employment_type default 'full_time',
+  status member_status not null default 'invited',
+  invited_at TIMESTAMPTZ default NOW(),
+  invited_by UUID references profiles (id) ON DELETE SET NULL,
+  joined_at TIMESTAMPTZ,
+  offboarded_at TIMESTAMPTZ,
+  salary_amount DECIMAL(12, 2),
+  salary_currency TEXT default 'NPR',
+  pay_frequency TEXT default 'monthly',
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW(),
+  unique (organization_id, profile_id)
 );
-
 
 -- =============================================
 -- 6. PAYROLL TABLES
 -- =============================================
-
 -- Payroll runs (batches)
-CREATE TABLE IF NOT EXISTS payroll_runs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    pay_period_start DATE NOT NULL,
-    pay_period_end DATE NOT NULL,
-    pay_date DATE NOT NULL,
-    status payroll_status NOT NULL DEFAULT 'draft',
-    total_amount DECIMAL(14,2) DEFAULT 0,
-    currency TEXT DEFAULT 'NPR',
-    notes TEXT,
-    created_by UUID REFERENCES profiles(id),
-    processed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists payroll_runs (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  pay_period_start DATE not null,
+  pay_period_end DATE not null,
+  pay_date DATE not null,
+  status payroll_status not null default 'draft',
+  total_amount DECIMAL(14, 2) default 0,
+  currency TEXT default 'NPR',
+  notes TEXT,
+  created_by UUID references profiles (id) ON DELETE SET NULL,
+  processed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
 
 -- Individual payroll items (one per employee per run)
-CREATE TABLE IF NOT EXISTS payroll_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    payroll_run_id UUID NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
-    member_id UUID NOT NULL REFERENCES organization_members(id) ON DELETE CASCADE,
-    base_salary DECIMAL(12,2) NOT NULL DEFAULT 0,
-    bonuses DECIMAL(12,2) DEFAULT 0,
-    deductions DECIMAL(12,2) DEFAULT 0,
-    tax_amount DECIMAL(12,2) DEFAULT 0,
-    net_amount DECIMAL(12,2) GENERATED ALWAYS AS (
-        base_salary + COALESCE(bonuses, 0) - COALESCE(deductions, 0) - COALESCE(tax_amount, 0)
-    ) STORED,
-    status payroll_item_status NOT NULL DEFAULT 'pending',
-    paid_at TIMESTAMPTZ,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(payroll_run_id, member_id)
+create table if not exists payroll_items (
+  id UUID primary key default uuid_generate_v4 (),
+  payroll_run_id UUID not null references payroll_runs (id) on delete CASCADE,
+  member_id UUID not null references organization_members (id) on delete CASCADE,
+  base_salary DECIMAL(12, 2) not null default 0,
+  bonuses DECIMAL(12, 2) default 0,
+  deductions DECIMAL(12, 2) default 0,
+  tax_amount DECIMAL(12, 2) default 0,
+  net_amount DECIMAL(12, 2) GENERATED ALWAYS as (
+    base_salary + COALESCE(bonuses, 0) - COALESCE(deductions, 0) - COALESCE(tax_amount, 0)
+  ) STORED,
+  status payroll_item_status not null default 'pending',
+  paid_at TIMESTAMPTZ,
+  notes TEXT,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW(),
+  unique (payroll_run_id, member_id)
 );
-
 
 -- =============================================
 -- 7. TIME OFF TABLES
 -- =============================================
-
 -- Time off policy types (Vacation, Sick, Personal, etc.)
-CREATE TABLE IF NOT EXISTS time_off_policies (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    description TEXT,
-    days_per_year INT NOT NULL DEFAULT 0,
-    carry_over_days INT DEFAULT 0,
-    carry_over_expires_months INT DEFAULT 3,
-    is_paid BOOLEAN DEFAULT TRUE,
-    requires_approval BOOLEAN DEFAULT TRUE,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists time_off_policies (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  name TEXT not null,
+  description TEXT,
+  days_per_year INT not null default 0,
+  carry_over_days INT default 0,
+  carry_over_expires_months INT default 3,
+  is_paid BOOLEAN default true,
+  requires_approval BOOLEAN default true,
+  is_active BOOLEAN default true,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
 
 -- Employee time off balances (per policy per year)
-CREATE TABLE IF NOT EXISTS time_off_balances (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    member_id UUID NOT NULL REFERENCES organization_members(id) ON DELETE CASCADE,
-    policy_id UUID NOT NULL REFERENCES time_off_policies(id) ON DELETE CASCADE,
-    year INT NOT NULL,
-    total_days DECIMAL(5,2) NOT NULL DEFAULT 0,
-    used_days DECIMAL(5,2) NOT NULL DEFAULT 0,
-    pending_days DECIMAL(5,2) NOT NULL DEFAULT 0,
-    carry_over_days DECIMAL(5,2) DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(member_id, policy_id, year)
+create table if not exists time_off_balances (
+  id UUID primary key default uuid_generate_v4 (),
+  member_id UUID not null references organization_members (id) on delete CASCADE,
+  policy_id UUID not null references time_off_policies (id) on delete CASCADE,
+  year INT not null,
+  total_days DECIMAL(5, 2) not null default 0,
+  used_days DECIMAL(5, 2) not null default 0,
+  pending_days DECIMAL(5, 2) not null default 0,
+  carry_over_days DECIMAL(5, 2) default 0,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW(),
+  unique (member_id, policy_id, year)
 );
 
 -- Time off requests
-CREATE TABLE IF NOT EXISTS time_off_requests (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    member_id UUID NOT NULL REFERENCES organization_members(id) ON DELETE CASCADE,
-    policy_id UUID NOT NULL REFERENCES time_off_policies(id) ON DELETE CASCADE,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    days_requested DECIMAL(5,2) NOT NULL,
-    reason TEXT,
-    status time_off_request_status NOT NULL DEFAULT 'pending',
-    reviewed_by UUID REFERENCES profiles(id),
-    reviewed_at TIMESTAMPTZ,
-    reviewer_notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists time_off_requests (
+  id UUID primary key default uuid_generate_v4 (),
+  member_id UUID not null references organization_members (id) on delete CASCADE,
+  policy_id UUID not null references time_off_policies (id) on delete CASCADE,
+  start_date DATE not null,
+  end_date DATE not null,
+  days_requested DECIMAL(5, 2) not null,
+  reason TEXT,
+  status time_off_request_status not null default 'pending',
+  reviewed_by UUID references profiles (id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  reviewer_notes TEXT,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
-
 
 -- =============================================
 -- 8. HOLIDAYS TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS holidays (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    date DATE NOT NULL,
-    is_paid BOOLEAN DEFAULT TRUE,
-    country TEXT DEFAULT 'NP',
-    year INT GENERATED ALWAYS AS (EXTRACT(YEAR FROM date)::INT) STORED,
-    is_recurring BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists holidays (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID references organizations (id) on delete CASCADE,
+  name TEXT not null,
+  date DATE not null,
+  is_paid BOOLEAN default true,
+  country TEXT default 'NP',
+  year INT GENERATED ALWAYS as (
+    EXTRACT(
+      year
+      from
+        date
+    )::INT
+  ) STORED,
+  is_recurring BOOLEAN default false,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
 
 -- Insert default Nepal holidays (organization_id NULL = global defaults)
-INSERT INTO holidays (organization_id, name, date, is_paid, country) VALUES
-    (NULL, 'New Year''s Day', '2025-01-01', TRUE, 'NP'),
-    (NULL, 'Magh Sankranti', '2025-01-15', TRUE, 'NP'),
-    (NULL, 'Saraswati Puja', '2025-02-03', TRUE, 'NP'),
-    (NULL, 'Democracy Day', '2025-02-19', TRUE, 'NP'),
-    (NULL, 'Maha Shivaratri', '2025-02-26', TRUE, 'NP'),
-    (NULL, 'Holi', '2025-03-14', TRUE, 'NP'),
-    (NULL, 'Nepali New Year', '2025-04-14', TRUE, 'NP'),
-    (NULL, 'Buddha Jayanti', '2025-05-12', TRUE, 'NP'),
-    (NULL, 'Republic Day', '2025-05-28', TRUE, 'NP'),
-    (NULL, 'Gaijatra', '2025-08-09', TRUE, 'NP'),
-    (NULL, 'Krishna Janmashtami', '2025-08-16', TRUE, 'NP'),
-    (NULL, 'Constitution Day', '2025-09-19', TRUE, 'NP'),
-    (NULL, 'Dashain (10 days)', '2025-10-01', TRUE, 'NP'),
-    (NULL, 'Tihar (5 days)', '2025-10-20', TRUE, 'NP'),
-    (NULL, 'Chhath Parva', '2025-10-28', TRUE, 'NP')
-ON CONFLICT DO NOTHING;
-
+insert into
+  holidays (organization_id, name, date, is_paid, country)
+values
+  (null, 'New Year''s Day', '2025-01-01', true, 'NP'),
+  (null, 'Magh Sankranti', '2025-01-15', true, 'NP'),
+  (null, 'Saraswati Puja', '2025-02-03', true, 'NP'),
+  (null, 'Democracy Day', '2025-02-19', true, 'NP'),
+  (null, 'Maha Shivaratri', '2025-02-26', true, 'NP'),
+  (null, 'Holi', '2025-03-14', true, 'NP'),
+  (null, 'Nepali New Year', '2025-04-14', true, 'NP'),
+  (null, 'Buddha Jayanti', '2025-05-12', true, 'NP'),
+  (null, 'Republic Day', '2025-05-28', true, 'NP'),
+  (null, 'Gaijatra', '2025-08-09', true, 'NP'),
+  (
+    null,
+    'Krishna Janmashtami',
+    '2025-08-16',
+    true,
+    'NP'
+  ),
+  (
+    null,
+    'Constitution Day',
+    '2025-09-19',
+    true,
+    'NP'
+  ),
+  (
+    null,
+    'Dashain (10 days)',
+    '2025-10-01',
+    true,
+    'NP'
+  ),
+  (null, 'Tihar (5 days)', '2025-10-20', true, 'NP'),
+  (null, 'Chhath Parva', '2025-10-28', true, 'NP')
+on conflict do nothing;
 
 -- =============================================
 -- 9. ANNOUNCEMENTS TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS announcements (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    author_id UUID NOT NULL REFERENCES profiles(id),
-    is_published BOOLEAN DEFAULT FALSE,
-    is_pinned BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists announcements (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  title TEXT not null,
+  content TEXT not null,
+  author_id UUID references profiles (id) ON DELETE SET NULL,
+  is_published BOOLEAN default false,
+  is_pinned BOOLEAN default false,
+  published_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
-
 
 -- =============================================
 -- 10. JOB POSTINGS & APPLICATIONS TABLES
 -- =============================================
-
 -- Job postings
-CREATE TABLE IF NOT EXISTS job_postings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    description TEXT,
-    requirements TEXT,
-    responsibilities TEXT,
-    department TEXT,
-    location TEXT,
-    is_remote BOOLEAN DEFAULT TRUE,
-    employment_type employment_type DEFAULT 'full_time',
-    salary_min DECIMAL(12,2),
-    salary_max DECIMAL(12,2),
-    salary_currency TEXT DEFAULT 'NPR',
-    show_salary BOOLEAN DEFAULT FALSE,
-    status job_posting_status NOT NULL DEFAULT 'draft',
-    applications_count INT DEFAULT 0,
-    created_by UUID REFERENCES profiles(id),
-    published_at TIMESTAMPTZ,
-    closes_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists job_postings (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  title TEXT not null,
+  description TEXT,
+  requirements TEXT,
+  responsibilities TEXT,
+  department TEXT,
+  location TEXT,
+  is_remote BOOLEAN default true,
+  employment_type employment_type default 'full_time',
+  salary_min DECIMAL(12, 2),
+  salary_max DECIMAL(12, 2),
+  salary_currency TEXT default 'NPR',
+  show_salary BOOLEAN default false,
+  status job_posting_status not null default 'draft',
+  applications_count INT default 0,
+  created_by UUID references profiles (id) ON DELETE SET NULL,
+  published_at TIMESTAMPTZ,
+  closes_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
 
 -- Job applications
-CREATE TABLE IF NOT EXISTS applications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    job_posting_id UUID NOT NULL REFERENCES job_postings(id) ON DELETE CASCADE,
-    candidate_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    stage application_stage NOT NULL DEFAULT 'applied',
-    resume_url TEXT,
-    cover_letter TEXT,
-    notes TEXT,
-    rating INT CHECK (rating >= 1 AND rating <= 5),
-    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(job_posting_id, candidate_id)
+create table if not exists applications (
+  id UUID primary key default uuid_generate_v4 (),
+  job_posting_id UUID not null references job_postings (id) on delete CASCADE,
+  candidate_id UUID not null references profiles (id) on delete CASCADE,
+  stage application_stage not null default 'applied',
+  resume_url TEXT,
+  cover_letter TEXT,
+  notes TEXT,
+  rating INT check (
+    rating >= 1
+    and rating <= 5
+  ),
+  applied_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW(),
+  unique (job_posting_id, candidate_id)
 );
 
 -- Application activity/history
-CREATE TABLE IF NOT EXISTS application_activities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-    from_stage application_stage,
-    to_stage application_stage NOT NULL,
-    notes TEXT,
-    created_by UUID REFERENCES profiles(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists application_activities (
+  id UUID primary key default uuid_generate_v4 (),
+  application_id UUID not null references applications (id) on delete CASCADE,
+  from_stage application_stage,
+  to_stage application_stage not null,
+  notes TEXT,
+  created_by UUID references profiles (id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ not null default NOW()
 );
-
 
 -- =============================================
 -- 11. COMPLIANCE TABLES
 -- =============================================
-
 -- Compliance checklist items
-CREATE TABLE IF NOT EXISTS compliance_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    member_id UUID REFERENCES organization_members(id) ON DELETE CASCADE,
-    item_type compliance_item_type NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    is_required BOOLEAN DEFAULT TRUE,
-    status compliance_status NOT NULL DEFAULT 'pending',
-    due_date DATE,
-    completed_at TIMESTAMPTZ,
-    document_url TEXT,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists compliance_items (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  member_id UUID references organization_members (id) on delete CASCADE,
+  item_type compliance_item_type not null,
+  name TEXT not null,
+  description TEXT,
+  is_required BOOLEAN default true,
+  status compliance_status not null default 'pending',
+  due_date DATE,
+  completed_at TIMESTAMPTZ,
+  document_url TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
 
 -- Compliance alerts/notifications
-CREATE TABLE IF NOT EXISTS compliance_alerts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    member_id UUID REFERENCES organization_members(id) ON DELETE CASCADE,
-    compliance_item_id UUID REFERENCES compliance_items(id) ON DELETE SET NULL,
-    alert_type alert_type NOT NULL DEFAULT 'info',
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
-    action_url TEXT,
-    is_read BOOLEAN DEFAULT FALSE,
-    is_dismissed BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists compliance_alerts (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  member_id UUID references organization_members (id) on delete CASCADE,
+  compliance_item_id UUID references compliance_items (id) on delete set null,
+  alert_type alert_type not null default 'info',
+  title TEXT not null,
+  message TEXT not null,
+  action_url TEXT,
+  is_read BOOLEAN default false,
+  is_dismissed BOOLEAN default false,
+  created_at TIMESTAMPTZ not null default NOW()
 );
-
 
 -- =============================================
 -- 12. INVOICES TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS invoices (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    invoice_number TEXT NOT NULL,
-    member_id UUID REFERENCES organization_members(id) ON DELETE SET NULL,
-    client_name TEXT,
-    client_email TEXT,
-    client_address TEXT,
-    amount DECIMAL(14,2) NOT NULL DEFAULT 0,
-    tax_amount DECIMAL(12,2) DEFAULT 0,
-    total_amount DECIMAL(14,2) GENERATED ALWAYS AS (amount + COALESCE(tax_amount, 0)) STORED,
-    currency TEXT DEFAULT 'NPR',
-    status invoice_status NOT NULL DEFAULT 'draft',
-    issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    due_date DATE,
-    paid_at TIMESTAMPTZ,
-    notes TEXT,
-    line_items JSONB DEFAULT '[]'::jsonb,
-    created_by UUID REFERENCES profiles(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(organization_id, invoice_number)
+create table if not exists invoices (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  invoice_number TEXT not null,
+  member_id UUID references organization_members (id) on delete set null,
+  client_name TEXT,
+  client_email TEXT,
+  client_address TEXT,
+  amount DECIMAL(14, 2) not null default 0,
+  tax_amount DECIMAL(12, 2) default 0,
+  total_amount DECIMAL(14, 2) GENERATED ALWAYS as (amount + COALESCE(tax_amount, 0)) STORED,
+  currency TEXT default 'NPR',
+  status invoice_status not null default 'draft',
+  issue_date DATE not null default CURRENT_DATE,
+  due_date DATE,
+  paid_at TIMESTAMPTZ,
+  notes TEXT,
+  line_items JSONB default '[]'::jsonb,
+  created_by UUID references profiles (id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW(),
+  unique (organization_id, invoice_number)
 );
-
 
 -- =============================================
 -- 13. DOCUMENTS TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS documents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    member_id UUID REFERENCES organization_members(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    description TEXT,
-    file_url TEXT NOT NULL,
-    file_type TEXT,
-    file_size INT,
-    category document_category NOT NULL DEFAULT 'other',
-    is_sensitive BOOLEAN DEFAULT FALSE,
-    uploaded_by UUID REFERENCES profiles(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists documents (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  member_id UUID references organization_members (id) on delete CASCADE,
+  name TEXT not null,
+  description TEXT,
+  file_url TEXT not null,
+  file_type TEXT,
+  file_size INT,
+  category document_category not null default 'other',
+  is_sensitive BOOLEAN default false,
+  uploaded_by UUID references profiles (id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
-
 
 -- =============================================
 -- 14. BENEFITS ENROLLMENTS TABLE
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS benefits_plans (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    description TEXT,
-    plan_type TEXT NOT NULL,
-    provider TEXT,
-    monthly_cost DECIMAL(10,2),
-    employer_contribution DECIMAL(5,2) DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists benefits_plans (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID not null references organizations (id) on delete CASCADE,
+  name TEXT not null,
+  description TEXT,
+  plan_type TEXT not null,
+  provider TEXT,
+  monthly_cost DECIMAL(10, 2),
+  employer_contribution DECIMAL(5, 2) default 0,
+  is_active BOOLEAN default true,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW()
 );
 
-CREATE TABLE IF NOT EXISTS benefits_enrollments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    member_id UUID NOT NULL REFERENCES organization_members(id) ON DELETE CASCADE,
-    plan_id UUID NOT NULL REFERENCES benefits_plans(id) ON DELETE CASCADE,
-    status benefits_status NOT NULL DEFAULT 'pending',
-    enrolled_at TIMESTAMPTZ,
-    coverage_start_date DATE,
-    coverage_end_date DATE,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(member_id, plan_id)
+create table if not exists benefits_enrollments (
+  id UUID primary key default uuid_generate_v4 (),
+  member_id UUID not null references organization_members (id) on delete CASCADE,
+  plan_id UUID not null references benefits_plans (id) on delete CASCADE,
+  status benefits_status not null default 'pending',
+  enrolled_at TIMESTAMPTZ,
+  coverage_start_date DATE,
+  coverage_end_date DATE,
+  notes TEXT,
+  created_at TIMESTAMPTZ not null default NOW(),
+  updated_at TIMESTAMPTZ not null default NOW(),
+  unique (member_id, plan_id)
 );
-
 
 -- =============================================
 -- 15. ACTIVITY LOG TABLE (Audit Trail)
 -- =============================================
-
-CREATE TABLE IF NOT EXISTS activity_log (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
-    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    action TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_id UUID,
-    details JSONB DEFAULT '{}'::jsonb,
-    ip_address INET,
-    user_agent TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists activity_log (
+  id UUID primary key default uuid_generate_v4 (),
+  organization_id UUID references organizations (id) on delete set null,
+  user_id UUID references profiles (id) on delete set null,
+  action TEXT not null,
+  entity_type TEXT not null,
+  entity_id UUID,
+  details JSONB default '{}'::jsonb,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ not null default NOW()
 );
-
 
 -- =============================================
 -- 16. INDEXES
 -- =============================================
-
 -- Existing indexes
-CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
-CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
-CREATE INDEX IF NOT EXISTS idx_profiles_organization ON profiles(organization_id);
-CREATE INDEX IF NOT EXISTS idx_profiles_status ON profiles(status);
+create index IF not exists idx_profiles_email on profiles (email);
 
-CREATE INDEX IF NOT EXISTS idx_organizations_owner ON organizations(owner_id);
-CREATE INDEX IF NOT EXISTS idx_organizations_status ON organizations(status);
-CREATE INDEX IF NOT EXISTS idx_organizations_industry ON organizations(industry);
+create index IF not exists idx_profiles_role on profiles (role);
 
-CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(organization_id);
-CREATE INDEX IF NOT EXISTS idx_org_members_profile ON organization_members(profile_id);
-CREATE INDEX IF NOT EXISTS idx_org_members_status ON organization_members(status);
+create index IF not exists idx_profiles_organization on profiles (organization_id);
+
+create index IF not exists idx_profiles_status on profiles (status);
+
+create index IF not exists idx_organizations_owner on organizations (owner_id);
+
+create index IF not exists idx_organizations_status on organizations (status);
+
+create index IF not exists idx_organizations_industry on organizations (industry);
+
+create index IF not exists idx_org_members_org on organization_members (organization_id);
+
+create index IF not exists idx_org_members_profile on organization_members (profile_id);
+
+create index IF not exists idx_org_members_status on organization_members (status);
 
 -- New indexes for MVP tables
-CREATE INDEX IF NOT EXISTS idx_payroll_runs_org ON payroll_runs(organization_id);
-CREATE INDEX IF NOT EXISTS idx_payroll_runs_status ON payroll_runs(status);
-CREATE INDEX IF NOT EXISTS idx_payroll_runs_pay_date ON payroll_runs(pay_date);
-CREATE INDEX IF NOT EXISTS idx_payroll_items_run ON payroll_items(payroll_run_id);
-CREATE INDEX IF NOT EXISTS idx_payroll_items_member ON payroll_items(member_id);
+create index IF not exists idx_payroll_runs_org on payroll_runs (organization_id);
 
-CREATE INDEX IF NOT EXISTS idx_time_off_policies_org ON time_off_policies(organization_id);
-CREATE INDEX IF NOT EXISTS idx_time_off_balances_member ON time_off_balances(member_id);
-CREATE INDEX IF NOT EXISTS idx_time_off_requests_member ON time_off_requests(member_id);
-CREATE INDEX IF NOT EXISTS idx_time_off_requests_status ON time_off_requests(status);
+create index IF not exists idx_payroll_runs_status on payroll_runs (status);
 
-CREATE INDEX IF NOT EXISTS idx_holidays_org ON holidays(organization_id);
-CREATE INDEX IF NOT EXISTS idx_holidays_date ON holidays(date);
-CREATE INDEX IF NOT EXISTS idx_holidays_year ON holidays(year);
+create index IF not exists idx_payroll_runs_pay_date on payroll_runs (pay_date);
 
-CREATE INDEX IF NOT EXISTS idx_announcements_org ON announcements(organization_id);
-CREATE INDEX IF NOT EXISTS idx_announcements_published ON announcements(is_published, published_at);
+create index IF not exists idx_payroll_items_run on payroll_items (payroll_run_id);
 
-CREATE INDEX IF NOT EXISTS idx_job_postings_org ON job_postings(organization_id);
-CREATE INDEX IF NOT EXISTS idx_job_postings_status ON job_postings(status);
-CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_posting_id);
-CREATE INDEX IF NOT EXISTS idx_applications_candidate ON applications(candidate_id);
-CREATE INDEX IF NOT EXISTS idx_applications_stage ON applications(stage);
+create index IF not exists idx_payroll_items_member on payroll_items (member_id);
 
-CREATE INDEX IF NOT EXISTS idx_compliance_items_org ON compliance_items(organization_id);
-CREATE INDEX IF NOT EXISTS idx_compliance_items_member ON compliance_items(member_id);
-CREATE INDEX IF NOT EXISTS idx_compliance_items_status ON compliance_items(status);
-CREATE INDEX IF NOT EXISTS idx_compliance_alerts_org ON compliance_alerts(organization_id);
-CREATE INDEX IF NOT EXISTS idx_compliance_alerts_read ON compliance_alerts(is_read, is_dismissed);
+create index IF not exists idx_time_off_policies_org on time_off_policies (organization_id);
 
-CREATE INDEX IF NOT EXISTS idx_invoices_org ON invoices(organization_id);
-CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
-CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
+create index IF not exists idx_time_off_balances_member on time_off_balances (member_id);
 
-CREATE INDEX IF NOT EXISTS idx_documents_org ON documents(organization_id);
-CREATE INDEX IF NOT EXISTS idx_documents_member ON documents(member_id);
-CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
+create index IF not exists idx_time_off_requests_member on time_off_requests (member_id);
 
-CREATE INDEX IF NOT EXISTS idx_benefits_plans_org ON benefits_plans(organization_id);
-CREATE INDEX IF NOT EXISTS idx_benefits_enrollments_member ON benefits_enrollments(member_id);
+create index IF not exists idx_time_off_requests_status on time_off_requests (status);
 
-CREATE INDEX IF NOT EXISTS idx_activity_log_org ON activity_log(organization_id);
-CREATE INDEX IF NOT EXISTS idx_activity_log_user ON activity_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at);
+create index IF not exists idx_holidays_org on holidays (organization_id);
 
+create index IF not exists idx_holidays_date on holidays (date);
+
+create index IF not exists idx_holidays_year on holidays (year);
+
+create index IF not exists idx_announcements_org on announcements (organization_id);
+
+create index IF not exists idx_announcements_published on announcements (is_published, published_at);
+
+create index IF not exists idx_job_postings_org on job_postings (organization_id);
+
+create index IF not exists idx_job_postings_status on job_postings (status);
+
+create index IF not exists idx_applications_job on applications (job_posting_id);
+
+create index IF not exists idx_applications_candidate on applications (candidate_id);
+
+create index IF not exists idx_applications_stage on applications (stage);
+
+create index IF not exists idx_compliance_items_org on compliance_items (organization_id);
+
+create index IF not exists idx_compliance_items_member on compliance_items (member_id);
+
+create index IF not exists idx_compliance_items_status on compliance_items (status);
+
+create index IF not exists idx_compliance_alerts_org on compliance_alerts (organization_id);
+
+create index IF not exists idx_compliance_alerts_read on compliance_alerts (is_read, is_dismissed);
+
+create index IF not exists idx_invoices_org on invoices (organization_id);
+
+create index IF not exists idx_invoices_status on invoices (status);
+
+create index IF not exists idx_invoices_due_date on invoices (due_date);
+
+create index IF not exists idx_documents_org on documents (organization_id);
+
+create index IF not exists idx_documents_member on documents (member_id);
+
+create index IF not exists idx_documents_category on documents (category);
+
+create index IF not exists idx_benefits_plans_org on benefits_plans (organization_id);
+
+create index IF not exists idx_benefits_enrollments_member on benefits_enrollments (member_id);
+
+create index IF not exists idx_activity_log_org on activity_log (organization_id);
+
+create index IF not exists idx_activity_log_user on activity_log (user_id);
+
+create index IF not exists idx_activity_log_entity on activity_log (entity_type, entity_id);
+
+create index IF not exists idx_activity_log_created on activity_log (created_at);
 
 -- =============================================
 -- 17. UPDATED_AT TRIGGER
 -- =============================================
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+create or replace function update_updated_at_column () RETURNS TRIGGER as $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
@@ -740,98 +790,112 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Drop and recreate triggers to avoid duplicates
-DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
-CREATE TRIGGER update_profiles_updated_at
-    BEFORE UPDATE ON profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_profiles_updated_at on profiles;
 
-DROP TRIGGER IF EXISTS update_organizations_updated_at ON organizations;
-CREATE TRIGGER update_organizations_updated_at
-    BEFORE UPDATE ON organizations
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_profiles_updated_at BEFORE
+update on profiles for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_org_members_updated_at ON organization_members;
-CREATE TRIGGER update_org_members_updated_at
-    BEFORE UPDATE ON organization_members
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_organizations_updated_at on organizations;
 
-DROP TRIGGER IF EXISTS update_payroll_runs_updated_at ON payroll_runs;
-CREATE TRIGGER update_payroll_runs_updated_at
-    BEFORE UPDATE ON payroll_runs
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_organizations_updated_at BEFORE
+update on organizations for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_payroll_items_updated_at ON payroll_items;
-CREATE TRIGGER update_payroll_items_updated_at
-    BEFORE UPDATE ON payroll_items
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_org_members_updated_at on organization_members;
 
-DROP TRIGGER IF EXISTS update_time_off_policies_updated_at ON time_off_policies;
-CREATE TRIGGER update_time_off_policies_updated_at
-    BEFORE UPDATE ON time_off_policies
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_org_members_updated_at BEFORE
+update on organization_members for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_time_off_balances_updated_at ON time_off_balances;
-CREATE TRIGGER update_time_off_balances_updated_at
-    BEFORE UPDATE ON time_off_balances
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_payroll_runs_updated_at on payroll_runs;
 
-DROP TRIGGER IF EXISTS update_time_off_requests_updated_at ON time_off_requests;
-CREATE TRIGGER update_time_off_requests_updated_at
-    BEFORE UPDATE ON time_off_requests
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_payroll_runs_updated_at BEFORE
+update on payroll_runs for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_holidays_updated_at ON holidays;
-CREATE TRIGGER update_holidays_updated_at
-    BEFORE UPDATE ON holidays
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_payroll_items_updated_at on payroll_items;
 
-DROP TRIGGER IF EXISTS update_announcements_updated_at ON announcements;
-CREATE TRIGGER update_announcements_updated_at
-    BEFORE UPDATE ON announcements
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_payroll_items_updated_at BEFORE
+update on payroll_items for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_job_postings_updated_at ON job_postings;
-CREATE TRIGGER update_job_postings_updated_at
-    BEFORE UPDATE ON job_postings
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_time_off_policies_updated_at on time_off_policies;
 
-DROP TRIGGER IF EXISTS update_applications_updated_at ON applications;
-CREATE TRIGGER update_applications_updated_at
-    BEFORE UPDATE ON applications
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_time_off_policies_updated_at BEFORE
+update on time_off_policies for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_compliance_items_updated_at ON compliance_items;
-CREATE TRIGGER update_compliance_items_updated_at
-    BEFORE UPDATE ON compliance_items
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_time_off_balances_updated_at on time_off_balances;
 
-DROP TRIGGER IF EXISTS update_invoices_updated_at ON invoices;
-CREATE TRIGGER update_invoices_updated_at
-    BEFORE UPDATE ON invoices
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_time_off_balances_updated_at BEFORE
+update on time_off_balances for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_documents_updated_at ON documents;
-CREATE TRIGGER update_documents_updated_at
-    BEFORE UPDATE ON documents
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_time_off_requests_updated_at on time_off_requests;
 
-DROP TRIGGER IF EXISTS update_benefits_plans_updated_at ON benefits_plans;
-CREATE TRIGGER update_benefits_plans_updated_at
-    BEFORE UPDATE ON benefits_plans
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+create trigger update_time_off_requests_updated_at BEFORE
+update on time_off_requests for EACH row
+execute FUNCTION update_updated_at_column ();
 
-DROP TRIGGER IF EXISTS update_benefits_enrollments_updated_at ON benefits_enrollments;
-CREATE TRIGGER update_benefits_enrollments_updated_at
-    BEFORE UPDATE ON benefits_enrollments
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+drop trigger IF exists update_holidays_updated_at on holidays;
 
+create trigger update_holidays_updated_at BEFORE
+update on holidays for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_announcements_updated_at on announcements;
+
+create trigger update_announcements_updated_at BEFORE
+update on announcements for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_job_postings_updated_at on job_postings;
+
+create trigger update_job_postings_updated_at BEFORE
+update on job_postings for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_applications_updated_at on applications;
+
+create trigger update_applications_updated_at BEFORE
+update on applications for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_compliance_items_updated_at on compliance_items;
+
+create trigger update_compliance_items_updated_at BEFORE
+update on compliance_items for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_invoices_updated_at on invoices;
+
+create trigger update_invoices_updated_at BEFORE
+update on invoices for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_documents_updated_at on documents;
+
+create trigger update_documents_updated_at BEFORE
+update on documents for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_benefits_plans_updated_at on benefits_plans;
+
+create trigger update_benefits_plans_updated_at BEFORE
+update on benefits_plans for EACH row
+execute FUNCTION update_updated_at_column ();
+
+drop trigger IF exists update_benefits_enrollments_updated_at on benefits_enrollments;
+
+create trigger update_benefits_enrollments_updated_at BEFORE
+update on benefits_enrollments for EACH row
+execute FUNCTION update_updated_at_column ();
 
 -- =============================================
 -- 18. AUTO-CREATE PROFILE ON SIGNUP
 -- =============================================
-
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+create or replace function handle_new_user () RETURNS TRIGGER as $$
 BEGIN
     INSERT INTO profiles (
         id,
@@ -858,550 +922,1114 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Drop and recreate trigger
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+drop trigger IF exists on_auth_user_created on auth.users;
 
+create trigger on_auth_user_created
+after INSERT on auth.users for EACH row
+execute FUNCTION handle_new_user ();
+
+-- =============================================
+-- 18b. DELETE AUTH.USERS WHEN PROFILE DELETED
+-- =============================================
+-- This trigger ensures that when a profile is deleted,
+-- the corresponding auth.users entry is also deleted.
+-- Without this, the email would still be "taken" in Supabase Auth.
+
+create or replace function delete_auth_user () RETURNS TRIGGER as $$
+BEGIN
+    -- Delete the auth.users record (requires service role)
+    DELETE FROM auth.users WHERE id = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Drop and recreate trigger
+drop trigger IF exists on_profile_deleted on profiles;
+
+create trigger on_profile_deleted
+BEFORE DELETE on profiles for EACH row
+execute FUNCTION delete_auth_user ();
 
 -- =============================================
 -- 19. ROW LEVEL SECURITY
 -- =============================================
-
 -- Enable RLS on all tables
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE industries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payroll_runs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payroll_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE time_off_policies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE time_off_balances ENABLE ROW LEVEL SECURITY;
-ALTER TABLE time_off_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE holidays ENABLE ROW LEVEL SECURITY;
-ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE job_postings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE application_activities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE compliance_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE compliance_alerts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE benefits_plans ENABLE ROW LEVEL SECURITY;
-ALTER TABLE benefits_enrollments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
+alter table profiles ENABLE row LEVEL SECURITY;
+
+alter table organizations ENABLE row LEVEL SECURITY;
+
+alter table organization_members ENABLE row LEVEL SECURITY;
+
+alter table industries ENABLE row LEVEL SECURITY;
+
+alter table payroll_runs ENABLE row LEVEL SECURITY;
+
+alter table payroll_items ENABLE row LEVEL SECURITY;
+
+alter table time_off_policies ENABLE row LEVEL SECURITY;
+
+alter table time_off_balances ENABLE row LEVEL SECURITY;
+
+alter table time_off_requests ENABLE row LEVEL SECURITY;
+
+alter table holidays ENABLE row LEVEL SECURITY;
+
+alter table announcements ENABLE row LEVEL SECURITY;
+
+alter table job_postings ENABLE row LEVEL SECURITY;
+
+alter table applications ENABLE row LEVEL SECURITY;
+
+alter table application_activities ENABLE row LEVEL SECURITY;
+
+alter table compliance_items ENABLE row LEVEL SECURITY;
+
+alter table compliance_alerts ENABLE row LEVEL SECURITY;
+
+alter table invoices ENABLE row LEVEL SECURITY;
+
+alter table documents ENABLE row LEVEL SECURITY;
+
+alter table benefits_plans ENABLE row LEVEL SECURITY;
+
+alter table benefits_enrollments ENABLE row LEVEL SECURITY;
+
+alter table activity_log ENABLE row LEVEL SECURITY;
 
 -- =============================================
 -- RLS POLICIES - EXISTING TABLES
 -- =============================================
-
 -- Drop existing policies first (to allow re-run)
-DROP POLICY IF EXISTS "Anyone can view industries" ON industries;
-DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
-DROP POLICY IF EXISTS "Employers can view org member profiles" ON profiles;
-DROP POLICY IF EXISTS "Members can view their organization" ON organizations;
-DROP POLICY IF EXISTS "Owners can update organization" ON organizations;
-DROP POLICY IF EXISTS "Employers can create organizations" ON organizations;
-DROP POLICY IF EXISTS "Users can view own membership" ON organization_members;
-DROP POLICY IF EXISTS "Org admins can view all members" ON organization_members;
-DROP POLICY IF EXISTS "Org owners can add members" ON organization_members;
-DROP POLICY IF EXISTS "Org owners can update members" ON organization_members;
-DROP POLICY IF EXISTS "Org owners can delete members" ON organization_members;
+drop policy IF exists "Anyone can view industries" on industries;
+
+drop policy IF exists "Users can view own profile" on profiles;
+
+drop policy IF exists "Users can update own profile" on profiles;
+
+drop policy IF exists "Employers can view org member profiles" on profiles;
+
+drop policy IF exists "Members can view their organization" on organizations;
+
+drop policy IF exists "Owners can update organization" on organizations;
+
+drop policy IF exists "Employers can create organizations" on organizations;
+
+drop policy IF exists "Users can view own membership" on organization_members;
+
+drop policy IF exists "Org admins can view all members" on organization_members;
+
+drop policy IF exists "Org owners can add members" on organization_members;
+
+drop policy IF exists "Org owners can update members" on organization_members;
+
+drop policy IF exists "Org owners can delete members" on organization_members;
 
 -- Create policies for existing tables
-CREATE POLICY "Anyone can view industries"
-ON industries FOR SELECT USING (true);
+create policy "Anyone can view industries" on industries for
+select
+  using (true);
 
-CREATE POLICY "Users can view own profile"
-ON profiles FOR SELECT USING (auth.uid() = id);
+create policy "Users can view own profile" on profiles for
+select
+  using (auth.uid () = id);
 
-CREATE POLICY "Users can update own profile"
-ON profiles FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+create policy "Users can update own profile" on profiles
+for update
+  using (auth.uid () = id)
+with
+  check (auth.uid () = id);
 
-CREATE POLICY "Employers can view org member profiles"
-ON profiles FOR SELECT
-USING (
-    EXISTS (
-        SELECT 1 FROM organization_members om
-        WHERE om.profile_id = profiles.id
-        AND om.organization_id IN (
-            SELECT organization_id FROM profiles WHERE id = auth.uid()
+create policy "Employers can view org member profiles" on profiles for
+select
+  using (
+    exists (
+      select
+        1
+      from
+        organization_members om
+      where
+        om.profile_id = profiles.id
+        and om.organization_id in (
+          select
+            organization_id
+          from
+            profiles
+          where
+            id = auth.uid ()
         )
     )
+  );
+
+create policy "Members can view their organization" on organizations for
+select
+  using (
+    owner_id = auth.uid ()
+    or id in (
+      select
+        organization_id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+    or id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+  );
+
+create policy "Owners can update organization" on organizations
+for update
+  using (owner_id = auth.uid ())
+with
+  check (owner_id = auth.uid ());
+
+create policy "Employers can create organizations" on organizations for INSERT
+with
+  check (auth.uid () is not null);
+
+create policy "Users can view own membership" on organization_members for
+select
+  using (profile_id = auth.uid ());
+
+create policy "Org admins can view all members" on organization_members for
+select
+  using (
+    organization_id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+    or organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org owners can add members" on organization_members for INSERT
+with
+  check (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org owners can update members" on organization_members
+for update
+  using (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org owners can delete members" on organization_members for DELETE using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
-
-CREATE POLICY "Members can view their organization"
-ON organizations FOR SELECT
-USING (
-    owner_id = auth.uid()
-    OR id IN (SELECT organization_id FROM organization_members WHERE profile_id = auth.uid())
-    OR id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-);
-
-CREATE POLICY "Owners can update organization"
-ON organizations FOR UPDATE USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
-
-CREATE POLICY "Employers can create organizations"
-ON organizations FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-
-CREATE POLICY "Users can view own membership"
-ON organization_members FOR SELECT USING (profile_id = auth.uid());
-
-CREATE POLICY "Org admins can view all members"
-ON organization_members FOR SELECT
-USING (
-    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-    OR organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
-);
-
-CREATE POLICY "Org owners can add members"
-ON organization_members FOR INSERT
-WITH CHECK (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
-CREATE POLICY "Org owners can update members"
-ON organization_members FOR UPDATE
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
-CREATE POLICY "Org owners can delete members"
-ON organization_members FOR DELETE
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
 
 -- =============================================
 -- RLS POLICIES - PAYROLL
 -- =============================================
+drop policy IF exists "Org members can view payroll runs" on payroll_runs;
 
-DROP POLICY IF EXISTS "Org members can view payroll runs" ON payroll_runs;
-DROP POLICY IF EXISTS "Org admins can create payroll runs" ON payroll_runs;
-DROP POLICY IF EXISTS "Org admins can update payroll runs" ON payroll_runs;
-DROP POLICY IF EXISTS "Org owners can delete payroll runs" ON payroll_runs;
+drop policy IF exists "Org admins can create payroll runs" on payroll_runs;
 
-CREATE POLICY "Org members can view payroll runs"
-ON payroll_runs FOR SELECT
-USING (
-    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-    OR organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+drop policy IF exists "Org admins can update payroll runs" on payroll_runs;
+
+drop policy IF exists "Org owners can delete payroll runs" on payroll_runs;
+
+create policy "Org members can view payroll runs" on payroll_runs for
+select
+  using (
+    organization_id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+    or organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can create payroll runs" on payroll_runs for INSERT
+with
+  check (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can update payroll runs" on payroll_runs
+for update
+  using (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org owners can delete payroll runs" on payroll_runs for DELETE using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
 
-CREATE POLICY "Org admins can create payroll runs"
-ON payroll_runs FOR INSERT
-WITH CHECK (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+drop policy IF exists "Employees can view own payroll items" on payroll_items;
 
-CREATE POLICY "Org admins can update payroll runs"
-ON payroll_runs FOR UPDATE
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+drop policy IF exists "Org admins can view all payroll items" on payroll_items;
 
-CREATE POLICY "Org owners can delete payroll runs"
-ON payroll_runs FOR DELETE
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+drop policy IF exists "Org admins can manage payroll items" on payroll_items;
 
-DROP POLICY IF EXISTS "Employees can view own payroll items" ON payroll_items;
-DROP POLICY IF EXISTS "Org admins can view all payroll items" ON payroll_items;
-DROP POLICY IF EXISTS "Org admins can manage payroll items" ON payroll_items;
+create policy "Employees can view own payroll items" on payroll_items for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+  );
 
-CREATE POLICY "Employees can view own payroll items"
-ON payroll_items FOR SELECT
-USING (
-    member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid())
-);
-
-CREATE POLICY "Org admins can view all payroll items"
-ON payroll_items FOR SELECT
-USING (
-    payroll_run_id IN (
-        SELECT id FROM payroll_runs WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
+create policy "Org admins can view all payroll items" on payroll_items for
+select
+  using (
+    payroll_run_id in (
+      select
+        id
+      from
+        payroll_runs
+      where
+        organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
         )
     )
-);
+  );
 
-CREATE POLICY "Org admins can manage payroll items"
-ON payroll_items FOR ALL
-USING (
-    payroll_run_id IN (
-        SELECT id FROM payroll_runs WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
-        )
-    )
+create policy "Org admins can manage payroll items" on payroll_items for all using (
+  payroll_run_id in (
+    select
+      id
+    from
+      payroll_runs
+    where
+      organization_id in (
+        select
+          id
+        from
+          organizations
+        where
+          owner_id = auth.uid ()
+      )
+  )
 );
-
 
 -- =============================================
 -- RLS POLICIES - TIME OFF
 -- =============================================
+drop policy IF exists "Org members can view time off policies" on time_off_policies;
 
-DROP POLICY IF EXISTS "Org members can view time off policies" ON time_off_policies;
-DROP POLICY IF EXISTS "Org admins can manage time off policies" ON time_off_policies;
+drop policy IF exists "Org admins can manage time off policies" on time_off_policies;
 
-CREATE POLICY "Org members can view time off policies"
-ON time_off_policies FOR SELECT
-USING (
-    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-    OR organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+create policy "Org members can view time off policies" on time_off_policies for
+select
+  using (
+    organization_id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+    or organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can manage time off policies" on time_off_policies for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
 
-CREATE POLICY "Org admins can manage time off policies"
-ON time_off_policies FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+drop policy IF exists "Employees can view own time off balances" on time_off_balances;
 
-DROP POLICY IF EXISTS "Employees can view own time off balances" ON time_off_balances;
-DROP POLICY IF EXISTS "Org admins can view all time off balances" ON time_off_balances;
-DROP POLICY IF EXISTS "Org admins can manage time off balances" ON time_off_balances;
+drop policy IF exists "Org admins can view all time off balances" on time_off_balances;
 
-CREATE POLICY "Employees can view own time off balances"
-ON time_off_balances FOR SELECT
-USING (member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid()));
+drop policy IF exists "Org admins can manage time off balances" on time_off_balances;
 
-CREATE POLICY "Org admins can view all time off balances"
-ON time_off_balances FOR SELECT
-USING (
-    member_id IN (
-        SELECT id FROM organization_members WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
+create policy "Employees can view own time off balances" on time_off_balances for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can view all time off balances" on time_off_balances for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
         )
     )
+  );
+
+create policy "Org admins can manage time off balances" on time_off_balances for all using (
+  member_id in (
+    select
+      id
+    from
+      organization_members
+    where
+      organization_id in (
+        select
+          id
+        from
+          organizations
+        where
+          owner_id = auth.uid ()
+      )
+  )
 );
 
-CREATE POLICY "Org admins can manage time off balances"
-ON time_off_balances FOR ALL
-USING (
-    member_id IN (
-        SELECT id FROM organization_members WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
+drop policy IF exists "Employees can view own time off requests" on time_off_requests;
+
+drop policy IF exists "Employees can create time off requests" on time_off_requests;
+
+drop policy IF exists "Employees can update own pending requests" on time_off_requests;
+
+drop policy IF exists "Org admins can view all time off requests" on time_off_requests;
+
+drop policy IF exists "Org admins can update time off requests" on time_off_requests;
+
+create policy "Employees can view own time off requests" on time_off_requests for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+  );
+
+create policy "Employees can create time off requests" on time_off_requests for INSERT
+with
+  check (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+  );
+
+create policy "Employees can update own pending requests" on time_off_requests
+for update
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+    and status = 'pending'
+  );
+
+create policy "Org admins can view all time off requests" on time_off_requests for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
         )
     )
-);
+  );
 
-DROP POLICY IF EXISTS "Employees can view own time off requests" ON time_off_requests;
-DROP POLICY IF EXISTS "Employees can create time off requests" ON time_off_requests;
-DROP POLICY IF EXISTS "Employees can update own pending requests" ON time_off_requests;
-DROP POLICY IF EXISTS "Org admins can view all time off requests" ON time_off_requests;
-DROP POLICY IF EXISTS "Org admins can update time off requests" ON time_off_requests;
-
-CREATE POLICY "Employees can view own time off requests"
-ON time_off_requests FOR SELECT
-USING (member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid()));
-
-CREATE POLICY "Employees can create time off requests"
-ON time_off_requests FOR INSERT
-WITH CHECK (member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid()));
-
-CREATE POLICY "Employees can update own pending requests"
-ON time_off_requests FOR UPDATE
-USING (
-    member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid())
-    AND status = 'pending'
-);
-
-CREATE POLICY "Org admins can view all time off requests"
-ON time_off_requests FOR SELECT
-USING (
-    member_id IN (
-        SELECT id FROM organization_members WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
+create policy "Org admins can update time off requests" on time_off_requests
+for update
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
         )
     )
-);
-
-CREATE POLICY "Org admins can update time off requests"
-ON time_off_requests FOR UPDATE
-USING (
-    member_id IN (
-        SELECT id FROM organization_members WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
-        )
-    )
-);
-
+  );
 
 -- =============================================
 -- RLS POLICIES - HOLIDAYS
 -- =============================================
+drop policy IF exists "Anyone can view global holidays" on holidays;
 
-DROP POLICY IF EXISTS "Anyone can view global holidays" ON holidays;
-DROP POLICY IF EXISTS "Org members can view org holidays" ON holidays;
-DROP POLICY IF EXISTS "Org admins can manage org holidays" ON holidays;
+drop policy IF exists "Org members can view org holidays" on holidays;
 
-CREATE POLICY "Anyone can view global holidays"
-ON holidays FOR SELECT
-USING (organization_id IS NULL);
+drop policy IF exists "Org admins can manage org holidays" on holidays;
 
-CREATE POLICY "Org members can view org holidays"
-ON holidays FOR SELECT
-USING (
-    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-    OR organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+create policy "Anyone can view global holidays" on holidays for
+select
+  using (organization_id is null);
+
+create policy "Org members can view org holidays" on holidays for
+select
+  using (
+    organization_id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+    or organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can manage org holidays" on holidays for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
-
-CREATE POLICY "Org admins can manage org holidays"
-ON holidays FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
 
 -- =============================================
 -- RLS POLICIES - ANNOUNCEMENTS
 -- =============================================
+drop policy IF exists "Org members can view published announcements" on announcements;
 
-DROP POLICY IF EXISTS "Org members can view published announcements" ON announcements;
-DROP POLICY IF EXISTS "Org admins can manage announcements" ON announcements;
+drop policy IF exists "Org admins can manage announcements" on announcements;
 
-CREATE POLICY "Org members can view published announcements"
-ON announcements FOR SELECT
-USING (
-    is_published = TRUE
-    AND (
-        organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-        OR organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+create policy "Org members can view published announcements" on announcements for
+select
+  using (
+    is_published = true
+    and (
+      organization_id in (
+        select
+          organization_id
+        from
+          profiles
+        where
+          id = auth.uid ()
+      )
+      or organization_id in (
+        select
+          id
+        from
+          organizations
+        where
+          owner_id = auth.uid ()
+      )
     )
+  );
+
+create policy "Org admins can manage announcements" on announcements for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
-
-CREATE POLICY "Org admins can manage announcements"
-ON announcements FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
 
 -- =============================================
 -- RLS POLICIES - JOB POSTINGS & APPLICATIONS
 -- =============================================
+drop policy IF exists "Anyone can view open job postings" on job_postings;
 
-DROP POLICY IF EXISTS "Anyone can view open job postings" ON job_postings;
-DROP POLICY IF EXISTS "Org admins can manage job postings" ON job_postings;
+drop policy IF exists "Org admins can manage job postings" on job_postings;
 
-CREATE POLICY "Anyone can view open job postings"
-ON job_postings FOR SELECT
-USING (status = 'open');
+create policy "Anyone can view open job postings" on job_postings for
+select
+  using (status = 'open');
 
-CREATE POLICY "Org admins can manage job postings"
-ON job_postings FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+create policy "Org admins can manage job postings" on job_postings for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
+);
 
-DROP POLICY IF EXISTS "Candidates can view own applications" ON applications;
-DROP POLICY IF EXISTS "Candidates can create applications" ON applications;
-DROP POLICY IF EXISTS "Org admins can view applications" ON applications;
-DROP POLICY IF EXISTS "Org admins can update applications" ON applications;
+drop policy IF exists "Candidates can view own applications" on applications;
 
-CREATE POLICY "Candidates can view own applications"
-ON applications FOR SELECT
-USING (candidate_id = auth.uid());
+drop policy IF exists "Candidates can create applications" on applications;
 
-CREATE POLICY "Candidates can create applications"
-ON applications FOR INSERT
-WITH CHECK (candidate_id = auth.uid());
+drop policy IF exists "Org admins can view applications" on applications;
 
-CREATE POLICY "Org admins can view applications"
-ON applications FOR SELECT
-USING (
-    job_posting_id IN (
-        SELECT id FROM job_postings WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
+drop policy IF exists "Org admins can update applications" on applications;
+
+create policy "Candidates can view own applications" on applications for
+select
+  using (candidate_id = auth.uid ());
+
+create policy "Candidates can create applications" on applications for INSERT
+with
+  check (candidate_id = auth.uid ());
+
+create policy "Org admins can view applications" on applications for
+select
+  using (
+    job_posting_id in (
+      select
+        id
+      from
+        job_postings
+      where
+        organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
         )
     )
-);
+  );
 
-CREATE POLICY "Org admins can update applications"
-ON applications FOR UPDATE
-USING (
-    job_posting_id IN (
-        SELECT id FROM job_postings WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
+create policy "Org admins can update applications" on applications
+for update
+  using (
+    job_posting_id in (
+      select
+        id
+      from
+        job_postings
+      where
+        organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
         )
     )
-);
+  );
 
-DROP POLICY IF EXISTS "Org admins can view application activities" ON application_activities;
-DROP POLICY IF EXISTS "Org admins can create application activities" ON application_activities;
+drop policy IF exists "Org admins can view application activities" on application_activities;
 
-CREATE POLICY "Org admins can view application activities"
-ON application_activities FOR SELECT
-USING (
-    application_id IN (
-        SELECT a.id FROM applications a
-        JOIN job_postings jp ON jp.id = a.job_posting_id
-        WHERE jp.organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+drop policy IF exists "Org admins can create application activities" on application_activities;
+
+create policy "Org admins can view application activities" on application_activities for
+select
+  using (
+    application_id in (
+      select
+        a.id
+      from
+        applications a
+        join job_postings jp on jp.id = a.job_posting_id
+      where
+        jp.organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
+        )
     )
-);
+  );
 
-CREATE POLICY "Org admins can create application activities"
-ON application_activities FOR INSERT
-WITH CHECK (
-    application_id IN (
-        SELECT a.id FROM applications a
-        JOIN job_postings jp ON jp.id = a.job_posting_id
-        WHERE jp.organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+create policy "Org admins can create application activities" on application_activities for INSERT
+with
+  check (
+    application_id in (
+      select
+        a.id
+      from
+        applications a
+        join job_postings jp on jp.id = a.job_posting_id
+      where
+        jp.organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
+        )
     )
-);
-
+  );
 
 -- =============================================
 -- RLS POLICIES - COMPLIANCE
 -- =============================================
+drop policy IF exists "Employees can view own compliance items" on compliance_items;
 
-DROP POLICY IF EXISTS "Employees can view own compliance items" ON compliance_items;
-DROP POLICY IF EXISTS "Org admins can view all compliance items" ON compliance_items;
-DROP POLICY IF EXISTS "Org admins can manage compliance items" ON compliance_items;
+drop policy IF exists "Org admins can view all compliance items" on compliance_items;
 
-CREATE POLICY "Employees can view own compliance items"
-ON compliance_items FOR SELECT
-USING (
-    member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid())
-    OR (member_id IS NULL AND organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid()))
+drop policy IF exists "Org admins can manage compliance items" on compliance_items;
+
+create policy "Employees can view own compliance items" on compliance_items for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+    or (
+      member_id is null
+      and organization_id in (
+        select
+          organization_id
+        from
+          profiles
+        where
+          id = auth.uid ()
+      )
+    )
+  );
+
+create policy "Org admins can view all compliance items" on compliance_items for
+select
+  using (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can manage compliance items" on compliance_items for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
 
-CREATE POLICY "Org admins can view all compliance items"
-ON compliance_items FOR SELECT
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+drop policy IF exists "Employees can view own compliance alerts" on compliance_alerts;
 
-CREATE POLICY "Org admins can manage compliance items"
-ON compliance_items FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+drop policy IF exists "Org admins can view all compliance alerts" on compliance_alerts;
 
-DROP POLICY IF EXISTS "Employees can view own compliance alerts" ON compliance_alerts;
-DROP POLICY IF EXISTS "Org admins can view all compliance alerts" ON compliance_alerts;
-DROP POLICY IF EXISTS "Org admins can manage compliance alerts" ON compliance_alerts;
+drop policy IF exists "Org admins can manage compliance alerts" on compliance_alerts;
 
-CREATE POLICY "Employees can view own compliance alerts"
-ON compliance_alerts FOR SELECT
-USING (
-    member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid())
-    OR (member_id IS NULL AND organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid()))
+create policy "Employees can view own compliance alerts" on compliance_alerts for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+    or (
+      member_id is null
+      and organization_id in (
+        select
+          organization_id
+        from
+          profiles
+        where
+          id = auth.uid ()
+      )
+    )
+  );
+
+create policy "Org admins can view all compliance alerts" on compliance_alerts for
+select
+  using (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can manage compliance alerts" on compliance_alerts for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
-
-CREATE POLICY "Org admins can view all compliance alerts"
-ON compliance_alerts FOR SELECT
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
-CREATE POLICY "Org admins can manage compliance alerts"
-ON compliance_alerts FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
 
 -- =============================================
 -- RLS POLICIES - INVOICES
 -- =============================================
+drop policy IF exists "Org members can view invoices" on invoices;
 
-DROP POLICY IF EXISTS "Org members can view invoices" ON invoices;
-DROP POLICY IF EXISTS "Org admins can manage invoices" ON invoices;
+drop policy IF exists "Org admins can manage invoices" on invoices;
 
-CREATE POLICY "Org members can view invoices"
-ON invoices FOR SELECT
-USING (
-    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-    OR organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+create policy "Org members can view invoices" on invoices for
+select
+  using (
+    organization_id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+    or organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can manage invoices" on invoices for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
-
-CREATE POLICY "Org admins can manage invoices"
-ON invoices FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
 
 -- =============================================
 -- RLS POLICIES - DOCUMENTS
 -- =============================================
+drop policy IF exists "Employees can view own documents" on documents;
 
-DROP POLICY IF EXISTS "Employees can view own documents" ON documents;
-DROP POLICY IF EXISTS "Org admins can view all documents" ON documents;
-DROP POLICY IF EXISTS "Org admins can manage documents" ON documents;
-DROP POLICY IF EXISTS "Employees can upload own documents" ON documents;
+drop policy IF exists "Org admins can view all documents" on documents;
 
-CREATE POLICY "Employees can view own documents"
-ON documents FOR SELECT
-USING (
-    member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid())
-    OR (member_id IS NULL AND organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid()))
+drop policy IF exists "Org admins can manage documents" on documents;
+
+drop policy IF exists "Employees can upload own documents" on documents;
+
+create policy "Employees can view own documents" on documents for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+    or (
+      member_id is null
+      and organization_id in (
+        select
+          organization_id
+        from
+          profiles
+        where
+          id = auth.uid ()
+      )
+    )
+  );
+
+create policy "Org admins can view all documents" on documents for
+select
+  using (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can manage documents" on documents for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
 
-CREATE POLICY "Org admins can view all documents"
-ON documents FOR SELECT
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
-CREATE POLICY "Org admins can manage documents"
-ON documents FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
-
-CREATE POLICY "Employees can upload own documents"
-ON documents FOR INSERT
-WITH CHECK (
-    member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid())
-    AND uploaded_by = auth.uid()
-);
-
+create policy "Employees can upload own documents" on documents for INSERT
+with
+  check (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+    and uploaded_by = auth.uid ()
+  );
 
 -- =============================================
 -- RLS POLICIES - BENEFITS
 -- =============================================
+drop policy IF exists "Org members can view benefits plans" on benefits_plans;
 
-DROP POLICY IF EXISTS "Org members can view benefits plans" ON benefits_plans;
-DROP POLICY IF EXISTS "Org admins can manage benefits plans" ON benefits_plans;
+drop policy IF exists "Org admins can manage benefits plans" on benefits_plans;
 
-CREATE POLICY "Org members can view benefits plans"
-ON benefits_plans FOR SELECT
-USING (
-    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
-    OR organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid())
+create policy "Org members can view benefits plans" on benefits_plans for
+select
+  using (
+    organization_id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+    or organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can manage benefits plans" on benefits_plans for all using (
+  organization_id in (
+    select
+      id
+    from
+      organizations
+    where
+      owner_id = auth.uid ()
+  )
 );
 
-CREATE POLICY "Org admins can manage benefits plans"
-ON benefits_plans FOR ALL
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+drop policy IF exists "Employees can view own benefits enrollments" on benefits_enrollments;
 
-DROP POLICY IF EXISTS "Employees can view own benefits enrollments" ON benefits_enrollments;
-DROP POLICY IF EXISTS "Org admins can view all benefits enrollments" ON benefits_enrollments;
-DROP POLICY IF EXISTS "Org admins can manage benefits enrollments" ON benefits_enrollments;
+drop policy IF exists "Org admins can view all benefits enrollments" on benefits_enrollments;
 
-CREATE POLICY "Employees can view own benefits enrollments"
-ON benefits_enrollments FOR SELECT
-USING (member_id IN (SELECT id FROM organization_members WHERE profile_id = auth.uid()));
+drop policy IF exists "Org admins can manage benefits enrollments" on benefits_enrollments;
 
-CREATE POLICY "Org admins can view all benefits enrollments"
-ON benefits_enrollments FOR SELECT
-USING (
-    member_id IN (
-        SELECT id FROM organization_members WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
+create policy "Employees can view own benefits enrollments" on benefits_enrollments for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        profile_id = auth.uid ()
+    )
+  );
+
+create policy "Org admins can view all benefits enrollments" on benefits_enrollments for
+select
+  using (
+    member_id in (
+      select
+        id
+      from
+        organization_members
+      where
+        organization_id in (
+          select
+            id
+          from
+            organizations
+          where
+            owner_id = auth.uid ()
         )
     )
-);
+  );
 
-CREATE POLICY "Org admins can manage benefits enrollments"
-ON benefits_enrollments FOR ALL
-USING (
-    member_id IN (
-        SELECT id FROM organization_members WHERE organization_id IN (
-            SELECT id FROM organizations WHERE owner_id = auth.uid()
-        )
-    )
+create policy "Org admins can manage benefits enrollments" on benefits_enrollments for all using (
+  member_id in (
+    select
+      id
+    from
+      organization_members
+    where
+      organization_id in (
+        select
+          id
+        from
+          organizations
+        where
+          owner_id = auth.uid ()
+      )
+  )
 );
-
 
 -- =============================================
 -- RLS POLICIES - ACTIVITY LOG
 -- =============================================
+drop policy IF exists "Org admins can view activity log" on activity_log;
 
-DROP POLICY IF EXISTS "Org admins can view activity log" ON activity_log;
-DROP POLICY IF EXISTS "System can insert activity log" ON activity_log;
+drop policy IF exists "System can insert activity log" on activity_log;
 
-CREATE POLICY "Org admins can view activity log"
-ON activity_log FOR SELECT
-USING (organization_id IN (SELECT id FROM organizations WHERE owner_id = auth.uid()));
+create policy "Org admins can view activity log" on activity_log for
+select
+  using (
+    organization_id in (
+      select
+        id
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
 
-CREATE POLICY "System can insert activity log"
-ON activity_log FOR INSERT
-WITH CHECK (auth.uid() IS NOT NULL);
-
+create policy "System can insert activity log" on activity_log for INSERT
+with
+  check (auth.uid () is not null);
 
 -- =============================================
 -- 20. HELPER FUNCTIONS
 -- =============================================
-
 -- Complete EMPLOYER signup
-CREATE OR REPLACE FUNCTION complete_employer_signup(
-    p_first_name TEXT,
-    p_last_name TEXT,
-    p_industry TEXT,
-    p_industry_other TEXT DEFAULT NULL
-)
-RETURNS JSON AS $$
+create or replace function complete_employer_signup (
+  p_first_name TEXT,
+  p_last_name TEXT,
+  p_industry TEXT,
+  p_industry_other TEXT default null
+) RETURNS JSON as $$
 DECLARE
     v_user_id UUID;
     v_user_email TEXT;
@@ -1463,16 +2091,14 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Complete CANDIDATE signup
-CREATE OR REPLACE FUNCTION complete_candidate_signup(
-    p_first_name TEXT,
-    p_last_name TEXT,
-    p_resume_url TEXT DEFAULT NULL,
-    p_resume_filename TEXT DEFAULT NULL,
-    p_linkedin_url TEXT DEFAULT NULL
-)
-RETURNS JSON AS $$
+create or replace function complete_candidate_signup (
+  p_first_name TEXT,
+  p_last_name TEXT,
+  p_resume_url TEXT default null,
+  p_resume_filename TEXT default null,
+  p_linkedin_url TEXT default null
+) RETURNS JSON as $$
 DECLARE
     v_user_id UUID;
     v_result JSON;
@@ -1508,10 +2134,8 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Get current user profile
-CREATE OR REPLACE FUNCTION get_my_profile()
-RETURNS JSON AS $$
+create or replace function get_my_profile () RETURNS JSON as $$
 DECLARE
     v_result JSON;
 BEGIN
@@ -1556,20 +2180,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Update last login
-CREATE OR REPLACE FUNCTION update_last_login()
-RETURNS JSON AS $$
+create or replace function update_last_login () RETURNS JSON as $$
 BEGIN
     UPDATE profiles SET last_login_at = NOW() WHERE id = auth.uid();
     RETURN json_build_object('success', true);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Check if email exists
-CREATE OR REPLACE FUNCTION check_email_exists(p_email TEXT)
-RETURNS JSON AS $$
+create or replace function check_email_exists (p_email TEXT) RETURNS JSON as $$
 DECLARE
     v_exists BOOLEAN;
 BEGIN
@@ -1578,14 +2198,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- =============================================
 -- 21. DASHBOARD STATS FUNCTIONS
 -- =============================================
-
 -- Get employer dashboard statistics
-CREATE OR REPLACE FUNCTION get_employer_dashboard_stats(p_org_id UUID DEFAULT NULL)
-RETURNS JSON AS $$
+create or replace function get_employer_dashboard_stats (p_org_id UUID default null) RETURNS JSON as $$
 DECLARE
     v_org_id UUID;
     v_result JSON;
@@ -1659,10 +2276,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Get employee dashboard statistics
-CREATE OR REPLACE FUNCTION get_employee_dashboard_stats(p_member_id UUID DEFAULT NULL)
-RETURNS JSON AS $$
+create or replace function get_employee_dashboard_stats (p_member_id UUID default null) RETURNS JSON as $$
 DECLARE
     v_member_id UUID;
     v_org_id UUID;
@@ -1765,10 +2380,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Get hiring pipeline stats
-CREATE OR REPLACE FUNCTION get_pipeline_stats(p_org_id UUID DEFAULT NULL)
-RETURNS JSON AS $$
+create or replace function get_pipeline_stats (p_org_id UUID default null) RETURNS JSON as $$
 DECLARE
     v_org_id UUID;
     v_result JSON;
@@ -1828,10 +2441,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Get compliance score and details
-CREATE OR REPLACE FUNCTION get_compliance_details(p_org_id UUID DEFAULT NULL)
-RETURNS JSON AS $$
+create or replace function get_compliance_details (p_org_id UUID default null) RETURNS JSON as $$
 DECLARE
     v_org_id UUID;
     v_result JSON;
@@ -1916,19 +2527,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- =============================================
 -- 22. PAYROLL HELPER FUNCTIONS
 -- =============================================
-
 -- Create a new payroll run
-CREATE OR REPLACE FUNCTION create_payroll_run(
-    p_org_id UUID,
-    p_pay_period_start DATE,
-    p_pay_period_end DATE,
-    p_pay_date DATE
-)
-RETURNS JSON AS $$
+create or replace function create_payroll_run (
+  p_org_id UUID,
+  p_pay_period_start DATE,
+  p_pay_period_end DATE,
+  p_pay_date DATE
+) RETURNS JSON as $$
 DECLARE
     v_run_id UUID;
     v_total DECIMAL(14,2) := 0;
@@ -1971,19 +2579,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- =============================================
 -- 23. TIME OFF HELPER FUNCTIONS
 -- =============================================
-
 -- Request time off
-CREATE OR REPLACE FUNCTION request_time_off(
-    p_policy_id UUID,
-    p_start_date DATE,
-    p_end_date DATE,
-    p_reason TEXT DEFAULT NULL
-)
-RETURNS JSON AS $$
+create or replace function request_time_off (
+  p_policy_id UUID,
+  p_start_date DATE,
+  p_end_date DATE,
+  p_reason TEXT default null
+) RETURNS JSON as $$
 DECLARE
     v_member_id UUID;
     v_days DECIMAL(5,2);
@@ -2022,14 +2627,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Approve/reject time off request
-CREATE OR REPLACE FUNCTION review_time_off_request(
-    p_request_id UUID,
-    p_approved BOOLEAN,
-    p_notes TEXT DEFAULT NULL
-)
-RETURNS JSON AS $$
+create or replace function review_time_off_request (
+  p_request_id UUID,
+  p_approved BOOLEAN,
+  p_notes TEXT default null
+) RETURNS JSON as $$
 DECLARE
     v_request RECORD;
     v_result JSON;
@@ -2086,18 +2689,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- =============================================
 -- 24. APPLICATION HELPER FUNCTIONS
 -- =============================================
-
 -- Move application to next stage
-CREATE OR REPLACE FUNCTION move_application_stage(
-    p_application_id UUID,
-    p_new_stage application_stage,
-    p_notes TEXT DEFAULT NULL
-)
-RETURNS JSON AS $$
+create or replace function move_application_stage (
+  p_application_id UUID,
+  p_new_stage application_stage,
+  p_notes TEXT default null
+) RETURNS JSON as $$
 DECLARE
     v_app RECORD;
     v_result JSON;
@@ -2136,14 +2736,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- =============================================
 -- 25. INVOICE HELPER FUNCTIONS
 -- =============================================
-
 -- Generate next invoice number
-CREATE OR REPLACE FUNCTION generate_invoice_number(p_org_id UUID)
-RETURNS TEXT AS $$
+create or replace function generate_invoice_number (p_org_id UUID) RETURNS TEXT as $$
 DECLARE
     v_prefix TEXT;
     v_next_num INT;
@@ -2165,146 +2762,247 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
 -- =============================================
 -- 26. STORAGE BUCKET FOR DOCUMENTS
 -- =============================================
-
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
+insert into
+  storage.buckets (
+    id,
+    name,
+    public,
+    file_size_limit,
+    allowed_mime_types
+  )
+values
+  (
     'resumes',
     'resumes',
     false,
     10485760,
-    ARRAY['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-)
-ON CONFLICT (id) DO NOTHING;
+    array[
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]
+  )
+on conflict (id) do nothing;
 
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
+insert into
+  storage.buckets (
+    id,
+    name,
+    public,
+    file_size_limit,
+    allowed_mime_types
+  )
+values
+  (
     'documents',
     'documents',
     false,
     52428800,
-    ARRAY['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'image/gif']
-)
-ON CONFLICT (id) DO NOTHING;
+    array[
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/gif'
+    ]
+  )
+on conflict (id) do nothing;
 
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
+insert into
+  storage.buckets (
+    id,
+    name,
+    public,
+    file_size_limit,
+    allowed_mime_types
+  )
+values
+  (
     'avatars',
     'avatars',
     true,
     5242880,
-    ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-)
-ON CONFLICT (id) DO NOTHING;
+    array[
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp'
+    ]
+  )
+on conflict (id) do nothing;
 
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
+insert into
+  storage.buckets (
+    id,
+    name,
+    public,
+    file_size_limit,
+    allowed_mime_types
+  )
+values
+  (
     'logos',
     'logos',
     true,
     5242880,
-    ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
-)
-ON CONFLICT (id) DO NOTHING;
+    array[
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/svg+xml'
+    ]
+  )
+on conflict (id) do nothing;
 
 -- Storage policies
-DROP POLICY IF EXISTS "Users can upload own resume" ON storage.objects;
-DROP POLICY IF EXISTS "Users can view own resume" ON storage.objects;
-DROP POLICY IF EXISTS "Users can update own resume" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete own resume" ON storage.objects;
-DROP POLICY IF EXISTS "Employers can view candidate resumes" ON storage.objects;
+drop policy IF exists "Users can upload own resume" on storage.objects;
 
-CREATE POLICY "Users can upload own resume"
-ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'resumes' AND auth.uid()::text = (storage.foldername(name))[1]);
+drop policy IF exists "Users can view own resume" on storage.objects;
 
-CREATE POLICY "Users can view own resume"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'resumes' AND auth.uid()::text = (storage.foldername(name))[1]);
+drop policy IF exists "Users can update own resume" on storage.objects;
 
-CREATE POLICY "Users can update own resume"
-ON storage.objects FOR UPDATE
-USING (bucket_id = 'resumes' AND auth.uid()::text = (storage.foldername(name))[1]);
+drop policy IF exists "Users can delete own resume" on storage.objects;
 
-CREATE POLICY "Users can delete own resume"
-ON storage.objects FOR DELETE
-USING (bucket_id = 'resumes' AND auth.uid()::text = (storage.foldername(name))[1]);
+drop policy IF exists "Employers can view candidate resumes" on storage.objects;
 
-CREATE POLICY "Employers can view candidate resumes"
-ON storage.objects FOR SELECT
-USING (
-    bucket_id = 'resumes' AND
-    EXISTS (
-        SELECT 1 FROM profiles p
-        JOIN organization_members om ON om.organization_id = p.organization_id
-        WHERE p.id = auth.uid()
-        AND p.role = 'employer'
-        AND om.profile_id::text = (storage.foldername(name))[1]
-    )
+create policy "Users can upload own resume" on storage.objects for INSERT
+with
+  check (
+    bucket_id = 'resumes'
+    and auth.uid ()::text = (storage.foldername (name)) [1]
+  );
+
+create policy "Users can view own resume" on storage.objects for
+select
+  using (
+    bucket_id = 'resumes'
+    and auth.uid ()::text = (storage.foldername (name)) [1]
+  );
+
+create policy "Users can update own resume" on storage.objects
+for update
+  using (
+    bucket_id = 'resumes'
+    and auth.uid ()::text = (storage.foldername (name)) [1]
+  );
+
+create policy "Users can delete own resume" on storage.objects for DELETE using (
+  bucket_id = 'resumes'
+  and auth.uid ()::text = (storage.foldername (name)) [1]
 );
+
+create policy "Employers can view candidate resumes" on storage.objects for
+select
+  using (
+    bucket_id = 'resumes'
+    and exists (
+      select
+        1
+      from
+        profiles p
+        join organization_members om on om.organization_id = p.organization_id
+      where
+        p.id = auth.uid ()
+        and p.role = 'employer'
+        and om.profile_id::text = (storage.foldername (name)) [1]
+    )
+  );
 
 -- Document storage policies
-DROP POLICY IF EXISTS "Org members can upload documents" ON storage.objects;
-DROP POLICY IF EXISTS "Org members can view documents" ON storage.objects;
+drop policy IF exists "Org members can upload documents" on storage.objects;
 
-CREATE POLICY "Org members can upload documents"
-ON storage.objects FOR INSERT
-WITH CHECK (
-    bucket_id = 'documents' AND
-    auth.uid() IS NOT NULL AND
-    (storage.foldername(name))[1] IN (
-        SELECT id::text FROM organizations WHERE owner_id = auth.uid()
-        UNION
-        SELECT organization_id::text FROM profiles WHERE id = auth.uid()
-    )
-);
+drop policy IF exists "Org members can view documents" on storage.objects;
 
-CREATE POLICY "Org members can view documents"
-ON storage.objects FOR SELECT
-USING (
-    bucket_id = 'documents' AND
-    (storage.foldername(name))[1] IN (
-        SELECT id::text FROM organizations WHERE owner_id = auth.uid()
-        UNION
-        SELECT organization_id::text FROM profiles WHERE id = auth.uid()
+create policy "Org members can upload documents" on storage.objects for INSERT
+with
+  check (
+    bucket_id = 'documents'
+    and auth.uid () is not null
+    and (storage.foldername (name)) [1] in (
+      select
+        id::text
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+      union
+      select
+        organization_id::text
+      from
+        profiles
+      where
+        id = auth.uid ()
     )
-);
+  );
+
+create policy "Org members can view documents" on storage.objects for
+select
+  using (
+    bucket_id = 'documents'
+    and (storage.foldername (name)) [1] in (
+      select
+        id::text
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+      union
+      select
+        organization_id::text
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+  );
 
 -- Avatar storage policies (public read)
-DROP POLICY IF EXISTS "Anyone can view avatars" ON storage.objects;
-DROP POLICY IF EXISTS "Users can upload own avatar" ON storage.objects;
+drop policy IF exists "Anyone can view avatars" on storage.objects;
 
-CREATE POLICY "Anyone can view avatars"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'avatars');
+drop policy IF exists "Users can upload own avatar" on storage.objects;
 
-CREATE POLICY "Users can upload own avatar"
-ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
+create policy "Anyone can view avatars" on storage.objects for
+select
+  using (bucket_id = 'avatars');
+
+create policy "Users can upload own avatar" on storage.objects for INSERT
+with
+  check (
+    bucket_id = 'avatars'
+    and auth.uid ()::text = (storage.foldername (name)) [1]
+  );
 
 -- Logo storage policies (public read)
-DROP POLICY IF EXISTS "Anyone can view logos" ON storage.objects;
-DROP POLICY IF EXISTS "Org owners can upload logos" ON storage.objects;
+drop policy IF exists "Anyone can view logos" on storage.objects;
 
-CREATE POLICY "Anyone can view logos"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'logos');
+drop policy IF exists "Org owners can upload logos" on storage.objects;
 
-CREATE POLICY "Org owners can upload logos"
-ON storage.objects FOR INSERT
-WITH CHECK (
-    bucket_id = 'logos' AND
-    (storage.foldername(name))[1] IN (SELECT id::text FROM organizations WHERE owner_id = auth.uid())
-);
+create policy "Anyone can view logos" on storage.objects for
+select
+  using (bucket_id = 'logos');
 
+create policy "Org owners can upload logos" on storage.objects for INSERT
+with
+  check (
+    bucket_id = 'logos'
+    and (storage.foldername (name)) [1] in (
+      select
+        id::text
+      from
+        organizations
+      where
+        owner_id = auth.uid ()
+    )
+  );
 
 -- =============================================
 -- DONE! Schema is ready.
 -- =============================================
-
 -- Summary of tables:
 -- 1.  industries          - Industry lookup
 -- 2.  profiles            - User profiles
@@ -2327,3 +3025,330 @@ WITH CHECK (
 -- 19. benefits_plans      - Available benefits
 -- 20. benefits_enrollments - Employee benefit enrollments
 -- 21. activity_log        - Audit trail
+drop trigger IF exists on_auth_user_created on auth.users;
+
+-- Disable RLS on profiles table
+alter table profiles DISABLE row LEVEL SECURITY;
+
+-- Also disable on organizations if needed
+alter table organizations DISABLE row LEVEL SECURITY;
+
+-- And organization_members
+alter table organization_members DISABLE row LEVEL SECURITY;
+
+-- Add unique constraint to profiles.email
+alter table profiles
+add constraint uk_profiles_email unique (email);
+
+-- Verify constraint
+select
+  constraint_name
+from
+  information_schema.table_constraints
+where
+  table_name = 'profiles'
+  and constraint_type = 'UNIQUE';
+
+-- Add holidays for your test organization
+insert into
+  holidays (organization_id, name, date, is_paid)
+select
+  id,
+  'Independence Day',
+  '2025-07-04',
+  true
+from
+  organizations
+limit
+  1;
+
+insert into
+  holidays (organization_id, name, date, is_paid)
+select
+  id,
+  'Labor Day',
+  '2025-09-01',
+  true
+from
+  organizations
+limit
+  1;
+
+insert into
+  holidays (organization_id, name, date, is_paid)
+select
+  id,
+  'Thanksgiving',
+  '2025-11-27',
+  true
+from
+  organizations
+limit
+  1;
+
+-- Add announcements (without created_by)
+insert into
+  announcements (organization_id, title, content, is_pinned)
+select
+  id,
+  'Welcome to Talyn!',
+  'We are excited to have you on board. Check out your dashboard for an overview of your workspace.',
+  true
+from
+  organizations
+limit
+  1;
+
+insert into
+  announcements (organization_id, title, content, is_pinned)
+select
+  id,
+  'New Benefits Portal',
+  'We have launched a new benefits portal for easier access to healthcare and retirement options.',
+  false
+from
+  organizations
+limit
+  1;
+
+select
+  column_name
+from
+  information_schema.columns
+where
+  table_name = 'announcements';
+
+alter table organization_members
+add column location TEXT,
+add column start_date DATE;
+
+select
+  id,
+  email,
+  role,
+  organization_id,
+  status
+from
+  profiles
+where
+  email = 'akramwashim027@gmail.com';
+
+-- 2. Check if an organization exists for you
+select
+  *
+from
+  organizations
+where
+  owner_id = 'b45b6cf3-bc32-43f5-acc6-2a5a41662227';
+
+-- 3. If organization exists but not linked, link it:
+update profiles
+set
+  organization_id = 'YOUR_ORG_ID'
+where
+  email = 'YOUR_EMPLOYER_EMAIL';
+
+-- 4. If NO organization exists, create one:
+insert into
+  organizations (name, email, owner_id, status, industry)
+values
+  (
+    'Your Company Name',
+    'YOUR_EMAIL',
+    'YOUR_PROFILE_ID',
+    'active',
+    'other'
+  )
+returning
+  id;
+
+-- Then link it to your profile:
+update profiles
+set
+  organization_id = 'THE_NEW_ORG_ID',
+  status = 'active',
+  onboarding_completed = true
+where
+  id = 'YOUR_PROFILE_ID';
+
+-- And create your owner membership:
+insert into
+  organization_members (
+    organization_id,
+    profile_id,
+    member_role,
+    status,
+    joined_at
+  )
+values
+  (
+    'THE_NEW_ORG_ID',
+    'YOUR_PROFILE_ID',
+    'owner',
+    'active',
+    NOW()
+  );
+
+select
+  *
+from
+  pg_policies
+where
+  tablename = 'documents';
+
+-- If needed, add insert policy for authenticated users
+create policy "Users can insert documents for their org" on documents for INSERT
+with
+  check (
+    organization_id in (
+      select
+        organization_id
+      from
+        profiles
+      where
+        id = auth.uid ()
+    )
+  );
+
+-- Migration: Add invitation tracking columns to organization_members
+-- Run this in Supabase SQL Editor
+-- Add invitation_email column (stores email for invitations before profile exists)
+alter table organization_members
+add column if not exists invitation_email TEXT;
+
+-- Add invited_at column (if not exists - may already exist)
+alter table organization_members
+add column if not exists invited_at TIMESTAMPTZ;
+
+-- Add joined_at column (if not exists - may already exist)
+alter table organization_members
+add column if not exists joined_at TIMESTAMPTZ;
+
+-- Add offboarded_at column (if not exists - may already exist)
+alter table organization_members
+add column if not exists offboarded_at TIMESTAMPTZ;
+
+-- Add created_at column
+alter table organization_members
+add column if not exists created_at TIMESTAMPTZ default NOW();
+
+-- Add updated_at column
+alter table organization_members
+add column if not exists updated_at TIMESTAMPTZ default NOW();
+
+-- Add created_by column (who invited this member)
+-- Note: This might conflict with existing invited_by column - check first
+do $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'organization_members' AND column_name = 'created_by'
+    ) THEN
+        ALTER TABLE organization_members ADD COLUMN created_by UUID REFERENCES profiles(id);
+    END IF;
+END $$;
+
+-- Create index for email lookup (to match invitations with signups)
+create index IF not exists idx_members_invitation_email on organization_members (invitation_email)
+where
+  invitation_email is not null;
+
+-- Make profile_id nullable (allow invitations before user signs up)
+alter table organization_members
+alter column profile_id
+drop not null;
+
+-- Add comment explaining the invitation flow
+COMMENT on column organization_members.invitation_email is 'Email used for invitation, used to match with profile when user signs up';
+
+COMMENT on column organization_members.invited_at is 'Timestamp when the invitation was created';
+
+COMMENT on column organization_members.joined_at is 'Timestamp when status changed to active';
+
+-- Create a trigger to update updated_at timestamp
+create or replace function update_updated_at_column () RETURNS TRIGGER as $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Apply trigger to organization_members
+drop trigger IF exists update_organization_members_updated_at on organization_members;
+
+create trigger update_organization_members_updated_at BEFORE
+update on organization_members for EACH row
+execute FUNCTION update_updated_at_column ();
+
+--schema to create password reset table
+create table password_reset_tokens (
+  id UUID primary key default gen_random_uuid (),
+  user_id UUID not null references profiles (id) on delete CASCADE,
+  token_hash TEXT not null,
+  expires_at TIMESTAMPTZ not null,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ default NOW()
+);
+
+create index idx_reset_tokens_hash on password_reset_tokens (token_hash);
+
+-- Email Service Expansion Migration
+-- Run this in Supabase SQL editor
+-- Email verification tokens (similar pattern to password_reset_tokens)
+create table if not exists email_verification_tokens (
+  id UUID primary key default gen_random_uuid (),
+  user_id UUID not null references profiles (id) on delete CASCADE,
+  token_hash TEXT not null,
+  expires_at TIMESTAMPTZ not null,
+  verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ default NOW()
+);
+
+create index IF not exists idx_verification_tokens_hash on email_verification_tokens (token_hash);
+
+create index IF not exists idx_verification_tokens_user on email_verification_tokens (user_id);
+
+-- Email logs for tracking sent emails
+create table if not exists email_logs (
+  id UUID primary key default gen_random_uuid (),
+  recipient_email TEXT not null,
+  email_type TEXT not null,
+  subject TEXT not null,
+  resend_message_id TEXT,
+  status TEXT default 'sent',
+  metadata JSONB,
+  error_message TEXT,
+  created_at TIMESTAMPTZ default NOW()
+);
+
+create index IF not exists idx_email_logs_recipient on email_logs (recipient_email);
+
+create index IF not exists idx_email_logs_type on email_logs (email_type);
+
+-- Add email_verified column to profiles if not exists
+do $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'profiles' AND column_name = 'email_verified'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN email_verified BOOLEAN DEFAULT false;
+  END IF;
+END $$;
+
+-- Update existing verified users (those who signed up before this migration)
+-- Set email_verified = true for users with status = 'active'
+update profiles
+set
+  email_verified = true
+where
+  status = 'active'
+  and email_verified is null;
+
+-- Set email_verified = false for users with status = 'pending'
+update profiles
+set
+  email_verified = false
+where
+  status = 'pending'
+  and email_verified is null;

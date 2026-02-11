@@ -123,24 +123,32 @@ export const useAuthStore = create((set, get) => ({
   },
 
   logout: async () => {
-    set({ isLoading: true })
-    try {
-      await authAPI.logout()
-    } catch (error) {
-      // Continue logout even if API call fails
-      console.error('Logout error:', error)
-    } finally {
-      // Always clear local state and token
-      localStorage.removeItem('access_token')
-      set({
-        user: null,
-        profile: null,
-        organization: null,
-        membership: null,
-        pendingInvitations: [],
-        isAuthenticated: false,
-        isLoading: false
-      })
+    // Get token before clearing anything
+    const token = localStorage.getItem('access_token')
+
+    // Clear local state FIRST to prevent any race conditions
+    localStorage.removeItem('access_token')
+    set({
+      user: null,
+      profile: null,
+      organization: null,
+      membership: null,
+      pendingInvitations: [],
+      isAuthenticated: false,
+      isLoading: false,
+      error: null
+    })
+
+    // Only call API logout if we had a valid token
+    // This is a best-effort call - we've already logged out locally
+    if (token) {
+      try {
+        await authAPI.logout()
+      } catch (error) {
+        // Ignore errors - we're logged out locally already
+        // This prevents loops when the logout API fails with 401
+        console.warn('Logout API call failed (ignored):', error.message)
+      }
     }
   },
 

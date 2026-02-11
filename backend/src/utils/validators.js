@@ -31,6 +31,29 @@ export const loginSchema = z.object({
   expectedRole: z.enum(['employer', 'candidate']).optional()
 })
 
+// Password reset schemas
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email address').transform(v => v.toLowerCase())
+})
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email('Invalid email address').transform(v => v.toLowerCase())
+})
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(passwordRegex, 'Password must contain at least 1 uppercase letter, 1 lowercase letter, and 1 number')
+})
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(passwordRegex, 'Password must contain at least 1 uppercase letter, 1 lowercase letter, and 1 number')
+})
+
 // Profile schemas
 export const completeEmployerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),

@@ -8,11 +8,15 @@ import Home from '../pages/Home'
 import AboutUs from '../pages/AboutUs'
 import SignUp from '../pages/SignUp'
 import Login from '../pages/Login'
+import ForgotPassword from '../pages/ForgotPassword'
+import ResetPassword from '../pages/ResetPassword'
+import VerifyEmail from '../pages/VerifyEmail'
 import Dashboard from '../pages/Dashboard'
 import People from '../pages/People'
 import PersonDetail from '../pages/PersonDetail'
 import EmployeeDashboard from '../pages/EmployeeDashboard'
 import Invoices from '../pages/Invoices'
+import Settings from '../pages/Settings'
 
 export default function AppRoutes() {
   return (
@@ -24,6 +28,9 @@ export default function AppRoutes() {
         <Route path="about-us" element={<AboutUs />} />
         <Route path="sign-up" element={<SignUp />} />
         <Route path="login-page" element={<Login />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
+        <Route path="reset-password" element={<ResetPassword />} />
+        <Route path="verify-email" element={<VerifyEmail />} />
       </Route>
 
       {/* Protected routes - wrapped in ProtectedLayout */}
@@ -77,6 +84,9 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+        {/* Common routes (both roles) */}
+        <Route path="settings" element={<Settings />} />
       </Route>
 
       {/* Catch-all redirect */}

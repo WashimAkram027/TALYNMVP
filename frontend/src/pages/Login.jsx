@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
+import { authAPI } from '../services/api'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -16,33 +17,64 @@ export default function Login() {
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [unverifiedEmail, setUnverifiedEmail] = useState('')
+  const [resendingVerification, setResendingVerification] = useState(false)
+  const [resendSuccess, setResendSuccess] = useState(false)
 
   const handleEmployerLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setUnverifiedEmail('')
+    setResendSuccess(false)
 
     const result = await login(employerEmail, employerPassword, 'employer')
 
     if (result.success) {
       navigate('/dashboard', { replace: true })
     } else {
-      setError(result.error || 'Login failed')
+      if (result.error === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(employerEmail)
+        setError('Please verify your email before logging in.')
+      } else {
+        setError(result.error || 'Login failed')
+      }
     }
     setLoading(false)
+  }
+
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) return
+
+    setResendingVerification(true)
+    try {
+      await authAPI.resendVerification(unverifiedEmail)
+      setResendSuccess(true)
+    } catch (err) {
+      // Still show success to not reveal if email exists
+      setResendSuccess(true)
+    }
+    setResendingVerification(false)
   }
 
   const handleCandidateLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setUnverifiedEmail('')
+    setResendSuccess(false)
 
     const result = await login(candidateEmail, candidatePassword, 'candidate')
 
     if (result.success) {
       navigate('/dashboard-employee', { replace: true })
     } else {
-      setError(result.error || 'Login failed')
+      if (result.error === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(candidateEmail)
+        setError('Please verify your email before logging in.')
+      } else {
+        setError(result.error || 'Login failed')
+      }
     }
     setLoading(false)
   }
@@ -63,7 +95,21 @@ export default function Login() {
       {error && (
         <div className="max-w-6xl mx-auto w-full mb-6">
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg">
-            {error}
+            <p>{error}</p>
+            {unverifiedEmail && !resendSuccess && (
+              <button
+                onClick={handleResendVerification}
+                disabled={resendingVerification}
+                className="mt-2 text-sm font-medium text-primary hover:text-primary-hover underline disabled:opacity-50"
+              >
+                {resendingVerification ? 'Sending...' : 'Resend verification email'}
+              </button>
+            )}
+            {resendSuccess && (
+              <p className="mt-2 text-sm text-green-600 dark:text-green-400">
+                Verification email sent! Check your inbox.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -129,9 +175,9 @@ export default function Login() {
 
               <div className="flex items-center justify-end">
                 <div className="text-sm">
-                  <span className="font-medium text-gray-400 dark:text-gray-500 cursor-default" title="Coming soon">
+                  <Link to="/forgot-password" className="font-medium text-primary hover:text-blue-500 transition-colors">
                     Forgot password?
-                  </span>
+                  </Link>
                 </div>
               </div>
 
@@ -214,9 +260,9 @@ export default function Login() {
 
               <div className="flex items-center justify-end">
                 <div className="text-sm">
-                  <span className="font-medium text-gray-400 dark:text-gray-500 cursor-default" title="Coming soon">
+                  <Link to="/forgot-password" className="font-medium text-candidate-btn hover:text-candidate-btn-hover transition-colors">
                     Forgot password?
-                  </span>
+                  </Link>
                 </div>
               </div>
 

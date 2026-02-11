@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { authAPI, profileAPI } from '../services/api'
 
@@ -17,8 +17,17 @@ const validatePassword = (password) => {
 
 export default function SignUp() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { signUp } = useAuthStore()
   const fileInputRef = useRef(null)
+
+  // Check for invite params
+  const inviteEmail = searchParams.get('email')
+  const isInvite = searchParams.get('invite') === 'true'
+
+  // Verification success state
+  const [signupComplete, setSignupComplete] = useState(false)
+  const [signupEmail, setSignupEmail] = useState('')
 
   // Employer form state
   const [empFirstName, setEmpFirstName] = useState('')
@@ -35,7 +44,7 @@ export default function SignUp() {
   // Candidate form state
   const [candFirstName, setCandFirstName] = useState('')
   const [candLastName, setCandLastName] = useState('')
-  const [candEmail, setCandEmail] = useState('')
+  const [candEmail, setCandEmail] = useState(inviteEmail || '')
   const [linkedIn, setLinkedIn] = useState('')
   const [candPassword, setCandPassword] = useState('')
   const [candConfirmPassword, setCandConfirmPassword] = useState('')
@@ -146,9 +155,10 @@ export default function SignUp() {
       role: 'employer'
     })
     if (result.success) {
-      // Clear auth state since user needs to log in manually
+      // Clear auth state since user needs to verify email
       localStorage.removeItem('access_token')
-      navigate('/login-page')
+      setSignupEmail(busEmail)
+      setSignupComplete(true)
     } else {
       setError(result.error || 'Sign up failed')
     }
@@ -196,17 +206,68 @@ export default function SignUp() {
           // Don't block signup, just warn
         }
       }
-      // Clear auth state since user needs to log in manually
+      // Clear auth state since user needs to verify email
       localStorage.removeItem('access_token')
-      navigate('/login-page')
+      setSignupEmail(candEmail)
+      setSignupComplete(true)
     } else {
       setError(result.error || 'Sign up failed')
     }
     setLoading(false)
   }
 
+  // Show verification success screen after signup
+  if (signupComplete) {
+    return (
+      <div className="flex-grow flex items-center justify-center py-16 px-4 bg-background-light dark:bg-background-dark">
+        <div className="max-w-md w-full bg-card-light dark:bg-card-dark rounded-2xl shadow-xl p-8 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4">
+              <span className="material-icons text-primary text-4xl">
+                mail
+              </span>
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Check your email
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mb-2">
+            We've sent a verification link to:
+          </p>
+          <p className="text-primary font-medium mb-6">
+            {signupEmail}
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Click the link in your email to verify your account. The link will expire in 24 hours.
+          </p>
+          <div className="space-y-3">
+            <Link
+              to="/login-page"
+              className="block w-full py-3 px-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-colors"
+            >
+              Go to Login
+            </Link>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Didn't receive the email? Check your spam folder or try logging in to resend.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-background-light dark:bg-background-dark">
+      {/* Invitation Banner */}
+      {isInvite && inviteEmail && (
+        <div className="mb-6">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 px-4 py-3 rounded-lg flex items-center gap-3">
+            <span className="material-icons">celebration</span>
+            <span>You've been invited! Create your account with <strong>{inviteEmail}</strong> to accept the invitation.</span>
+          </div>
+        </div>
+      )}
+
       {/* Error Message */}
       {error && (
         <div className="mb-6">

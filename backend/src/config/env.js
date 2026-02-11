@@ -18,6 +18,10 @@ export const env = {
   // CORS
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 
+  // Email (Resend)
+  resendApiKey: process.env.RESEND_API_KEY,
+  emailFrom: process.env.EMAIL_FROM || 'Talyn <noreply@resend.dev>',
+
   // Helpers
   isDev: process.env.NODE_ENV === 'development',
   isProd: process.env.NODE_ENV === 'production'

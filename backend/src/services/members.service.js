@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js'
+import { emailService } from './email.service.js'
 
 /**
  * Members Service
@@ -168,8 +169,35 @@ export const membersService = {
 
     if (error) throw error
 
-    // TODO: Send invitation email (future enhancement)
-    // await emailService.sendInvitation(email, orgId, data.id)
+    // Send invitation email
+    try {
+      // Get inviter and org info for email
+      const { data: inviterProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, full_name')
+        .eq('id', invitedBy)
+        .single()
+
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', orgId)
+        .single()
+
+      const inviterName = inviterProfile?.full_name ||
+        `${inviterProfile?.first_name || ''} ${inviterProfile?.last_name || ''}`.trim() ||
+        'Someone'
+
+      await emailService.sendInvitationEmail(
+        email,
+        inviterName,
+        org?.name || 'an organization',
+        memberData.jobTitle
+      )
+    } catch (emailError) {
+      console.error('[MembersService] Failed to send invitation email:', emailError)
+      // Don't throw - invitation was created, email just failed
+    }
 
     return data
   },
@@ -450,6 +478,41 @@ export const membersService = {
       })
       .eq('id', profileId)
 
+    // Send notification email to the inviter/employer
+    try {
+      // Get inviter info
+      if (invitation.invited_by) {
+        const { data: inviterProfile } = await supabase
+          .from('profiles')
+          .select('email, first_name')
+          .eq('id', invitation.invited_by)
+          .single()
+
+        // Get accepted user's full name
+        const { data: acceptedProfile } = await supabase
+          .from('profiles')
+          .select('full_name, first_name, last_name')
+          .eq('id', profileId)
+          .single()
+
+        const candidateName = acceptedProfile?.full_name ||
+          `${acceptedProfile?.first_name || ''} ${acceptedProfile?.last_name || ''}`.trim() ||
+          profile.email
+
+        if (inviterProfile?.email) {
+          await emailService.sendInvitationAcceptedEmail(
+            inviterProfile.email,
+            inviterProfile.first_name,
+            candidateName,
+            invitation.organization?.name || 'your organization'
+          )
+        }
+      }
+    } catch (emailError) {
+      console.error('[MembersService] Failed to send acceptance notification:', emailError)
+      // Don't throw - acceptance was successful, email just failed
+    }
+
     return {
       membership: updatedMember,
       organization: updatedMember.organization
@@ -460,10 +523,15 @@ export const membersService = {
    * Decline an invitation
    */
   async declineInvitation(memberId, profileId) {
-    // Get the invitation to verify it exists
+    // Get the invitation to verify it exists (include invited_by for notification)
     const { data: invitation, error: inviteError } = await supabase
       .from('organization_members')
-      .select('invitation_email')
+      .select(`
+        invitation_email,
+        invited_by,
+        organization_id,
+        organization:organizations!organization_members_organization_id_fkey(name)
+      `)
       .eq('id', memberId)
       .eq('status', 'invited')
       .single()
@@ -491,6 +559,29 @@ export const membersService = {
 
     if (deleteError) throw deleteError
 
+    // Send notification email to the inviter/employer
+    try {
+      if (invitation.invited_by) {
+        const { data: inviterProfile } = await supabase
+          .from('profiles')
+          .select('email, first_name')
+          .eq('id', invitation.invited_by)
+          .single()
+
+        if (inviterProfile?.email) {
+          await emailService.sendInvitationDeclinedEmail(
+            inviterProfile.email,
+            inviterProfile.first_name,
+            invitation.invitation_email,
+            invitation.organization?.name || 'your organization'
+          )
+        }
+      }
+    } catch (emailError) {
+      console.error('[MembersService] Failed to send decline notification:', emailError)
+      // Don't throw - decline was successful, email just failed
+    }
+
     return { success: true }
   },
 
@@ -498,7 +589,7 @@ export const membersService = {
    * Resend an invitation (for employers)
    * Resets the invited_at timestamp
    */
-  async resendInvitation(memberId, orgId) {
+  async resendInvitation(memberId, orgId, resenderId) {
     const { data, error } = await supabase
       .from('organization_members')
       .update({
@@ -512,7 +603,35 @@ export const membersService = {
 
     if (error) throw error
 
-    // TODO: Send invitation email (future enhancement)
+    // Send invitation email
+    try {
+      // Get resender and org info for email
+      const { data: resenderProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, full_name')
+        .eq('id', resenderId)
+        .single()
+
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', orgId)
+        .single()
+
+      const resenderName = resenderProfile?.full_name ||
+        `${resenderProfile?.first_name || ''} ${resenderProfile?.last_name || ''}`.trim() ||
+        'Someone'
+
+      await emailService.sendInvitationEmail(
+        data.invitation_email,
+        resenderName,
+        org?.name || 'an organization',
+        data.job_title
+      )
+    } catch (emailError) {
+      console.error('[MembersService] Failed to send invitation email:', emailError)
+      // Don't throw - invitation was updated, email just failed
+    }
 
     return data
   }

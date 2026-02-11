@@ -141,11 +141,20 @@ export default function Sidebar({ onClose }) {
           <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
         </span>
 
-        <span className={disabledLinkClass} title="Coming soon">
+        <NavLink
+          to="/settings"
+          onClick={handleNavClick}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+              isActive
+                ? 'bg-primary/10 text-primary font-medium'
+                : 'text-subtext-light dark:text-subtext-dark hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-text-light dark:hover:text-text-dark'
+            }`
+          }
+        >
           <span className="material-icons-outlined">settings</span>
           Settings
-          <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
-        </span>
+        </NavLink>
       </nav>
 
       {/* User Profile */}

@@ -18,8 +18,39 @@ export const authController = {
           email: result.user.email
         },
         profile: result.profile,
-        token: result.token
-      }, 'Account created successfully')
+        token: result.token,
+        requiresVerification: result.requiresVerification
+      }, 'Account created successfully. Please check your email to verify your account.')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * GET /api/auth/verify-email
+   */
+  async verifyEmail(req, res, next) {
+    try {
+      const { token } = req.query
+      if (!token) {
+        return badRequestResponse(res, 'Verification token is required')
+      }
+
+      const result = await authService.verifyEmail(token)
+      return successResponse(res, result, 'Email verified successfully')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/auth/resend-verification
+   */
+  async resendVerification(req, res, next) {
+    try {
+      const { email } = req.body
+      await authService.resendVerificationEmail(email)
+      return successResponse(res, null, 'If the email exists and is not verified, a new verification email has been sent')
     } catch (error) {
       next(error)
     }
@@ -107,6 +138,19 @@ export const authController = {
     try {
       const result = await authService.refreshToken(req.user.id)
       return successResponse(res, result, 'Token refreshed')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/auth/change-password
+   */
+  async changePassword(req, res, next) {
+    try {
+      const { currentPassword, newPassword } = req.body
+      await authService.changePassword(req.user.id, currentPassword, newPassword)
+      return successResponse(res, null, 'Password changed successfully')
     } catch (error) {
       next(error)
     }
