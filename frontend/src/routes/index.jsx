@@ -16,6 +16,15 @@ import People from '../pages/People'
 import PersonDetail from '../pages/PersonDetail'
 import EmployeeDashboard from '../pages/EmployeeDashboard'
 import Invoices from '../pages/Invoices'
+import Payroll from '../pages/Payroll'
+import TimeOff from '../pages/TimeOff'
+import Benefits from '../pages/Benefits'
+import Holidays from '../pages/Holidays'
+import Announcements from '../pages/Announcements'
+import Documents from '../pages/Documents'
+import JobPostings from '../pages/JobPostings'
+import Applications from '../pages/Applications'
+import Compliance from '../pages/Compliance'
 import Settings from '../pages/Settings'
 
 export default function AppRoutes() {
@@ -67,12 +76,90 @@ export default function AppRoutes() {
           }
         />
         <Route
-          path="people-copy"
+          path="payroll"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <Payroll />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="time-off"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <TimeOff />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="benefits"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <Benefits />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="holidays"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <Holidays />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="announcements"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <Announcements />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="invoices"
           element={
             <ProtectedRoute allowedRoles={['employer']}>
               <Invoices />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="documents"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <Documents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="job-postings"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <JobPostings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="applications"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <Applications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <Compliance />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Legacy route redirect */}
+        <Route
+          path="people-copy"
+          element={<Navigate to="/invoices" replace />}
         />
 
         {/* Candidate-only routes */}

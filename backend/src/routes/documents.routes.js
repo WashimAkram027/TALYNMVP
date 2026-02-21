@@ -2,6 +2,8 @@ import { Router } from 'express'
 import multer from 'multer'
 import { documentsController } from '../controllers/documents.controller.js'
 import { authenticate, requireOrganization } from '../middleware/auth.js'
+import { validateBody } from '../middleware/validate.js'
+import { updateDocumentSchema } from '../utils/validators.js'
 
 const router = Router()
 
@@ -68,7 +70,7 @@ router.get('/:id', documentsController.getById)
  * PUT /api/documents/:id
  * Update document metadata
  */
-router.put('/:id', documentsController.update)
+router.put('/:id', validateBody(updateDocumentSchema), documentsController.update)
 
 /**
  * DELETE /api/documents/:id

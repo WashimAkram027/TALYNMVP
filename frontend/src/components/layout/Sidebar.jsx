@@ -1,7 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 
-const disabledLinkClass = 'flex items-center gap-3 px-3 py-2.5 text-subtext-light/50 dark:text-subtext-dark/50 rounded-lg cursor-not-allowed'
+const navLinkClass = ({ isActive }) =>
+  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+    isActive
+      ? 'bg-primary/10 text-primary font-medium'
+      : 'text-subtext-light dark:text-subtext-dark hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-text-light dark:hover:text-text-dark'
+  }`
 
 export default function Sidebar({ onClose }) {
   const { user, profile, logout } = useAuthStore()
@@ -59,41 +64,68 @@ export default function Sidebar({ onClose }) {
               Management
             </div>
 
-            <NavLink
-              to="/people"
-              onClick={handleNavClick}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-subtext-light dark:text-subtext-dark hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-text-light dark:hover:text-text-dark'
-                }`
-              }
-            >
+            <NavLink to="/people" onClick={handleNavClick} className={navLinkClass}>
               <span className="material-icons-outlined">people</span>
               Team
             </NavLink>
 
-            <NavLink
-              to="/people-copy"
-              onClick={handleNavClick}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-subtext-light dark:text-subtext-dark hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-text-light dark:hover:text-text-dark'
-                }`
-              }
-            >
+            <NavLink to="/payroll" onClick={handleNavClick} className={navLinkClass}>
               <span className="material-icons-outlined">payments</span>
               Payroll
             </NavLink>
 
-            <span className={disabledLinkClass} title="Coming soon">
-              <span className="material-icons-outlined">policy</span>
+            <NavLink to="/time-off" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">event_available</span>
+              Time Off
+            </NavLink>
+
+            <NavLink to="/benefits" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">health_and_safety</span>
+              Benefits
+            </NavLink>
+
+            <NavLink to="/compliance" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">verified_user</span>
               Compliance
-              <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
-            </span>
+            </NavLink>
+
+            <div className="pt-4 pb-2 text-xs font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wider pl-3">
+              Organization
+            </div>
+
+            <NavLink to="/holidays" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">calendar_today</span>
+              Holidays
+            </NavLink>
+
+            <NavLink to="/announcements" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">campaign</span>
+              Announcements
+            </NavLink>
+
+            <NavLink to="/invoices" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">receipt_long</span>
+              Invoices
+            </NavLink>
+
+            <NavLink to="/documents" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">folder_open</span>
+              Documents
+            </NavLink>
+
+            <div className="pt-4 pb-2 text-xs font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wider pl-3">
+              Hiring
+            </div>
+
+            <NavLink to="/job-postings" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">work</span>
+              Job Postings
+            </NavLink>
+
+            <NavLink to="/applications" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">assignment</span>
+              Applications
+            </NavLink>
           </>
         )}
 
@@ -104,53 +136,22 @@ export default function Sidebar({ onClose }) {
               My Workspace
             </div>
 
-            <span className={disabledLinkClass} title="Coming soon">
-              <span className="material-icons-outlined">event_available</span>
-              Time Off
-              <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
-            </span>
-
-            <span className={disabledLinkClass} title="Coming soon">
-              <span className="material-icons-outlined">attach_money</span>
-              Payroll & Benefits
-              <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
-            </span>
-
-            <span className={disabledLinkClass} title="Coming soon">
-              <span className="material-icons-outlined">business</span>
-              Company Info
-              <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
-            </span>
+            <NavLink to="/documents" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">folder_open</span>
+              Documents
+            </NavLink>
           </>
         )}
 
         {/* Common menu items */}
-        <span className={disabledLinkClass} title="Coming soon">
-          <span className="material-icons-outlined">folder_open</span>
-          Documents
-          <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
-        </span>
-
         <div className="pt-4 pb-2 text-xs font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wider pl-3">
           Support
         </div>
 
-        <span className={disabledLinkClass} title="Coming soon">
-          <span className="material-icons-outlined">help_outline</span>
-          Help Center
-          <span className="ml-auto text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">Soon</span>
-        </span>
-
         <NavLink
           to="/settings"
           onClick={handleNavClick}
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-              isActive
-                ? 'bg-primary/10 text-primary font-medium'
-                : 'text-subtext-light dark:text-subtext-dark hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-text-light dark:hover:text-text-dark'
-            }`
-          }
+          className={navLinkClass}
         >
           <span className="material-icons-outlined">settings</span>
           Settings

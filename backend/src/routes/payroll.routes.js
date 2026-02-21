@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { payrollController } from '../controllers/payroll.controller.js'
 import { authenticate, requireOrganization } from '../middleware/auth.js'
+import { validateBody, validateQuery } from '../middleware/validate.js'
+import { createPayrollRunSchema, updatePayrollStatusSchema, updatePayrollItemSchema, payrollFiltersSchema } from '../utils/validators.js'
 
 const router = Router()
 
@@ -13,7 +15,7 @@ router.use(requireOrganization)
  * Get all payroll runs for the organization
  * Query params: status, fromDate, toDate
  */
-router.get('/runs', payrollController.getRuns)
+router.get('/runs', validateQuery(payrollFiltersSchema), payrollController.getRuns)
 
 /**
  * GET /api/payroll/upcoming
@@ -32,14 +34,14 @@ router.get('/runs/:id', payrollController.getRun)
  * Create a new payroll run
  * Body: payPeriodStart, payPeriodEnd, payDate
  */
-router.post('/runs', payrollController.createRun)
+router.post('/runs', validateBody(createPayrollRunSchema), payrollController.createRun)
 
 /**
  * PUT /api/payroll/runs/:id/status
  * Update payroll run status
  * Body: status (draft, processing, completed, cancelled)
  */
-router.put('/runs/:id/status', payrollController.updateRunStatus)
+router.put('/runs/:id/status', validateBody(updatePayrollStatusSchema), payrollController.updateRunStatus)
 
 /**
  * DELETE /api/payroll/runs/:id
@@ -51,7 +53,7 @@ router.delete('/runs/:id', payrollController.deleteRun)
  * PUT /api/payroll/items/:id
  * Update a payroll item
  */
-router.put('/items/:id', payrollController.updateItem)
+router.put('/items/:id', validateBody(updatePayrollItemSchema), payrollController.updateItem)
 
 /**
  * GET /api/payroll/member/:memberId/history

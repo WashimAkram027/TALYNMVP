@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { invoicesController } from '../controllers/invoices.controller.js'
 import { authenticate, requireOrganization } from '../middleware/auth.js'
+import { validateBody } from '../middleware/validate.js'
+import { createInvoiceSchema, updateInvoiceSchema } from '../utils/validators.js'
 
 const router = Router()
 
@@ -12,9 +14,9 @@ router.get('/stats', invoicesController.getStats)
 router.get('/overdue', invoicesController.getOverdue)
 router.get('/generate-number', invoicesController.generateNumber)
 router.get('/:id', invoicesController.getById)
-router.post('/', invoicesController.create)
+router.post('/', validateBody(createInvoiceSchema), invoicesController.create)
 router.post('/update-overdue', invoicesController.updateOverdueStatus)
-router.put('/:id', invoicesController.update)
+router.put('/:id', validateBody(updateInvoiceSchema), invoicesController.update)
 router.delete('/:id', invoicesController.delete)
 
 export default router

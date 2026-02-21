@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { timeOffController } from '../controllers/timeoff.controller.js'
 import { authenticate, requireOrganization } from '../middleware/auth.js'
+import { validateBody, validateQuery } from '../middleware/validate.js'
+import { createTimeOffPolicySchema, updateTimeOffPolicySchema, createTimeOffRequestSchema, reviewTimeOffRequestSchema, timeOffRequestFiltersSchema, initializeBalancesSchema } from '../utils/validators.js'
 
 const router = Router()
 
@@ -22,13 +24,13 @@ router.get('/policies', timeOffController.getPolicies)
  * POST /api/timeoff/policies
  * Create a time off policy
  */
-router.post('/policies', timeOffController.createPolicy)
+router.post('/policies', validateBody(createTimeOffPolicySchema), timeOffController.createPolicy)
 
 /**
  * PUT /api/timeoff/policies/:id
  * Update a time off policy
  */
-router.put('/policies/:id', timeOffController.updatePolicy)
+router.put('/policies/:id', validateBody(updateTimeOffPolicySchema), timeOffController.updatePolicy)
 
 /**
  * DELETE /api/timeoff/policies/:id
@@ -52,7 +54,7 @@ router.get('/balances/:memberId', timeOffController.getBalances)
  * Initialize balances for a new year/employee
  * Body: year (default current year)
  */
-router.post('/balances/:memberId/initialize', timeOffController.initializeBalances)
+router.post('/balances/:memberId/initialize', validateBody(initializeBalancesSchema), timeOffController.initializeBalances)
 
 /**
  * Requests
@@ -63,21 +65,21 @@ router.post('/balances/:memberId/initialize', timeOffController.initializeBalanc
  * Get time off requests
  * Query params: memberId, status, fromDate, toDate
  */
-router.get('/requests', timeOffController.getRequests)
+router.get('/requests', validateQuery(timeOffRequestFiltersSchema), timeOffController.getRequests)
 
 /**
  * POST /api/timeoff/requests
  * Request time off
  * Body: policyId, startDate, endDate, reason (optional), memberId (optional)
  */
-router.post('/requests', timeOffController.createRequest)
+router.post('/requests', validateBody(createTimeOffRequestSchema), timeOffController.createRequest)
 
 /**
  * PUT /api/timeoff/requests/:id/review
  * Review (approve/reject) time off request
  * Body: approved (boolean), notes (optional)
  */
-router.put('/requests/:id/review', timeOffController.reviewRequest)
+router.put('/requests/:id/review', validateBody(reviewTimeOffRequestSchema), timeOffController.reviewRequest)
 
 /**
  * PUT /api/timeoff/requests/:id/cancel

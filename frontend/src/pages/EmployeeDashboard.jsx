@@ -1,13 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
 import { dashboardService } from '../services/dashboardService'
+import { payrollService } from '../services/payrollService'
+import { benefitsService } from '../services/benefitsService'
+import { documentsService } from '../services/documentsService'
 import { useAuthStore } from '../store/authStore'
 
 export default function EmployeeDashboard() {
-  const { profile, pendingInvitations, acceptInvitation, declineInvitation } = useAuthStore()
+  const { profile, membership, pendingInvitations, acceptInvitation, declineInvitation } = useAuthStore()
   const [activeTab, setActiveTab] = useState('overview')
   const [stats, setStats] = useState(null)
   const [holidays, setHolidays] = useState([])
   const [announcements, setAnnouncements] = useState([])
+  const [payslips, setPayslips] = useState([])
+  const [enrollments, setEnrollments] = useState([])
+  const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [invitationLoading, setInvitationLoading] = useState(null) // Track which invitation is being processed
@@ -56,6 +62,28 @@ export default function EmployeeDashboard() {
 
     fetchDashboardData()
   }, [])
+
+  // Fetch tab-specific data when tab changes
+  useEffect(() => {
+    const memberId = membership?.id
+    if (!memberId) return
+
+    if (activeTab === 'payroll' && payslips.length === 0) {
+      payrollService.getEmployeePayrollHistory(memberId, 10)
+        .then(data => setPayslips(data || []))
+        .catch(err => console.error('Failed to fetch payslips:', err))
+
+      benefitsService.getActiveCoverage(memberId)
+        .then(data => setEnrollments(data || []))
+        .catch(err => console.error('Failed to fetch enrollments:', err))
+    }
+
+    if (activeTab === 'documents' && documents.length === 0) {
+      documentsService.getMemberDocuments(memberId)
+        .then(data => setDocuments(data || []))
+        .catch(err => console.error('Failed to fetch documents:', err))
+    }
+  }, [activeTab, membership?.id])
 
   // Loading state
   if (loading) {
@@ -426,25 +454,82 @@ export default function EmployeeDashboard() {
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Payslips</h3>
             </div>
-            <div className="flex flex-col items-center justify-center text-center p-8">
-              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                <span className="material-icons-outlined text-gray-400 text-3xl">receipt_long</span>
+            {payslips.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Period</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Pay Date</th>
+                      <th className="text-right py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Net Pay</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payslips.map((slip, index) => (
+                      <tr key={slip.id || index} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">
+                          {slip.payroll_run?.pay_period_start ? new Date(slip.payroll_run.pay_period_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                          {slip.payroll_run?.pay_period_end ? ` - ${new Date(slip.payroll_run.pay_period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                          {slip.payroll_run?.pay_date ? new Date(slip.payroll_run.pay_date).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-right font-medium text-gray-900 dark:text-white">
+                          {slip.currency || 'NPR'} {(slip.net_pay || 0).toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded ${
+                            slip.status === 'paid' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                          }`}>
+                            {slip.status ? slip.status.charAt(0).toUpperCase() + slip.status.slice(1) : 'Pending'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <p className="text-subtext-light dark:text-subtext-dark">No payslips available yet.</p>
-              <p className="text-sm text-gray-400 mt-2">Payslips will appear here after your first pay period.</p>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center text-center p-8">
+                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                  <span className="material-icons-outlined text-gray-400 text-3xl">receipt_long</span>
+                </div>
+                <p className="text-subtext-light dark:text-subtext-dark">No payslips available yet.</p>
+                <p className="text-sm text-gray-400 mt-2">Payslips will appear here after your first pay period.</p>
+              </div>
+            )}
           </div>
 
           {/* Benefits Enrollment */}
           <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl shadow-sm border border-border-light dark:border-border-dark">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Benefits Enrollment</h3>
-            <div className="flex flex-col items-center justify-center text-center p-8">
-              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                <span className="material-icons-outlined text-gray-400 text-3xl">health_and_safety</span>
+            {enrollments.length > 0 ? (
+              <div className="space-y-4">
+                {enrollments.map((enrollment, index) => (
+                  <div key={enrollment.id || index} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-gray-900 dark:text-white">{enrollment.plan_name || enrollment.name || 'Benefit Plan'}</h4>
+                      <p className="text-sm text-subtext-light dark:text-subtext-dark mt-0.5">
+                        {enrollment.type || enrollment.plan_type || 'Coverage'}
+                        {enrollment.provider && ` - ${enrollment.provider}`}
+                      </p>
+                    </div>
+                    <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-2.5 py-1 rounded">
+                      Active
+                    </span>
+                  </div>
+                ))}
               </div>
-              <p className="text-subtext-light dark:text-subtext-dark">No benefits enrolled.</p>
-              <p className="text-sm text-gray-400 mt-2">Contact your HR administrator to enroll in benefits.</p>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center text-center p-8">
+                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                  <span className="material-icons-outlined text-gray-400 text-3xl">health_and_safety</span>
+                </div>
+                <p className="text-subtext-light dark:text-subtext-dark">No benefits enrolled.</p>
+                <p className="text-sm text-gray-400 mt-2">Contact your HR administrator to enroll in benefits.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -535,13 +620,63 @@ export default function EmployeeDashboard() {
       {activeTab === 'documents' && (
         <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl shadow-sm border border-border-light dark:border-border-dark">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">My Documents</h3>
-          <div className="flex flex-col items-center justify-center text-center p-8">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-              <span className="material-icons-outlined text-gray-400 text-3xl">folder_open</span>
+          {documents.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Name</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Category</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Uploaded</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-subtext-light dark:text-subtext-dark">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map((doc, index) => (
+                    <tr key={doc.id || index} className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <span className="material-icons-outlined text-gray-400">
+                            {doc.file_type?.includes('pdf') ? 'picture_as_pdf' : 'insert_drive_file'}
+                          </span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">{doc.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 capitalize">
+                          {doc.category || 'other'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                        {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {doc.file_url && (
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:text-primary-hover text-sm font-medium flex items-center gap-1"
+                          >
+                            <span className="material-icons-outlined text-base">download</span>
+                            Download
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <p className="text-subtext-light dark:text-subtext-dark">No documents available.</p>
-            <p className="text-sm text-gray-400 mt-2">Your employment documents will appear here once uploaded by HR.</p>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-center p-8">
+              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                <span className="material-icons-outlined text-gray-400 text-3xl">folder_open</span>
+              </div>
+              <p className="text-subtext-light dark:text-subtext-dark">No documents available.</p>
+              <p className="text-sm text-gray-400 mt-2">Your employment documents will appear here once uploaded by HR.</p>
+            </div>
+          )}
         </div>
       )}
 
