@@ -106,7 +106,9 @@ export const membersController = {
         salaryCurrency,
         payFrequency,
         location,
-        startDate
+        startDate,
+        jobDescription,
+        probationPeriod
       } = req.body
 
       if (!email) {
@@ -126,7 +128,9 @@ export const membersController = {
           salaryCurrency,
           payFrequency,
           location,
-          startDate
+          startDate,
+          jobDescription,
+          probationPeriod
         }
       )
 
@@ -151,7 +155,7 @@ export const membersController = {
     try {
       const { id } = req.params
 
-      const member = await membersService.resendInvitation(id, req.user.organizationId)
+      const member = await membersService.resendInvitation(id, req.user.organizationId, req.user.id)
 
       return successResponse(res, member, 'Invitation resent successfully')
     } catch (error) {
@@ -218,6 +222,12 @@ export const membersController = {
   async offboard(req, res) {
     try {
       const { id } = req.params
+
+      // Only owner or admin can offboard
+      const callerRole = req.membership.member_role
+      if (callerRole !== 'owner' && callerRole !== 'admin') {
+        return forbiddenResponse(res, 'Only owners and admins can offboard members')
+      }
 
       // Prevent self-offboarding
       const member = await membersService.getById(id, req.user.organizationId)

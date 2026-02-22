@@ -35,24 +35,14 @@ export const membersService = {
       query = query.eq('employment_type', filters.employmentType)
     }
 
+    if (filters.search) {
+      const pattern = `%${filters.search}%`
+      query = query.or(`invitation_email.ilike.${pattern},job_title.ilike.${pattern},department.ilike.${pattern}`)
+    }
+
     const { data, error } = await query
 
     if (error) throw error
-
-    // Apply search filter if provided (client-side filter for profile fields)
-    if (filters.search && data) {
-      const searchLower = filters.search.toLowerCase()
-      return data.filter(member => {
-        const profile = member.profile
-        if (!profile) return false
-        return (
-          profile.full_name?.toLowerCase().includes(searchLower) ||
-          profile.email?.toLowerCase().includes(searchLower) ||
-          member.job_title?.toLowerCase().includes(searchLower) ||
-          member.department?.toLowerCase().includes(searchLower)
-        )
-      })
-    }
 
     return data
   },
@@ -65,7 +55,7 @@ export const membersService = {
       .from('organization_members')
       .select(`
         *,
-        profile:profiles!organization_members_profile_id_fkey(*),
+        profile:profiles!organization_members_profile_id_fkey(id, email, first_name, last_name, full_name, avatar_url, role, status),
         invited_by_profile:profiles!organization_members_invited_by_fkey(id, full_name, email)
       `)
       .eq('id', memberId)
@@ -157,6 +147,8 @@ export const membersService = {
         pay_frequency: memberData.payFrequency || 'monthly',
         location: memberData.location || null,
         start_date: memberData.startDate || null,
+        job_description: memberData.jobDescription || null,
+        probation_period: memberData.probationPeriod ? parseInt(memberData.probationPeriod) : null,
         status: 'invited',
         invited_by: invitedBy,
         invited_at: new Date().toISOString()
@@ -216,6 +208,8 @@ export const membersService = {
       'pay_frequency',
       'location',
       'start_date',
+      'job_description',
+      'probation_period',
       'status'
     ]
 

@@ -1,10 +1,12 @@
 import { documentsService } from '../services/documents.service.js'
+import { supabase } from '../config/supabase.js'
 import {
   successResponse,
   createdResponse,
   errorResponse,
   badRequestResponse,
-  notFoundResponse
+  notFoundResponse,
+  forbiddenResponse
 } from '../utils/response.js'
 
 /**
@@ -32,6 +34,20 @@ export const documentsController = {
         category: req.body.category || 'other',
         memberId: req.body.memberId || null,
         isSensitive: req.body.isSensitive
+      }
+
+      // Verify the target member belongs to the caller's organization
+      if (metadata.memberId) {
+        const { data: targetMember, error: memberErr } = await supabase
+          .from('organization_members')
+          .select('id')
+          .eq('id', metadata.memberId)
+          .eq('organization_id', req.user.organizationId)
+          .single()
+
+        if (memberErr || !targetMember) {
+          return forbiddenResponse(res, 'Member does not belong to your organization')
+        }
       }
 
       const document = await documentsService.upload(

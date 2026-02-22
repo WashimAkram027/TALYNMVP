@@ -86,7 +86,12 @@ export const inviteMemberSchema = z.object({
   memberRole: z.enum(['admin', 'manager', 'employee', 'contractor']).optional().default('employee'),
   employmentType: z.enum(['full_time', 'part_time', 'contract', 'freelance']).optional().default('full_time'),
   salaryAmount: z.number().positive().optional(),
-  salaryCurrency: z.string().optional().default('NPR')
+  salaryCurrency: z.string().optional().default('NPR'),
+  location: z.string().optional(),
+  startDate: z.string().optional(),
+  payFrequency: z.string().optional(),
+  jobDescription: z.string().max(1000).optional(),
+  probationPeriod: z.number().int().optional()
 })
 
 export const updateMemberSchema = z.object({

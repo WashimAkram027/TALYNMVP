@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
+import InviteMemberModal from '../components/features/InviteMemberModal'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
   { value: 'active', label: 'Active' },
   { value: 'invited', label: 'Invited' },
-  { value: 'inactive', label: 'Inactive' },
   { value: 'offboarded', label: 'Offboarded' }
 ]
 
@@ -42,12 +42,15 @@ export default function People() {
   const [statusFilter, setStatusFilter] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('')
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState('')
 
   // Modal states
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [feedback, setFeedback] = useState(null)
+  const [confirmModal, setConfirmModal] = useState(null)
 
   // Fetch members
   const fetchMembers = async () => {
@@ -60,6 +63,7 @@ export default function People() {
       if (statusFilter) filters.status = statusFilter
       if (roleFilter) filters.memberRole = roleFilter
       if (departmentFilter) filters.department = departmentFilter
+      if (employmentTypeFilter) filters.employmentType = employmentTypeFilter
 
       const data = await membersService.getMembers(filters)
       setMembers(data || [])
@@ -92,18 +96,17 @@ export default function People() {
   }
 
   useEffect(() => {
-    fetchMembers()
     fetchDepartments()
     fetchStats()
   }, [])
 
-  // Debounced search
+  // Debounced search and filter
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchMembers()
     }, 300)
     return () => clearTimeout(timer)
-  }, [search, statusFilter, roleFilter, departmentFilter])
+  }, [search, statusFilter, roleFilter, departmentFilter, employmentTypeFilter])
 
   // Handle member actions
   const handleActivate = async (memberId) => {
@@ -119,31 +122,55 @@ export default function People() {
     }
   }
 
-  const handleOffboard = async (memberId) => {
-    if (!confirm('Are you sure you want to offboard this member?')) return
-
-    try {
-      setActionLoading(true)
-      await membersService.offboardMember(memberId)
-      await fetchMembers()
-      await fetchStats()
-    } catch (err) {
-      alert(err.message || 'Failed to offboard member')
-    } finally {
-      setActionLoading(false)
-    }
+  const handleOffboard = (memberId) => {
+    setConfirmModal({
+      title: 'Offboard Member',
+      message: 'Are you sure you want to offboard this member? They will lose access to the organization.',
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          setActionLoading(true)
+          await membersService.offboardMember(memberId)
+          await fetchMembers()
+          await fetchStats()
+        } catch (err) {
+          alert(err.message || 'Failed to offboard member')
+        } finally {
+          setActionLoading(false)
+        }
+      }
+    })
   }
 
-  const handleDelete = async (memberId) => {
-    if (!confirm('Are you sure you want to remove this invitation?')) return
+  const handleDelete = (memberId) => {
+    setConfirmModal({
+      title: 'Remove Invitation',
+      message: 'Are you sure you want to remove this invitation? This action cannot be undone.',
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          setActionLoading(true)
+          await membersService.deleteMember(memberId)
+          await fetchMembers()
+          await fetchStats()
+        } catch (err) {
+          alert(err.message || 'Failed to delete member')
+        } finally {
+          setActionLoading(false)
+        }
+      }
+    })
+  }
 
+  const handleResendInvite = async (memberId) => {
     try {
       setActionLoading(true)
-      await membersService.deleteMember(memberId)
-      await fetchMembers()
-      await fetchStats()
+      await membersService.resendInvitation(memberId)
+      setFeedback({ type: 'success', message: 'Invitation resent successfully' })
+      setTimeout(() => setFeedback(null), 3000)
     } catch (err) {
-      alert(err.message || 'Failed to delete member')
+      setFeedback({ type: 'error', message: err.message || 'Failed to resend invitation' })
+      setTimeout(() => setFeedback(null), 3000)
     } finally {
       setActionLoading(false)
     }
@@ -221,7 +248,7 @@ export default function People() {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <input
             type="text"
             placeholder="Search by name, email, or title..."
@@ -248,6 +275,16 @@ export default function People() {
             ))}
           </select>
           <select
+            value={employmentTypeFilter}
+            onChange={(e) => setEmploymentTypeFilter(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Employment Types</option>
+            {EMPLOYMENT_TYPE_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <select
             value={departmentFilter}
             onChange={(e) => setDepartmentFilter(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -259,6 +296,13 @@ export default function People() {
           </select>
         </div>
       </div>
+
+      {/* Feedback Message */}
+      {feedback && (
+        <div className={`px-4 py-3 rounded-lg mb-6 ${feedback.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          {feedback.message}
+        </div>
+      )}
 
       {/* Error Message */}
       {error && (
@@ -358,6 +402,13 @@ export default function People() {
                           {member.status === 'invited' && (
                             <>
                               <button
+                                onClick={() => handleResendInvite(member.id)}
+                                disabled={actionLoading}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
+                                Resend Invite
+                              </button>
+                              <button
                                 onClick={() => handleActivate(member.id)}
                                 disabled={actionLoading}
                                 className="text-green-600 hover:text-green-800"
@@ -433,170 +484,38 @@ export default function People() {
           departments={departments}
         />
       )}
-    </div>
-  )
-}
 
-// Invite Member Modal Component
-function InviteMemberModal({ onClose, onSuccess, departments }) {
-  const [formData, setFormData] = useState({
-    email: '',
-    memberRole: 'employee',
-    jobTitle: '',
-    department: '',
-    employmentType: 'full_time',
-    salaryAmount: '',
-    salaryCurrency: 'NPR',
-    payFrequency: 'monthly'
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!formData.email) {
-      setError('Email is required')
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError(null)
-      await membersService.inviteMember(formData)
-      onSuccess()
-    } catch (err) {
-      setError(err.message || 'Failed to invite member')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-        <div className="px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Invite Team Member</h2>
+      {/* Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+            <div className="px-6 py-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900">{confirmModal.title}</h2>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-gray-600">{confirmModal.message}</p>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end space-x-3">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="team@company.com"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-              <select
-                value={formData.memberRole}
-                onChange={(e) => setFormData({ ...formData, memberRole: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {ROLE_OPTIONS.filter(r => r.value && r.value !== 'owner').map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
-              <select
-                value={formData.employmentType}
-                onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {EMPLOYMENT_TYPE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
-            <input
-              type="text"
-              value={formData.jobTitle}
-              onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Software Engineer"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-            <input
-              type="text"
-              value={formData.department}
-              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Engineering"
-              list="departments"
-            />
-            <datalist id="departments">
-              {departments.map(dept => (
-                <option key={dept} value={dept} />
-              ))}
-            </datalist>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Salary Amount</label>
-              <input
-                type="number"
-                value={formData.salaryAmount}
-                onChange={(e) => setFormData({ ...formData, salaryAmount: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="50000"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Pay Frequency</label>
-              <select
-                value={formData.payFrequency}
-                onChange={(e) => setFormData({ ...formData, payFrequency: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="monthly">Monthly</option>
-                <option value="bi-weekly">Bi-Weekly</option>
-                <option value="weekly">Weekly</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? 'Inviting...' : 'Send Invite'}
-            </button>
-          </div>
-        </form>
-      </div>
+      )}
     </div>
   )
 }
+
 
 // Edit Member Modal Component
 function EditMemberModal({ member, onClose, onSuccess, departments }) {

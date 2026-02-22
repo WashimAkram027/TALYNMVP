@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { membersController } from '../controllers/members.controller.js'
 import { authenticate, requireEmployer, requireOrganization } from '../middleware/auth.js'
+import { validateBody } from '../middleware/validate.js'
+import { inviteMemberSchema } from '../utils/validators.js'
 
 const router = Router()
 
@@ -37,7 +39,7 @@ router.get('/:id', membersController.getById)
  * POST /api/members
  * Invite a new member (employer only)
  */
-router.post('/', requireEmployer, membersController.invite)
+router.post('/', requireEmployer, validateBody(inviteMemberSchema), membersController.invite)
 
 /**
  * PUT /api/members/:id

@@ -57,7 +57,9 @@ export const membersService = {
       salaryCurrency: memberData.salary_currency || memberData.salaryCurrency,
       payFrequency: memberData.pay_frequency || memberData.payFrequency,
       location: memberData.location,
-      startDate: memberData.start_date || memberData.startDate
+      startDate: memberData.start_date || memberData.startDate,
+      jobDescription: memberData.job_description || memberData.jobDescription,
+      probationPeriod: memberData.probation_period || memberData.probationPeriod
     })
     return response.data
   },
@@ -116,7 +118,16 @@ export const membersService = {
    */
   async deleteMember(memberId) {
     const response = await api.delete(`/members/${memberId}`)
-    return { success: true }
+    return response.data
+  },
+
+  /**
+   * Resend invitation to an invited member
+   * @param {string} memberId - Member UUID
+   */
+  async resendInvitation(memberId) {
+    const response = await api.post(`/members/${memberId}/resend-invitation`)
+    return response.data
   },
 
   /**

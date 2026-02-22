@@ -57,11 +57,19 @@ const formatDate = (dateString) => {
 
 const formatCurrency = (amount, currency = 'NPR') => {
   if (!amount) return 'Not set'
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: 0
-  }).format(amount)
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 0
+    }).format(amount)
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0
+    }).format(amount)
+  }
 }
 
 const formatRole = (role) => {
@@ -71,7 +79,9 @@ const formatRole = (role) => {
 
 const formatEmploymentType = (type) => {
   if (!type) return 'N/A'
-  return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+  return type.split('_').map(segment =>
+    segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-')
+  ).join(' ')
 }
 
 export default function PersonDetail() {
@@ -84,6 +94,7 @@ export default function PersonDetail() {
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [confirmModal, setConfirmModal] = useState(null)
 
   // Fetch member data
   const fetchMember = async () => {
@@ -111,49 +122,64 @@ export default function PersonDetail() {
   }, [memberId])
 
   // Action handlers
-  const handleActivate = async () => {
-    if (!window.confirm(`Activate ${member.profile?.full_name || 'this member'}? They will become an active team member.`)) return
-
-    try {
-      setActionLoading(true)
-      await membersService.activateMember(memberId)
-      await fetchMember()
-    } catch (err) {
-      console.error('Failed to activate:', err)
-      alert(err.message || 'Failed to activate member')
-    } finally {
-      setActionLoading(false)
-    }
+  const handleActivate = () => {
+    setConfirmModal({
+      title: 'Activate Member',
+      message: `Activate ${member.profile?.full_name || 'this member'}? They will become an active team member.`,
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          setActionLoading(true)
+          await membersService.activateMember(memberId)
+          await fetchMember()
+        } catch (err) {
+          console.error('Failed to activate:', err)
+          alert(err.message || 'Failed to activate member')
+        } finally {
+          setActionLoading(false)
+        }
+      }
+    })
   }
 
-  const handleOffboard = async () => {
-    if (!window.confirm(`Offboard ${member.profile?.full_name || 'this member'}? This will remove their access to the organization.`)) return
-
-    try {
-      setActionLoading(true)
-      await membersService.offboardMember(memberId)
-      await fetchMember()
-    } catch (err) {
-      console.error('Failed to offboard:', err)
-      alert(err.message || 'Failed to offboard member')
-    } finally {
-      setActionLoading(false)
-    }
+  const handleOffboard = () => {
+    setConfirmModal({
+      title: 'Offboard Member',
+      message: `Offboard ${member.profile?.full_name || 'this member'}? This will remove their access to the organization.`,
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          setActionLoading(true)
+          await membersService.offboardMember(memberId)
+          await fetchMember()
+        } catch (err) {
+          console.error('Failed to offboard:', err)
+          alert(err.message || 'Failed to offboard member')
+        } finally {
+          setActionLoading(false)
+        }
+      }
+    })
   }
 
-  const handleDelete = async () => {
-    if (!window.confirm(`Delete invitation for ${member.profile?.full_name || 'this member'}? This action cannot be undone.`)) return
-
-    try {
-      setActionLoading(true)
-      await membersService.deleteMember(memberId)
-      navigate('/people')
-    } catch (err) {
-      console.error('Failed to delete:', err)
-      alert(err.message || 'Failed to delete member')
-    } finally {
-      setActionLoading(false)
-    }
+  const handleDelete = () => {
+    setConfirmModal({
+      title: 'Delete Invitation',
+      message: `Delete invitation for ${member.profile?.full_name || 'this member'}? This action cannot be undone.`,
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          setActionLoading(true)
+          await membersService.deleteMember(memberId)
+          navigate('/people')
+        } catch (err) {
+          console.error('Failed to delete:', err)
+          alert(err.message || 'Failed to delete member')
+        } finally {
+          setActionLoading(false)
+        }
+      }
+    })
   }
 
   // Loading state
@@ -194,6 +220,15 @@ export default function PersonDetail() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Back Button */}
+      <button
+        onClick={() => navigate('/people')}
+        className="mb-4 inline-flex items-center gap-1 text-sm text-subtext-light dark:text-subtext-dark hover:text-primary transition"
+      >
+        <span className="material-icons-outlined text-lg">arrow_back</span>
+        Back to Team
+      </button>
+
       {/* Breadcrumb */}
       <nav className="mb-6">
         <ol className="flex items-center gap-2 text-sm text-subtext-light dark:text-subtext-dark">
@@ -440,6 +475,34 @@ export default function PersonDetail() {
             fetchMember()
           }}
         />
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-sm mx-4">
+            <div className="px-6 py-4 border-b border-border-light dark:border-border-dark">
+              <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">{confirmModal.title}</h2>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-subtext-light dark:text-subtext-dark">{confirmModal.message}</p>
+            </div>
+            <div className="px-6 py-4 border-t border-border-light dark:border-border-dark flex justify-end space-x-3">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
