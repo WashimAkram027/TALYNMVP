@@ -54,10 +54,10 @@ router.put('/:id', requireEmployer, membersController.update)
 router.post('/:id/activate', requireEmployer, membersController.activate)
 
 /**
- * POST /api/members/:id/resend-invite
+ * POST /api/members/:id/resend-invitation
  * Resend an invitation (employer only)
  */
-router.post('/:id/resend-invite', requireEmployer, membersController.resendInvite)
+router.post('/:id/resend-invitation', requireEmployer, membersController.resendInvite)
 
 /**
  * POST /api/members/:id/offboard
