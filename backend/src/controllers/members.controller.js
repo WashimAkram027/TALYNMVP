@@ -4,8 +4,7 @@ import {
   createdResponse,
   errorResponse,
   badRequestResponse,
-  notFoundResponse,
-  forbiddenResponse
+  notFoundResponse
 } from '../utils/response.js'
 
 /**
@@ -222,12 +221,6 @@ export const membersController = {
   async offboard(req, res) {
     try {
       const { id } = req.params
-
-      // Only owner or admin can offboard
-      const callerRole = req.membership.member_role
-      if (callerRole !== 'owner' && callerRole !== 'admin') {
-        return forbiddenResponse(res, 'Only owners and admins can offboard members')
-      }
 
       // Prevent self-offboarding
       const member = await membersService.getById(id, req.user.organizationId)

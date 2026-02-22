@@ -247,7 +247,7 @@ export const membersService = {
       })
       .eq('id', memberId)
       .eq('organization_id', orgId)
-      .eq('status', 'invited')
+      .in('status', ['invited', 'onboarding', 'ready_to_start', 'in_review'])
       .select(`
         *,
         profile:profiles!organization_members_profile_id_fkey(id, full_name, email)
@@ -296,8 +296,8 @@ export const membersService = {
       throw new Error('Member not found')
     }
 
-    if (member.status !== 'invited') {
-      throw new Error('Only invited members can be deleted. Use offboard for active members.')
+    if (member.status !== 'invited' && member.status !== 'in_review') {
+      throw new Error('Only invited or in-review members can be deleted. Use offboard for active members.')
     }
 
     const { error } = await supabase

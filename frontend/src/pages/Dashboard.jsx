@@ -4,6 +4,7 @@ import { dashboardService } from '../services/dashboardService'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
 import InviteMemberModal from '../components/features/InviteMemberModal'
+import { StatusBadge } from '../utils/statusUtils'
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
@@ -18,36 +19,6 @@ const EMPLOYMENT_TYPE_OPTIONS = [
   { value: 'contract', label: 'Contract' },
   { value: 'freelance', label: 'Freelance' }
 ]
-
-const getStatusBadge = (status) => {
-  const statusLower = status?.toLowerCase()
-  if (statusLower === 'active') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Active
-      </span>
-    )
-  }
-  if (statusLower === 'invited' || statusLower === 'onboarding') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> {status}
-      </span>
-    )
-  }
-  if (statusLower === 'offboarded') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span> Offboarded
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400">
-      {status || 'Unknown'}
-    </span>
-  )
-}
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -452,7 +423,7 @@ export default function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-text-light dark:text-text-dark">{member.role}</td>
-                      <td className="px-6 py-4">{getStatusBadge(member.status)}</td>
+                      <td className="px-6 py-4"><StatusBadge status={member.status} /></td>
                       <td className="px-6 py-4 text-text-light dark:text-text-dark">{member.payroll}</td>
                       <td className="px-6 py-4 text-right relative">
                         <button
@@ -486,7 +457,7 @@ export default function Dashboard() {
 
                             <div className="border-t border-border-light dark:border-border-dark my-1"></div>
 
-                            {member.status?.toLowerCase() === 'invited' && (
+                            {(member.status?.toLowerCase() === 'invited' || member.status?.toLowerCase() === 'in_review') && (
                               <>
                                 <button
                                   onClick={() => handleActivateMember(member)}

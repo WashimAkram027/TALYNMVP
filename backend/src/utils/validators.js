@@ -100,7 +100,13 @@ export const updateMemberSchema = z.object({
   memberRole: z.enum(['admin', 'manager', 'employee', 'contractor']).optional(),
   employmentType: z.enum(['full_time', 'part_time', 'contract', 'freelance']).optional(),
   salaryAmount: z.number().positive().optional(),
-  salaryCurrency: z.string().optional()
+  salaryCurrency: z.string().optional(),
+  status: z.enum([
+    'invited', 'onboarding', 'onboarding_at_risk', 'onboarding_overdue',
+    'ready_to_start', 'active', 'offboarding', 'inactive',
+    'in_review', 'quote_requires_changes', 'no_active_contracts',
+    'offboarded'
+  ]).optional()
 })
 
 // Payroll schemas

@@ -124,10 +124,11 @@ export const dashboardService = {
         salary_amount,
         salary_currency,
         pay_frequency,
+        start_date,
         profile:profiles!organization_members_profile_id_fkey(id, full_name, first_name, last_name, email, avatar_url)
       `)
       .eq('organization_id', organizationId)
-      .in('status', ['active', 'invited'])
+      .in('status', ['active', 'invited', 'onboarding', 'ready_to_start', 'in_review', 'offboarding'])
       .neq('member_role', 'owner') // Exclude owner from team list
       .order('joined_at', { ascending: false, nullsFirst: false })
       .limit(limit)
@@ -143,6 +144,7 @@ export const dashboardService = {
       department: member.department || 'Not specified',
       role: member.job_title || member.member_role || 'Team Member',
       status: member.status,
+      startDate: member.start_date,
       payroll: member.salary_amount
         ? `$${member.salary_amount.toLocaleString()}/${member.pay_frequency === 'monthly' ? 'mo' : member.pay_frequency}`
         : 'Not set'

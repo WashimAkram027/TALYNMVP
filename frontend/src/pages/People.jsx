@@ -3,13 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
 import InviteMemberModal from '../components/features/InviteMemberModal'
-
-const STATUS_OPTIONS = [
-  { value: '', label: 'All Statuses' },
-  { value: 'active', label: 'Active' },
-  { value: 'invited', label: 'Invited' },
-  { value: 'offboarded', label: 'Offboarded' }
-]
+import { StatusBadge, STATUS_FILTER_OPTIONS, formatStartDate } from '../utils/statusUtils'
 
 const ROLE_OPTIONS = [
   { value: '', label: 'All Roles' },
@@ -176,21 +170,6 @@ export default function People() {
     }
   }
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      active: 'bg-green-100 text-green-800',
-      invited: 'bg-yellow-100 text-yellow-800',
-      inactive: 'bg-gray-100 text-gray-800',
-      offboarded: 'bg-red-100 text-red-800',
-      pending: 'bg-blue-100 text-blue-800'
-    }
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    )
-  }
-
   const getRoleBadge = (role) => {
     const styles = {
       owner: 'bg-purple-100 text-purple-800',
@@ -240,8 +219,8 @@ export default function People() {
             <p className="text-2xl font-bold text-yellow-600">{stats.byStatus?.invited || 0}</p>
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
-            <p className="text-sm text-gray-500">Offboarded</p>
-            <p className="text-2xl font-bold text-red-600">{stats.byStatus?.offboarded || 0}</p>
+            <p className="text-sm text-gray-500">Inactive</p>
+            <p className="text-2xl font-bold text-red-600">{(stats.byStatus?.inactive || 0) + (stats.byStatus?.offboarded || 0)}</p>
           </div>
         </div>
       )}
@@ -261,7 +240,7 @@ export default function People() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {STATUS_OPTIONS.map(opt => (
+            {STATUS_FILTER_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
@@ -345,6 +324,9 @@ export default function People() {
                   Department
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Start Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -386,8 +368,11 @@ export default function People() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {member.department || '-'}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatStartDate(member.start_date)}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {getStatusBadge(member.status)}
+                    <StatusBadge status={member.status} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex space-x-2">
@@ -399,7 +384,7 @@ export default function People() {
                       </button>
                       {profile?.role === 'employer' && (
                         <>
-                          {member.status === 'invited' && (
+                          {(member.status === 'invited' || member.status === 'in_review') && (
                             <>
                               <button
                                 onClick={() => handleResendInvite(member.id)}
@@ -433,7 +418,7 @@ export default function People() {
                               Offboard
                             </button>
                           )}
-                          {member.status !== 'offboarded' && (
+                          {member.status !== 'offboarded' && member.status !== 'inactive' && (
                             <button
                               onClick={() => {
                                 setSelectedMember(member)

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { membersService } from '../services/membersService'
+import { StatusBadge, formatStartDate } from '../utils/statusUtils'
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
@@ -15,36 +16,6 @@ const EMPLOYMENT_TYPE_OPTIONS = [
   { value: 'contract', label: 'Contract' },
   { value: 'freelance', label: 'Freelance' }
 ]
-
-const getStatusBadge = (status) => {
-  const statusLower = status?.toLowerCase()
-  if (statusLower === 'active') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-        <span className="w-2 h-2 rounded-full bg-green-500"></span> Active
-      </span>
-    )
-  }
-  if (statusLower === 'invited' || statusLower === 'onboarding') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
-        <span className="w-2 h-2 rounded-full bg-yellow-500"></span> {status}
-      </span>
-    )
-  }
-  if (statusLower === 'offboarded') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400">
-        <span className="w-2 h-2 rounded-full bg-gray-500"></span> Offboarded
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400">
-      {status || 'Unknown'}
-    </span>
-  )
-}
 
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A'
@@ -276,7 +247,7 @@ export default function PersonDetail() {
                     {member.job_title || 'No job title'} {member.department ? `• ${member.department}` : ''}
                   </p>
                   <div className="mt-3">
-                    {getStatusBadge(member.status)}
+                    <StatusBadge status={member.status} size="lg" />
                   </div>
                 </div>
 
@@ -291,7 +262,7 @@ export default function PersonDetail() {
                     Edit
                   </button>
 
-                  {status === 'invited' && (
+                  {(status === 'invited' || status === 'in_review') && (
                     <>
                       <button
                         onClick={handleActivate}
@@ -388,6 +359,10 @@ export default function PersonDetail() {
               <label className="text-xs font-medium text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Employment Type</label>
               <p className="text-text-light dark:text-text-dark mt-1">{formatEmploymentType(member.employment_type)}</p>
             </div>
+            <div>
+              <label className="text-xs font-medium text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Start Date</label>
+              <p className="text-text-light dark:text-text-dark mt-1">{formatStartDate(member.start_date)}</p>
+            </div>
           </div>
         </div>
 
@@ -424,7 +399,7 @@ export default function PersonDetail() {
           <div className="space-y-4">
             <div>
               <label className="text-xs font-medium text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Status</label>
-              <div className="mt-1">{getStatusBadge(member.status)}</div>
+              <div className="mt-1"><StatusBadge status={member.status} size="lg" /></div>
             </div>
             <div>
               <label className="text-xs font-medium text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Invited On</label>
