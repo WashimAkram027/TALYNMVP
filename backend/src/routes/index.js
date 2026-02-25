@@ -15,6 +15,7 @@ import jobPostingsRoutes from './jobpostings.routes.js'
 import applicationsRoutes from './applications.routes.js'
 import complianceRoutes from './compliance.routes.js'
 import benefitsRoutes from './benefits.routes.js'
+import onboardingRoutes from './onboarding.routes.js'
 
 const router = Router()
 
@@ -44,5 +45,6 @@ router.use('/jobs', jobPostingsRoutes)
 router.use('/applications', applicationsRoutes)
 router.use('/compliance', complianceRoutes)
 router.use('/benefits', benefitsRoutes)
+router.use('/onboarding', onboardingRoutes)
 
 export default router

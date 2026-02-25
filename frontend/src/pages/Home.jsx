@@ -22,13 +22,13 @@ export default function Home() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link
-                  to="/sign-up"
+                  to="/signup/employer"
                   className="bg-primary hover:bg-blue-700 text-white px-8 py-3.5 rounded-lg font-semibold text-lg transition shadow-lg shadow-blue-500/20 text-center"
                 >
                   Hire in Nepal
                 </Link>
                 <Link
-                  to="/sign-up"
+                  to="/signup/employer"
                   className="bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 px-8 py-3.5 rounded-lg font-semibold text-lg transition text-center"
                 >
                   Work in Nepal
@@ -156,7 +156,7 @@ export default function Home() {
           </div>
           <div className="flex justify-center gap-4 mt-16">
             <Link
-              to="/sign-up"
+              to="/signup/employer"
               className="bg-primary hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition shadow-md flex items-center gap-2"
             >
               Get Started <span className="material-icons-outlined text-sm">arrow_forward</span>
@@ -287,7 +287,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              to="/login-page"
+              to="/login/employer"
               className="text-sm font-medium text-gray-700 dark:text-gray-300 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Log In
@@ -296,7 +296,7 @@ export default function Home() {
               Request Demo
             </button>
             <Link
-              to="/sign-up"
+              to="/signup/employer"
               className="text-sm font-medium text-white bg-primary px-4 py-2 rounded hover:bg-blue-700"
             >
               Sign Up

@@ -6,8 +6,6 @@ import ProtectedRoute from '../components/features/auth/ProtectedRoute'
 
 import Home from '../pages/Home'
 import AboutUs from '../pages/AboutUs'
-import SignUp from '../pages/SignUp'
-import Login from '../pages/Login'
 import ForgotPassword from '../pages/ForgotPassword'
 import ResetPassword from '../pages/ResetPassword'
 import VerifyEmail from '../pages/VerifyEmail'
@@ -27,6 +25,15 @@ import Applications from '../pages/Applications'
 import Compliance from '../pages/Compliance'
 import Settings from '../pages/Settings'
 
+// New split auth pages
+import EmployerSignup from '../pages/auth/EmployerSignup'
+import EmployeeSignup from '../pages/auth/EmployeeSignup'
+import EmployerLogin from '../pages/auth/EmployerLogin'
+import EmployeeLogin from '../pages/auth/EmployeeLogin'
+
+// Onboarding
+import EmployerOnboarding from '../pages/onboarding/EmployerOnboarding'
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -35,17 +42,36 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<Home />} />
         <Route path="about-us" element={<AboutUs />} />
-        <Route path="sign-up" element={<SignUp />} />
-        <Route path="login-page" element={<Login />} />
+
+        {/* New split auth routes */}
+        <Route path="signup/employer" element={<EmployerSignup />} />
+        <Route path="signup/employee" element={<EmployeeSignup />} />
+        <Route path="login/employer" element={<EmployerLogin />} />
+        <Route path="login/employee" element={<EmployeeLogin />} />
+
+        {/* Legacy redirects */}
+        <Route path="sign-up" element={<Navigate to="/signup/employer" replace />} />
+        <Route path="login-page" element={<Navigate to="/login/employer" replace />} />
+
         <Route path="forgot-password" element={<ForgotPassword />} />
         <Route path="reset-password" element={<ResetPassword />} />
         <Route path="verify-email" element={<VerifyEmail />} />
       </Route>
 
+      {/* Onboarding route - protected but no sidebar, no onboarding requirement */}
+      <Route
+        path="onboarding/employer"
+        element={
+          <ProtectedRoute requireOnboarding={false}>
+            <EmployerOnboarding />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Protected routes - wrapped in ProtectedLayout */}
       <Route
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireOnboarding={true}>
             <ProtectedLayout />
           </ProtectedRoute>
         }

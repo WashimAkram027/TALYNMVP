@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../../../store/authStore'
 
-export default function ProtectedRoute({ children, allowedRoles = [] }) {
+export default function ProtectedRoute({ children, allowedRoles = [], requireOnboarding = true }) {
   const { isAuthenticated, isLoading, profile } = useAuthStore()
 
   // Don't redirect while still checking auth
@@ -18,7 +18,22 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
 
   // Not authenticated - redirect to login
   if (!isAuthenticated) {
-    return <Navigate to="/login-page" replace />
+    return <Navigate to="/login/employer" replace />
+  }
+
+  // Onboarding checks for employers
+  if (profile?.role === 'employer') {
+    const onboardingComplete = profile.onboarding_completed === true
+
+    // Protected routes require completed onboarding
+    if (requireOnboarding && !onboardingComplete) {
+      return <Navigate to="/onboarding/employer" replace />
+    }
+
+    // Onboarding page should redirect away if already complete
+    if (!requireOnboarding && onboardingComplete) {
+      return <Navigate to="/dashboard" replace />
+    }
   }
 
   // Role-based access control

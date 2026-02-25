@@ -57,7 +57,7 @@ export default function ForgotPassword() {
                   If an account exists for <strong>{email}</strong>, you will receive a password reset link shortly.
                 </p>
                 <Link
-                  to="/login-page"
+                  to="/login/employer"
                   className="inline-flex items-center gap-2 text-primary hover:text-blue-700 font-medium"
                 >
                   <span className="material-icons text-sm">arrow_back</span>
@@ -105,7 +105,7 @@ export default function ForgotPassword() {
 
                 <div className="text-center">
                   <Link
-                    to="/login-page"
+                    to="/login/employer"
                     className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary"
                   >
                     <span className="material-icons text-sm">arrow_back</span>

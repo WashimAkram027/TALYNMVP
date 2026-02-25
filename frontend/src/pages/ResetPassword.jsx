@@ -59,7 +59,7 @@ export default function ResetPassword() {
       setSuccess(true)
       // Redirect to login after 3 seconds
       setTimeout(() => {
-        navigate('/login-page', { replace: true })
+        navigate('/login/employer', { replace: true })
       }, 3000)
     } catch (err) {
       setError(err.message || 'Failed to reset password. The link may have expired.')
@@ -101,7 +101,7 @@ export default function ResetPassword() {
                   Your password has been updated. Redirecting to login...
                 </p>
                 <Link
-                  to="/login-page"
+                  to="/login/employer"
                   className="inline-flex items-center gap-2 text-primary hover:text-blue-700 font-medium"
                 >
                   Go to login now
@@ -174,7 +174,7 @@ export default function ResetPassword() {
 
                 <div className="text-center">
                   <Link
-                    to="/login-page"
+                    to="/login/employer"
                     className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary"
                   >
                     <span className="material-icons text-sm">arrow_back</span>

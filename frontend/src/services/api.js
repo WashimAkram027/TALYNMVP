@@ -153,4 +153,13 @@ export const profileAPI = {
   }
 }
 
+/**
+ * Onboarding API endpoints
+ */
+export const onboardingAPI = {
+  completeProfile: (data) => api.post('/onboarding/employer/profile', data),
+  selectService: (data) => api.post('/onboarding/employer/service', data),
+  getStatus: () => api.get('/onboarding/employer/status')
+}
+
 export default api

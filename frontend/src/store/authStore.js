@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { authAPI, profileAPI } from '../services/api'
+import { authAPI, profileAPI, onboardingAPI } from '../services/api'
 import { invitationsService } from '../services/invitationsService'
 
 /**
@@ -32,6 +32,7 @@ export const useAuthStore = create((set, get) => ({
   organization: null,
   membership: null,
   pendingInvitations: [],
+  onboardingStep: null,
   isAuthenticated: false,
   isLoading: false,
   error: null,
@@ -66,19 +67,8 @@ export const useAuthStore = create((set, get) => ({
       const response = await authAPI.signup({ email, password, ...metadata })
 
       if (response.success) {
-        // Store the JWT token
-        localStorage.setItem('access_token', response.data.token)
-
-        set({
-          user: response.data.user,
-          profile: response.data.profile,
-          isAuthenticated: true,
-          isLoading: false
-        })
-
-        // Fetch full profile including pending invitations
-        await get().fetchProfile()
-
+        // Don't store token or set auth state - user must verify email first
+        set({ isLoading: false })
         return { success: true, user: response.data.user }
       } else {
         throw new Error(response.error || 'Signup failed')
@@ -108,11 +98,12 @@ export const useAuthStore = create((set, get) => ({
           organization: response.data.organization || null,
           membership: response.data.membership || null,
           pendingInvitations: response.data.pendingInvitations || [],
+          onboardingStep: profile?.onboarding_step || null,
           isAuthenticated: true,
           isLoading: false
         })
 
-        return { success: true, user: response.data.user, profile: profile }
+        return { success: true, user: response.data.user, profile: profile, redirectTo: response.data.redirectTo }
       } else {
         throw new Error(response.error || 'Login failed')
       }
@@ -134,6 +125,7 @@ export const useAuthStore = create((set, get) => ({
       organization: null,
       membership: null,
       pendingInvitations: [],
+      onboardingStep: null,
       isAuthenticated: false,
       isLoading: false,
       error: null
@@ -194,6 +186,7 @@ export const useAuthStore = create((set, get) => ({
           organization: organization || null,
           membership: membership || null,
           pendingInvitations: pendingInvitations || [],
+          onboardingStep: profile?.onboarding_step || null,
           isAuthenticated: true,
           isLoading: false
         })
@@ -204,6 +197,7 @@ export const useAuthStore = create((set, get) => ({
           profile: null,
           organization: null,
           membership: null,
+          onboardingStep: null,
           isAuthenticated: false,
           isLoading: false
         })
@@ -215,6 +209,7 @@ export const useAuthStore = create((set, get) => ({
         profile: null,
         organization: null,
         membership: null,
+        onboardingStep: null,
         isAuthenticated: false,
         isLoading: false
       })
@@ -355,6 +350,40 @@ export const useAuthStore = create((set, get) => ({
       return { success: true }
     } catch (error) {
       console.error('[AuthStore] Decline invitation error:', error)
+      set({ error: error.message, isLoading: false })
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Complete onboarding profile (Step 1)
+  completeOnboardingProfile: async (formData) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await onboardingAPI.completeProfile(formData)
+      if (response.success) {
+        await get().fetchProfile()
+        set({ onboardingStep: 2, isLoading: false })
+        return { success: true, data: response.data }
+      }
+      throw new Error(response.error || 'Failed to complete profile')
+    } catch (error) {
+      set({ error: error.message, isLoading: false })
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Complete onboarding service selection (Step 2)
+  completeOnboardingService: async (serviceType) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await onboardingAPI.selectService({ serviceType })
+      if (response.success) {
+        await get().fetchProfile()
+        set({ onboardingStep: null, isLoading: false })
+        return { success: true, data: response.data }
+      }
+      throw new Error(response.error || 'Failed to select service')
+    } catch (error) {
       set({ error: error.message, isLoading: false })
       return { success: false, error: error.message }
     }

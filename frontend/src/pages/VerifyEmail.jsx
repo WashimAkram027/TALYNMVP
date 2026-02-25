@@ -1,21 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { authAPI } from '../services/api'
+import { useAuthStore } from '../store/authStore'
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const token = searchParams.get('token')
+  const { checkAuth } = useAuthStore()
 
   const [status, setStatus] = useState('verifying') // verifying, success, error
   const [message, setMessage] = useState('')
-  const [userRole, setUserRole] = useState(null)
 
   // Prevent duplicate verification calls (React StrictMode runs useEffect twice)
   const hasAttemptedVerification = useRef(false)
 
   useEffect(() => {
-    // Skip if already attempted (prevents StrictMode double-call)
     if (hasAttemptedVerification.current) return
     hasAttemptedVerification.current = true
 
@@ -28,9 +28,20 @@ export default function VerifyEmail() {
 
       try {
         const response = await authAPI.verifyEmail(token)
+        const data = response.data
+
+        // Auto-login: store JWT and hydrate auth state
+        if (data?.token) {
+          localStorage.setItem('access_token', data.token)
+          await checkAuth()
+        }
+
         setStatus('success')
-        setUserRole(response.data?.role)
         setMessage('Your email has been verified successfully!')
+
+        // Redirect immediately after auth state is hydrated
+        const redirectTo = data?.redirectTo || (data?.role === 'candidate' ? '/login/employee' : '/login/employer')
+        navigate(redirectTo, { replace: true })
       } catch (error) {
         setStatus('error')
         setMessage(error.message || 'Failed to verify email')
@@ -38,11 +49,7 @@ export default function VerifyEmail() {
     }
 
     verify()
-  }, [token])
-
-  const handleContinue = () => {
-    navigate('/login-page')
-  }
+  }, [token, navigate, checkAuth])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark px-4">
@@ -73,15 +80,12 @@ export default function VerifyEmail() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
               Email Verified!
             </h1>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               {message}
             </p>
-            <button
-              onClick={handleContinue}
-              className="w-full py-3 px-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-colors"
-            >
-              Continue to Login
-            </button>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Redirecting you automatically...
+            </p>
           </>
         )}
 
@@ -102,14 +106,14 @@ export default function VerifyEmail() {
             </p>
             <div className="space-y-3">
               <Link
-                to="/login-page"
+                to="/login/employer"
                 className="block w-full py-3 px-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-colors text-center"
               >
                 Go to Login
               </Link>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Need a new verification link?{' '}
-                <Link to="/login-page" className="text-primary hover:text-primary-hover">
+                <Link to="/login/employer" className="text-primary hover:text-primary-hover">
                   Try logging in
                 </Link>{' '}
                 and we'll send you a new one.

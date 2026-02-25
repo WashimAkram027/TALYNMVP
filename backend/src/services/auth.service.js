@@ -14,7 +14,7 @@ export const authService = {
    * Register a new user
    * Now requires email verification before login
    */
-  async signup({ email, password, role = 'candidate', firstName = '', lastName = '', companyName = '', industry = '' }) {
+  async signup({ email, password, role = 'candidate', firstName = '', lastName = '' }) {
     // Create user in Supabase Auth (email NOT confirmed - requires verification)
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
@@ -48,6 +48,16 @@ export const authService = {
 
     if (existingProfile) {
       profile = existingProfile
+      // For employers, set onboarding_step if not already set
+      if (role === 'employer' && !existingProfile.onboarding_step) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ onboarding_step: 1 })
+          .eq('id', authData.user.id)
+        if (!updateError && profile) {
+          profile.onboarding_step = 1
+        }
+      }
     } else {
       // Create profile manually with email_verified = false
       const { data: newProfile, error: profileError } = await supabase
@@ -59,74 +69,16 @@ export const authService = {
           last_name: lastName || '',
           role: role,
           status: 'pending',
-          email_verified: false
+          email_verified: false,
+          onboarding_step: role === 'employer' ? 1 : null
         })
         .select()
         .single()
 
       if (profileError) {
         console.error('Profile creation error:', profileError)
-        // Don't throw - user was created, profile creation failed
-        // We can still return the user
       } else {
         profile = newProfile
-      }
-    }
-
-    // For employers, create organization and link it
-    let organization = null
-    if (role === 'employer' && companyName) {
-      // Normalize industry value to match database enum
-      const normalizedIndustry = this.normalizeIndustry(industry)
-
-      // Create organization
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .insert({
-          name: companyName,
-          email: email,
-          industry: normalizedIndustry,
-          owner_id: authData.user.id,
-          status: 'active'
-        })
-        .select()
-        .single()
-
-      if (orgError) {
-        console.error('Organization creation error:', orgError)
-      } else {
-        organization = orgData
-
-        // Update profile with organization_id (but status stays pending until verified)
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({
-            organization_id: orgData.id,
-            onboarding_completed: true
-          })
-          .eq('id', authData.user.id)
-
-        if (updateError) {
-          console.error('Profile update error:', updateError)
-        } else if (profile) {
-          profile.organization_id = orgData.id
-          profile.onboarding_completed = true
-        }
-
-        // Create owner membership record
-        const { error: memberError } = await supabase
-          .from('organization_members')
-          .insert({
-            organization_id: orgData.id,
-            profile_id: authData.user.id,
-            member_role: 'owner',
-            status: 'active',
-            joined_at: new Date().toISOString()
-          })
-
-        if (memberError) {
-          console.error('Membership creation error:', memberError)
-        }
       }
     }
 
@@ -160,7 +112,7 @@ export const authService = {
     return {
       user: authData.user,
       profile,
-      organization,
+      organization: null,
       token: null, // No token until verified
       requiresVerification: true
     }
@@ -184,19 +136,23 @@ export const authService = {
       throw new BadRequestError('Invalid or expired verification link')
     }
 
-    // Check if already verified - return success instead of error
+    // Check if already verified - return success with token instead of error
     // This handles duplicate requests gracefully (e.g., user clicking link twice)
     if (verifyRecord.verified_at) {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, onboarding_completed, onboarding_step')
         .eq('id', verifyRecord.user_id)
         .single()
 
-      return {
-        alreadyVerified: true,
-        role: profile?.role || 'candidate'
+      const jwtToken = this.generateToken(verifyRecord.user_id)
+      const role = profile?.role || 'candidate'
+      let redirectTo = '/dashboard-employee'
+      if (role === 'employer') {
+        redirectTo = profile?.onboarding_completed ? '/dashboard' : '/onboarding/employer'
       }
+
+      return { role, token: jwtToken, redirectTo }
     }
 
     // Check if token is expired
@@ -263,7 +219,14 @@ export const authService = {
       console.error('[AuthService] Failed to send welcome email:', emailError)
     }
 
-    return { success: true, role: profile.role }
+    // Generate JWT for auto-login after verification
+    const jwtToken = this.generateToken(verifyRecord.user_id)
+    let redirectTo = '/dashboard-employee'
+    if (profile.role === 'employer') {
+      redirectTo = profile.onboarding_completed ? '/dashboard' : '/onboarding/employer'
+    }
+
+    return { role: profile.role, token: jwtToken, redirectTo }
   },
 
   /**
@@ -456,13 +419,20 @@ export const authService = {
 
     console.log('[AuthService] Login successful, returning profile with role:', profile.role)
 
+    // Determine redirect for employers based on onboarding status
+    let redirectTo = null
+    if (profile.role === 'employer' && !profile.onboarding_completed) {
+      redirectTo = '/onboarding/employer'
+    }
+
     return {
       user: authData.user,
       profile,
       organization: profile.organization,
       membership,
       pendingInvitations,
-      token
+      token,
+      redirectTo
     }
   },
 

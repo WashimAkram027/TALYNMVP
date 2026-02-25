@@ -15,9 +15,7 @@ export const signupSchema = z.object({
     .regex(passwordRegex, 'Password must contain at least 1 uppercase letter, 1 lowercase letter, and 1 number'),
   role: z.enum(['employer', 'candidate']).optional().default('candidate'),
   firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  companyName: z.string().optional(), // Required for employers
-  industry: z.string().optional() // Required for employers
+  lastName: z.string().optional()
 })
 
 // Email check schema
@@ -375,6 +373,24 @@ export const complianceFiltersSchema = z.object({
   itemType: z.string().optional(),
   memberId: z.string().optional(),
   isRequired: z.coerce.boolean().optional()
+})
+
+// Onboarding schemas
+export const employerOnboardingProfileSchema = z.object({
+  dateOfBirth: z.string().optional(),
+  phone: z.string().optional(),
+  orgName: z.string().min(1, 'Organization name is required'),
+  industry: z.string().min(1, 'Industry is required'),
+  addressLine1: z.string().min(1, 'Address is required'),
+  addressLine2: z.string().optional(),
+  city: z.string().min(1, 'City is required'),
+  state: z.string().min(1, 'State is required'),
+  zipCode: z.string().min(1, 'ZIP code is required'),
+  country: z.string().optional().default('US')
+})
+
+export const employerOnboardingServiceSchema = z.object({
+  serviceType: z.enum(['eor', 'hire_talent', 'both'])
 })
 
 // Common schemas

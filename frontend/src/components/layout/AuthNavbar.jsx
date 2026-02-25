@@ -7,7 +7,7 @@ export default function AuthNavbar() {
 
   const handleLogout = async () => {
     await logout()
-    navigate('/login-page')
+    navigate('/login/employer')
   }
 
   return (

@@ -35,7 +35,7 @@ export default function Navbar() {
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center space-x-3">
             <Link
-              to="/login-page"
+              to="/login/employer"
               className="text-gray-700 dark:text-white font-medium hover:text-primary transition px-3 py-2"
             >
               Log In
@@ -47,7 +47,7 @@ export default function Navbar() {
               <span className="material-icons-outlined text-sm">calendar_today</span>
             </button>
             <Link
-              to="/sign-up"
+              to="/signup/employer"
               className="bg-primary hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition shadow-sm shadow-blue-500/30"
             >
               Sign Up
@@ -95,14 +95,14 @@ export default function Navbar() {
 
             <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-3">
               <Link
-                to="/login-page"
+                to="/login/employer"
                 onClick={() => setMobileMenuOpen(false)}
                 className="block text-center text-gray-700 dark:text-white font-medium hover:text-primary transition py-2"
               >
                 Log In
               </Link>
               <Link
-                to="/sign-up"
+                to="/signup/employer"
                 onClick={() => setMobileMenuOpen(false)}
                 className="block text-center bg-primary hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition"
               >

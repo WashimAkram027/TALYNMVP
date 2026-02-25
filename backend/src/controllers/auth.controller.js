@@ -72,7 +72,8 @@ export const authController = {
         organization: result.organization,
         membership: result.membership,
         pendingInvitations: result.pendingInvitations,
-        token: result.token
+        token: result.token,
+        redirectTo: result.redirectTo || null
       }, 'Login successful')
     } catch (error) {
       next(error)
