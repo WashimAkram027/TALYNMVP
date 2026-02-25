@@ -375,6 +375,21 @@ export const complianceFiltersSchema = z.object({
   isRequired: z.coerce.boolean().optional()
 })
 
+// Dashboard onboarding checklist schemas
+export const orgProfileEnrichmentSchema = z.object({
+  description: z.string().max(1000).optional(),
+  employeeTypesNeeded: z.array(z.string()).optional(),
+  website: z.string().url().optional().or(z.literal('')),
+  linkedinUrl: z.string().url().optional().or(z.literal(''))
+})
+
+export const entityDocumentUploadSchema = z.object({
+  docType: z.enum(['w9', 'articles_of_incorporation', 'bank_statement']),
+  fileBase64: z.string().min(1, 'File data is required'),
+  fileName: z.string().min(1, 'File name is required'),
+  fileType: z.string().min(1, 'File type is required')
+})
+
 // Onboarding schemas
 export const employerOnboardingProfileSchema = z.object({
   dateOfBirth: z.string().optional(),

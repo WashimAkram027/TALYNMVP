@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { dashboardService } from '../services/dashboardService'
 import { membersService } from '../services/membersService'
+import { onboardingService } from '../services/onboardingService'
 import { useAuthStore } from '../store/authStore'
 import InviteMemberModal from '../components/features/InviteMemberModal'
+import OnboardingChecklist from '../components/features/onboarding/OnboardingChecklist'
 import { StatusBadge } from '../utils/statusUtils'
 
 const ROLE_OPTIONS = [
@@ -25,6 +27,7 @@ export default function Dashboard() {
   const { profile } = useAuthStore()
   const [stats, setStats] = useState(null)
   const [teamMembers, setTeamMembers] = useState([])
+  const [checklist, setChecklist] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -139,20 +142,31 @@ export default function Dashboard() {
     }
   }
 
+  const refreshChecklist = async () => {
+    try {
+      const checklistData = await onboardingService.getChecklist()
+      setChecklist(checklistData)
+    } catch (err) {
+      console.error('Checklist refresh error:', err)
+    }
+  }
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true)
         setError(null)
 
-        // Fetch stats and team data in parallel
-        const [statsData, teamData] = await Promise.all([
+        // Fetch stats, team data, and checklist in parallel
+        const [statsData, teamData, checklistData] = await Promise.allSettled([
           dashboardService.getEmployerStats(),
-          dashboardService.getTeamOverview(5)
+          dashboardService.getTeamOverview(5),
+          onboardingService.getChecklist()
         ])
 
-        setStats(statsData)
-        setTeamMembers(teamData)
+        if (statsData.status === 'fulfilled') setStats(statsData.value)
+        if (teamData.status === 'fulfilled') setTeamMembers(teamData.value)
+        if (checklistData.status === 'fulfilled') setChecklist(checklistData.value)
       } catch (err) {
         console.error('Dashboard fetch error:', err)
         setError(err.message || 'Failed to load dashboard data')
@@ -196,113 +210,52 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-text-light dark:text-text-dark">Overview</h1>
-          <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
-            Welcome back, here's what's happening with your team in Nepal.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button className="px-4 py-2 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-lg text-sm font-medium text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm flex items-center gap-2">
-            <span className="material-icons-outlined text-lg">download</span>
-            Export Report
-          </button>
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="px-4 py-2 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-lg text-sm font-medium text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm flex items-center gap-2"
-          >
-            <span className="material-icons-outlined text-lg">person_add</span>
-            Invite Member
-          </button>
-          <button
-            onClick={() => {
-              fetchAvailableCandidates()
-              setShowCandidatesModal(true)
-            }}
-            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-md shadow-blue-500/20 transition flex items-center gap-2"
-          >
-            <span className="material-icons-outlined text-lg">add</span>
-            Hire Talent
-          </button>
-        </div>
-      </div>
-
-      {/* Welcome Banner for New Employers */}
-      {stats?.isNewOrganization && (
-        <div className="mb-8 bg-gradient-to-r from-primary/10 to-blue-500/10 dark:from-primary/20 dark:to-blue-500/20 rounded-2xl p-6 md:p-8 border border-primary/20">
-          <div className="flex flex-col lg:flex-row gap-6 lg:gap-12">
-            {/* Welcome Message */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="material-icons-outlined text-primary text-2xl">celebration</span>
-                <span className="text-xs font-semibold text-primary uppercase tracking-wide">Welcome to Talyn</span>
-              </div>
-              <h2 className="text-2xl md:text-3xl font-bold text-text-light dark:text-text-dark mb-3">
-                Welcome, {profile?.first_name || 'there'}!
-              </h2>
-              <p className="text-subtext-light dark:text-subtext-dark mb-6 max-w-xl">
-                Your organization is all set up. Let's get your team onboarded and start managing your workforce efficiently.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => setShowInviteModal(true)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-md shadow-blue-500/20 transition"
-                >
-                  <span className="material-icons-outlined text-lg">person_add</span>
-                  Add Team Member
-                </button>
-                <button
-                  onClick={() => {
-                    fetchAvailableCandidates()
-                    setShowCandidatesModal(true)
-                  }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-light dark:text-text-dark rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                >
-                  <span className="material-icons-outlined text-lg">work</span>
-                  Browse Candidates
-                </button>
-              </div>
-            </div>
-
-            {/* Getting Started Checklist */}
-            <div className="lg:w-80 bg-surface-light dark:bg-surface-dark rounded-xl p-5 border border-border-light dark:border-border-dark">
-              <h3 className="font-semibold text-text-light dark:text-text-dark mb-4 flex items-center gap-2">
-                <span className="material-icons-outlined text-lg text-primary">checklist</span>
-                Getting Started
-              </h3>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-3">
-                  <span className="material-icons-outlined text-green-500 text-lg">check_circle</span>
-                  <span className="text-sm text-subtext-light dark:text-subtext-dark line-through">Create your account</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="material-icons-outlined text-green-500 text-lg">check_circle</span>
-                  <span className="text-sm text-subtext-light dark:text-subtext-dark line-through">Set up your organization</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="material-icons-outlined text-gray-300 dark:text-gray-600 text-lg">radio_button_unchecked</span>
-                  <button onClick={() => setShowInviteModal(true)} className="text-sm text-text-light dark:text-text-dark hover:text-primary transition text-left">
-                    Add your first team member
-                  </button>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="material-icons-outlined text-gray-300 dark:text-gray-600 text-lg">radio_button_unchecked</span>
-                  <Link to="/people-copy" className="text-sm text-text-light dark:text-text-dark hover:text-primary transition">
-                    Set up payroll schedule
-                  </Link>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="material-icons-outlined text-gray-300 dark:text-gray-600 text-lg">radio_button_unchecked</span>
-                  <span className="text-sm text-subtext-light dark:text-subtext-dark">
-                    Review compliance requirements (coming soon)
-                  </span>
-                </li>
-              </ul>
-            </div>
+      {/* Header Section - only show when checklist is complete */}
+      {(!checklist || checklist.allComplete) && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-text-light dark:text-text-dark">Overview</h1>
+            <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
+              Welcome back, here's what's happening with your team.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button className="px-4 py-2 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-lg text-sm font-medium text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm flex items-center gap-2">
+              <span className="material-icons-outlined text-lg">download</span>
+              Export Report
+            </button>
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="px-4 py-2 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-lg text-sm font-medium text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm flex items-center gap-2"
+            >
+              <span className="material-icons-outlined text-lg">person_add</span>
+              Invite Member
+            </button>
+            <button
+              onClick={() => {
+                fetchAvailableCandidates()
+                setShowCandidatesModal(true)
+              }}
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-md shadow-blue-500/20 transition flex items-center gap-2"
+            >
+              <span className="material-icons-outlined text-lg">add</span>
+              Hire Talent
+            </button>
           </div>
         </div>
+      )}
+
+      {/* Onboarding Checklist (replaces welcome banner) */}
+      {checklist && !checklist.allComplete && (
+        <OnboardingChecklist
+          checklist={checklist}
+          onRefresh={refreshChecklist}
+          firstName={profile?.first_name}
+          onBrowseCandidates={() => {
+            fetchAvailableCandidates()
+            setShowCandidatesModal(true)
+          }}
+        />
       )}
 
       {/* Stats Cards */}
