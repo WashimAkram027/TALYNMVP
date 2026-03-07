@@ -24,7 +24,7 @@ const EMPLOYMENT_TYPE_OPTIONS = [
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { profile } = useAuthStore()
+  const { profile, organization } = useAuthStore()
   const [stats, setStats] = useState(null)
   const [teamMembers, setTeamMembers] = useState([])
   const [checklist, setChecklist] = useState(null)
@@ -251,6 +251,8 @@ export default function Dashboard() {
           checklist={checklist}
           onRefresh={refreshChecklist}
           firstName={profile?.first_name}
+          orgName={organization?.name}
+          billingEmail={profile?.email}
           onBrowseCandidates={() => {
             fetchAvailableCandidates()
             setShowCandidatesModal(true)

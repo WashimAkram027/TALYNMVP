@@ -16,6 +16,8 @@ import applicationsRoutes from './applications.routes.js'
 import complianceRoutes from './compliance.routes.js'
 import benefitsRoutes from './benefits.routes.js'
 import onboardingRoutes from './onboarding.routes.js'
+import paymentsRoutes from './payments.routes.js'
+import quoteRoutes from './quote.routes.js'
 
 const router = Router()
 
@@ -46,5 +48,7 @@ router.use('/applications', applicationsRoutes)
 router.use('/compliance', complianceRoutes)
 router.use('/benefits', benefitsRoutes)
 router.use('/onboarding', onboardingRoutes)
+router.use('/payments', paymentsRoutes)
+router.use('/quotes', quoteRoutes)
 
 export default router

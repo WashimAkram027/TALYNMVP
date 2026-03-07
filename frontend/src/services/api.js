@@ -68,7 +68,12 @@ api.interceptors.response.use(
   },
   async (error) => {
     // Extract error message from response
-    const message = error.response?.data?.error ||
+    const rawError = error.response?.data?.error
+    const message = (Array.isArray(rawError)
+                      ? rawError.map(e => e.message || JSON.stringify(e)).join('; ')
+                      : typeof rawError === 'object' && rawError !== null
+                        ? rawError.message || JSON.stringify(rawError)
+                        : rawError) ||
                     error.response?.data?.message ||
                     error.message ||
                     'An error occurred'
@@ -157,9 +162,14 @@ export const profileAPI = {
  * Onboarding API endpoints
  */
 export const onboardingAPI = {
+  // Employer methods
   completeProfile: (data) => api.post('/onboarding/employer/profile', data),
   selectService: (data) => api.post('/onboarding/employer/service', data),
-  getStatus: () => api.get('/onboarding/employer/status')
+  getStatus: () => api.get('/onboarding/employer/status'),
+  // Employee methods
+  getEmployeeStatus: () => api.get('/onboarding/employee/status'),
+  advanceEmployeeStep: (currentStep) => api.post('/onboarding/employee/advance-step', { currentStep }),
+  submitEmployeeBankDetails: (data) => api.post('/onboarding/employee/bank-details', data),
 }
 
 export default api

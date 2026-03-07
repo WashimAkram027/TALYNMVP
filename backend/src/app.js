@@ -3,6 +3,7 @@ import cors from 'cors'
 import { corsOptions } from './config/cors.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import routes from './routes/index.js'
+import webhooksRoutes from './routes/webhooks.routes.js'
 import { env } from './config/env.js'
 
 const app = express()
@@ -12,6 +13,9 @@ app.set('trust proxy', 1)
 
 // CORS
 app.use(cors(corsOptions))
+
+// Mount webhook routes BEFORE body parsing — webhooks need raw body
+app.use('/api/webhooks', webhooksRoutes)
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }))

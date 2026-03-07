@@ -3,7 +3,9 @@ import { dashboardService } from '../services/dashboardService'
 import { payrollService } from '../services/payrollService'
 import { benefitsService } from '../services/benefitsService'
 import { documentsService } from '../services/documentsService'
+import { paymentsService } from '../services/paymentsService'
 import { useAuthStore } from '../store/authStore'
+import BankDetailsModal from '../components/features/payments/BankDetailsModal'
 
 export default function EmployeeDashboard() {
   const { profile, membership, pendingInvitations, acceptInvitation, declineInvitation } = useAuthStore()
@@ -14,6 +16,9 @@ export default function EmployeeDashboard() {
   const [payslips, setPayslips] = useState([])
   const [enrollments, setEnrollments] = useState([])
   const [documents, setDocuments] = useState([])
+  const [bankDetails, setBankDetails] = useState(null)
+  const [bankDetailsLoading, setBankDetailsLoading] = useState(false)
+  const [showBankModal, setShowBankModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [invitationLoading, setInvitationLoading] = useState(null) // Track which invitation is being processed
@@ -76,6 +81,15 @@ export default function EmployeeDashboard() {
       benefitsService.getActiveCoverage(memberId)
         .then(data => setEnrollments(data || []))
         .catch(err => console.error('Failed to fetch enrollments:', err))
+
+      // Fetch bank details
+      if (!bankDetails) {
+        setBankDetailsLoading(true)
+        paymentsService.getBankDetails()
+          .then(data => setBankDetails(data))
+          .catch(err => console.error('Failed to fetch bank details:', err))
+          .finally(() => setBankDetailsLoading(false))
+      }
     }
 
     if (activeTab === 'documents' && documents.length === 0) {
@@ -449,6 +463,65 @@ export default function EmployeeDashboard() {
             </div>
           </div>
 
+          {/* Bank Details */}
+          <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl shadow-sm border border-border-light dark:border-border-dark">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Bank Details</h3>
+              {bankDetails && (
+                <button
+                  onClick={() => setShowBankModal(true)}
+                  className="text-sm text-primary hover:text-primary-hover font-medium"
+                >
+                  Update
+                </button>
+              )}
+            </div>
+            {bankDetailsLoading ? (
+              <div className="flex items-center gap-3 p-4">
+                <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                <span className="text-sm text-subtext-light dark:text-subtext-dark">Loading bank details...</span>
+              </div>
+            ) : bankDetails ? (
+              <div className="flex items-start gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                  <span className="material-icons-outlined text-xl">account_balance</span>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-text-light dark:text-text-dark">
+                    {bankDetails.bank_name || 'Bank Account'} ····{bankDetails.account_number_last4 || '****'}
+                  </h4>
+                  <p className="text-xs text-subtext-light dark:text-subtext-dark mt-1">
+                    {bankDetails.account_holder_name} &middot; {bankDetails.currency || 'NPR'}
+                  </p>
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 mt-2 inline-block">
+                    Linked
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-border-light dark:border-border-dark">
+                <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                  <span className="material-icons-outlined text-xl">account_balance</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-text-light dark:text-text-dark">
+                    Add your bank details to receive payments
+                  </h4>
+                  <p className="text-xs text-subtext-light dark:text-subtext-dark mt-1">
+                    Link your Nepali bank account so your employer can send you payments directly.
+                  </p>
+                  <button
+                    onClick={() => setShowBankModal(true)}
+                    className="mt-3 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                    <span className="material-icons-outlined text-lg">add</span>
+                    Add Bank Details
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Recent Payslips */}
           <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl shadow-sm border border-border-light dark:border-border-dark">
             <div className="flex justify-between items-center mb-6">
@@ -476,7 +549,7 @@ export default function EmployeeDashboard() {
                           {slip.payroll_run?.pay_date ? new Date(slip.payroll_run.pay_date).toLocaleDateString() : '-'}
                         </td>
                         <td className="py-3 px-4 text-sm text-right font-medium text-gray-900 dark:text-white">
-                          {slip.currency || 'NPR'} {(slip.net_pay || 0).toLocaleString()}
+                          {slip.currency || 'USD'} {(slip.net_pay || 0).toLocaleString()}
                         </td>
                         <td className="py-3 px-4">
                           <span className={`text-xs font-semibold px-2.5 py-1 rounded ${
@@ -735,6 +808,21 @@ export default function EmployeeDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bank Details Modal */}
+      {showBankModal && (
+        <BankDetailsModal
+          existingDetails={bankDetails}
+          onClose={() => setShowBankModal(false)}
+          onSuccess={() => {
+            setShowBankModal(false)
+            // Refresh bank details
+            paymentsService.getBankDetails()
+              .then(data => setBankDetails(data))
+              .catch(err => console.error('Failed to refresh bank details:', err))
+          }}
+        />
       )}
 
       {/* Footer */}

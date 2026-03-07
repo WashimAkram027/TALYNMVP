@@ -22,6 +22,23 @@ export const env = {
   resendApiKey: process.env.RESEND_API_KEY,
   emailFrom: process.env.EMAIL_FROM || 'Talyn <noreply@resend.dev>',
 
+  // Stripe
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+  stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+
+  // Wise
+  wiseApiUrl: process.env.WISE_API_URL || 'https://api.transferwise.com',
+  wiseApiToken: process.env.WISE_API_TOKEN,
+  wiseProfileId: process.env.WISE_PROFILE_ID,
+  wiseWebhookPublicKey: process.env.WISE_WEBHOOK_PUBLIC_KEY,
+
+  // Admin
+  adminEmail: process.env.ADMIN_EMAIL || 'admin@talynx.org',
+
+  // Scheduler
+  payrollPullCron: process.env.PAYROLL_PULL_CRON || '0 9 * * 1-5',
+
   // Helpers
   isDev: process.env.NODE_ENV === 'development',
   isProd: process.env.NODE_ENV === 'production'

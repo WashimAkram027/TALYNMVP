@@ -14,7 +14,7 @@ app.listen(PORT, () => {
 ║  Status:  Running                         ║
 ║  Port:    ${PORT}                            ║
 ║  Mode:    ${env.nodeEnv.padEnd(11)}                   ║
-║  URL:     http://localhost:${PORT}           ║
+║  URL:     https://localhost:${PORT}           ║
 ╚═══════════════════════════════════════════╝
   `)
 

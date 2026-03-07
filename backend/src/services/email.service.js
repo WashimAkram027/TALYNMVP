@@ -175,7 +175,7 @@ If you didn't create an account with Talyn, you can safely ignore this email.
    * @param {string} jobTitle - Job title being offered
    */
   async sendInvitationEmail(email, inviterName, orgName, jobTitle = null) {
-    const signupUrl = `${env.frontendUrl}/sign-up?email=${encodeURIComponent(email)}&invite=true`
+    const signupUrl = `${env.frontendUrl}/signup/employee?email=${encodeURIComponent(email)}&invite=true`
     const subject = `You've been invited to join ${orgName} on Talyn`
 
     if (!resend) {
@@ -920,5 +920,271 @@ If you didn't request a password reset, you can safely ignore this email. Your p
       console.error('[EmailService] Failed to send email:', error)
       throw error
     }
+  },
+
+  // ─── Payment & Payroll Emails ───────────────────────────────
+
+  /**
+   * Send payroll processing notification to employer
+   */
+  async sendPayrollProcessingEmail(email, name, amount, period) {
+    const subject = `Payroll processing - ${amount}`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: payroll processing email to ${email}`)
+      await this.logEmail(email, 'payroll_processing', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Payroll Processing', `Hi ${displayName},`, `Your payroll for <strong>${period}</strong> is being processed. <strong>${amount}</strong> will be debited from your linked bank account via ACH.`, 'This typically takes 1-3 business days.'),
+        text: `Hi ${displayName},\n\nYour payroll for ${period} is being processed. ${amount} will be debited from your linked bank account via ACH.\n\nThis typically takes 1-3 business days.\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payroll_processing', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send payroll processing email:', error)
+      await this.logEmail(email, 'payroll_processing', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send payroll funded notification to employer
+   */
+  async sendPayrollFundedEmail(email, name, amount, period) {
+    const subject = `Payroll funded - ${amount}`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: payroll funded email to ${email}`)
+      await this.logEmail(email, 'payroll_funded', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Payroll Funded', `Hi ${displayName},`, `Great news! <strong>${amount}</strong> for payroll period <strong>${period}</strong> has been successfully debited from your bank account.`, 'Your funds have been received by Talyn.'),
+        text: `Hi ${displayName},\n\nGreat news! ${amount} for payroll period ${period} has been successfully debited from your bank account.\n\nYour funds have been received by Talyn.\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payroll_funded', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send payroll funded email:', error)
+      await this.logEmail(email, 'payroll_funded', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send admin notification when payroll funds are received
+   */
+  async sendAdminPayrollFundedEmail(adminEmail, orgName, amount, period, runId) {
+    const subject = `[Action Required] Payroll funded - ${orgName} - ${amount}`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: admin payroll funded email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'admin_payroll_funded', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html: this._paymentEmailHtml(
+          'Payroll Funds Received',
+          'Hello Admin,',
+          `ACH payment of <strong>${amount}</strong> has been collected from <strong>${orgName}</strong> for period <strong>${period}</strong>.`,
+          `<strong>Run ID:</strong> ${runId}<br><br>Please initiate employee payouts manually.`
+        ),
+        text: `ACH payment of ${amount} collected from ${orgName} for period ${period}. Run ID: ${runId}. Please initiate employee payouts manually.`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(adminEmail, 'admin_payroll_funded', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send admin payroll funded email:', error)
+      await this.logEmail(adminEmail, 'admin_payroll_funded', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send payroll payment failed notification to employer
+   */
+  async sendPayrollFailedEmail(email, name, amount, period, errorReason) {
+    const subject = `Payroll payment failed - action required`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: payroll failed email to ${email}`)
+      await this.logEmail(email, 'payroll_failed', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Payment Failed', `Hi ${displayName},`, `The ACH debit of <strong>${amount}</strong> for payroll period <strong>${period}</strong> has failed.`, `<strong>Reason:</strong> ${errorReason || 'Unknown error'}<br><br>Your payroll run has been reverted to draft. Please check your bank account details and try again.`),
+        text: `Hi ${displayName},\n\nThe ACH debit of ${amount} for payroll period ${period} has failed.\n\nReason: ${errorReason || 'Unknown error'}\n\nYour payroll run has been reverted to draft. Please check your bank account details and try again.\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payroll_failed', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send payroll failed email:', error)
+      await this.logEmail(email, 'payroll_failed', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send transfer completed notification to employee
+   */
+  async sendTransferCompletedEmail(email, name, amountNPR, period) {
+    const subject = `Payment received - ${amountNPR}`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: transfer completed email to ${email}`)
+      await this.logEmail(email, 'transfer_completed', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Payment Received', `Hi ${displayName},`, `Your payment of <strong>${amountNPR}</strong> for the pay period <strong>${period}</strong> has been sent to your bank account.`, 'The funds should appear in your account shortly.'),
+        text: `Hi ${displayName},\n\nYour payment of ${amountNPR} for the pay period ${period} has been sent to your bank account.\n\nThe funds should appear in your account shortly.\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'transfer_completed', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send transfer completed email:', error)
+      await this.logEmail(email, 'transfer_completed', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send transfer failed notification to employee
+   */
+  async sendTransferFailedEmail(email, name, amountUSD, period, reason) {
+    const subject = `Payment issue - action may be required`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: transfer failed email to ${email}`)
+      await this.logEmail(email, 'transfer_failed', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Payment Issue', `Hi ${displayName},`, `We encountered an issue sending your payment of <strong>${amountUSD}</strong> for the pay period <strong>${period}</strong>.`, `<strong>Reason:</strong> ${reason || 'Unknown error'}<br><br>Your employer has been notified and will retry the transfer. Please ensure your bank details are up to date.`),
+        text: `Hi ${displayName},\n\nWe encountered an issue sending your payment of ${amountUSD} for the pay period ${period}.\n\nReason: ${reason || 'Unknown error'}\n\nYour employer has been notified and will retry the transfer. Please ensure your bank details are up to date.\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'transfer_failed', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send transfer failed email:', error)
+      await this.logEmail(email, 'transfer_failed', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send payroll complete summary to employer
+   */
+  async sendPayrollCompleteEmail(email, name, successCount, totalCount, period) {
+    const subject = `Payroll complete - ${successCount}/${totalCount} transfers successful`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: payroll complete email to ${email}`)
+      await this.logEmail(email, 'payroll_complete', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const failedCount = totalCount - successCount
+      const statusLine = failedCount > 0
+        ? `<strong>${successCount}</strong> of <strong>${totalCount}</strong> transfers completed successfully. <strong>${failedCount}</strong> failed and may need to be retried.`
+        : `All <strong>${totalCount}</strong> transfers completed successfully!`
+
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Payroll Complete', `Hi ${displayName},`, `Your payroll run for <strong>${period}</strong> has been completed.`, statusLine),
+        text: `Hi ${displayName},\n\nYour payroll run for ${period} has been completed.\n\n${failedCount > 0 ? `${successCount} of ${totalCount} transfers completed successfully. ${failedCount} failed and may need to be retried.` : `All ${totalCount} transfers completed successfully!`}\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payroll_complete', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send payroll complete email:', error)
+      await this.logEmail(email, 'payroll_complete', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Shared HTML template for payment emails (simpler than full branded ones)
+   */
+  _paymentEmailHtml(title, greeting, body, footer) {
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background-color:#f5f5f5;">
+  <table role="presentation" style="width:100%;border-collapse:collapse;">
+    <tr><td align="center" style="padding:40px 0;">
+      <table role="presentation" style="width:100%;max-width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+        <tr><td style="padding:40px 40px 20px;text-align:center;border-bottom:1px solid #eee;">
+          <h1 style="margin:0;font-size:24px;font-weight:700;color:#3B82F6;">Talyn</h1>
+        </td></tr>
+        <tr><td style="padding:40px;">
+          <h2 style="margin:0 0 20px;font-size:20px;font-weight:600;color:#1a1a1a;">${title}</h2>
+          <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#4a4a4a;">${greeting}</p>
+          <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#4a4a4a;">${body}</p>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#6a6a6a;">${footer}</p>
+        </td></tr>
+        <tr><td style="padding:20px 40px;background-color:#f9fafb;border-radius:0 0 8px 8px;text-align:center;">
+          <p style="margin:0;font-size:12px;color:#888;">&copy; ${new Date().getFullYear()} Talyn. All rights reserved.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim()
   }
 }

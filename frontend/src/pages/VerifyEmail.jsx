@@ -106,17 +106,19 @@ export default function VerifyEmail() {
             </p>
             <div className="space-y-3">
               <Link
-                to="/login/employer"
+                to="/login/employee"
                 className="block w-full py-3 px-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-colors text-center"
               >
-                Go to Login
+                Log in as Employee
+              </Link>
+              <Link
+                to="/login/employer"
+                className="block w-full py-3 px-4 border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-center"
+              >
+                Log in as Employer
               </Link>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Need a new verification link?{' '}
-                <Link to="/login/employer" className="text-primary hover:text-primary-hover">
-                  Try logging in
-                </Link>{' '}
-                and we'll send you a new one.
+                Need a new verification link? Try logging in and we'll send you a new one.
               </p>
             </div>
           </>

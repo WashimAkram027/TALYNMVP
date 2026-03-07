@@ -4,8 +4,9 @@ import OrgProfileForm from './OrgProfileForm'
 import EntityDocumentUpload from './EntityDocumentUpload'
 import PaymentSetupPrompt from './PaymentSetupPrompt'
 import InviteMemberPrompt from './InviteMemberPrompt'
+import StripeProvider from '../../providers/StripeProvider'
 
-export default function OnboardingChecklist({ checklist, onRefresh, onBrowseCandidates, firstName }) {
+export default function OnboardingChecklist({ checklist, onRefresh, onBrowseCandidates, firstName, orgName, billingEmail }) {
   // Find the first active/non-locked step to auto-expand
   const findActiveStep = useCallback((steps) => {
     if (!steps) return null
@@ -133,7 +134,13 @@ export default function OnboardingChecklist({ checklist, onRefresh, onBrowseCand
               <EntityDocumentUpload stepData={step.data} onComplete={handleStepComplete} />
             )}
             {step.key === 'payment_setup' && (
-              <PaymentSetupPrompt />
+              <StripeProvider>
+                <PaymentSetupPrompt
+                  onComplete={handleStepComplete}
+                  orgName={orgName}
+                  billingEmail={billingEmail}
+                />
+              </StripeProvider>
             )}
             {step.key === 'invite_team' && (
               <InviteMemberPrompt

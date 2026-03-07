@@ -139,6 +139,21 @@ export function requireEmployer(req, res, next) {
 }
 
 /**
+ * Require candidate role
+ */
+export function requireCandidate(req, res, next) {
+  if (!req.user) {
+    return unauthorizedResponse(res, 'Not authenticated')
+  }
+
+  if (req.user.role !== 'candidate') {
+    return unauthorizedResponse(res, 'Employee access required')
+  }
+
+  next()
+}
+
+/**
  * Require organization membership
  */
 export function requireOrganization(req, res, next) {

@@ -33,6 +33,7 @@ import EmployeeLogin from '../pages/auth/EmployeeLogin'
 
 // Onboarding
 import EmployerOnboarding from '../pages/onboarding/EmployerOnboarding'
+import EmployeeOnboarding from '../pages/onboarding/EmployeeOnboarding'
 
 export default function AppRoutes() {
   return (
@@ -58,12 +59,20 @@ export default function AppRoutes() {
         <Route path="verify-email" element={<VerifyEmail />} />
       </Route>
 
-      {/* Onboarding route - protected but no sidebar, no onboarding requirement */}
+      {/* Onboarding routes - protected but no sidebar, no onboarding requirement */}
       <Route
         path="onboarding/employer"
         element={
           <ProtectedRoute requireOnboarding={false}>
             <EmployerOnboarding />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="onboarding/employee"
+        element={
+          <ProtectedRoute requireOnboarding={false}>
+            <EmployeeOnboarding />
           </ProtectedRoute>
         }
       />

@@ -55,6 +55,9 @@ router.delete('/runs/:id', payrollController.deleteRun)
  */
 router.put('/items/:id', validateBody(updatePayrollItemSchema), payrollController.updateItem)
 
+// Wise payout retry — disabled while Wise is decoupled
+// router.post('/items/:id/retry', payrollController.retryTransfer)
+
 /**
  * GET /api/payroll/member/:memberId/history
  * Get payroll history for a specific member

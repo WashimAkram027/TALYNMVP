@@ -95,5 +95,6 @@ export const payrollService = {
   async deletePayrollRun(runId) {
     await api.delete(`/payroll/runs/${runId}`)
     return { success: true }
-  }
+  },
+
 }

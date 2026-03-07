@@ -239,6 +239,7 @@ export const onboardingService = {
         .from('payment_methods')
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
+        .eq('status', 'active')
 
       if (paymentError) {
         // Table doesn't exist yet — show as active (skeleton UI)
@@ -306,6 +307,125 @@ export const onboardingService = {
           }
         }
       ]
+    }
+  },
+
+  /**
+   * Get employee onboarding status
+   */
+  async getEmployeeOnboardingStatus(userId) {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('id, first_name, role, onboarding_step, onboarding_completed, pending_bank_details')
+      .eq('id', userId)
+      .single()
+
+    if (error || !profile) {
+      throw new BadRequestError('User not found')
+    }
+
+    return {
+      currentStep: profile.onboarding_step || null,
+      isComplete: profile.onboarding_completed === true,
+      hasBankDetails: !!profile.pending_bank_details,
+      firstName: profile.first_name
+    }
+  },
+
+  /**
+   * Advance employee onboarding step (steps 1-4)
+   */
+  async advanceEmployeeStep(userId, currentStep) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, onboarding_step, onboarding_completed')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) {
+      throw new BadRequestError('User not found')
+    }
+
+    if (profile.role !== 'candidate') {
+      throw new BadRequestError('Only employees can complete this onboarding')
+    }
+
+    if (profile.onboarding_completed) {
+      throw new BadRequestError('Onboarding already completed')
+    }
+
+    if (profile.onboarding_step !== currentStep) {
+      throw new BadRequestError(`Expected step ${profile.onboarding_step}, got ${currentStep}`)
+    }
+
+    if (currentStep < 1 || currentStep > 4) {
+      throw new BadRequestError('Invalid step number')
+    }
+
+    const nextStep = currentStep + 1
+
+    const { data: updatedProfile, error: updateError } = await supabase
+      .from('profiles')
+      .update({ onboarding_step: nextStep })
+      .eq('id', userId)
+      .select('id, onboarding_step, onboarding_completed')
+      .single()
+
+    if (updateError) {
+      throw new BadRequestError('Failed to advance onboarding step')
+    }
+
+    return {
+      currentStep: updatedProfile.onboarding_step,
+      isComplete: false
+    }
+  },
+
+  /**
+   * Complete employee bank details (step 5) and finish onboarding
+   */
+  async completeEmployeeBankDetails(userId, bankDetails) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, onboarding_step, onboarding_completed, organization_id')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) {
+      throw new BadRequestError('User not found')
+    }
+
+    if (profile.role !== 'candidate') {
+      throw new BadRequestError('Only employees can complete this onboarding')
+    }
+
+    if (profile.onboarding_completed) {
+      throw new BadRequestError('Onboarding already completed')
+    }
+
+    if (profile.onboarding_step !== 5) {
+      throw new BadRequestError('Please complete previous steps first')
+    }
+
+    const { data: updatedProfile, error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        pending_bank_details: bankDetails,
+        onboarding_completed: true,
+        onboarding_step: null
+      })
+      .eq('id', userId)
+      .select('id, onboarding_step, onboarding_completed')
+      .single()
+
+    if (updateError) {
+      throw new BadRequestError('Failed to save bank details')
+    }
+
+    return {
+      currentStep: null,
+      isComplete: true,
+      redirectTo: '/dashboard-employee'
     }
   },
 
@@ -473,12 +593,14 @@ export const onboardingService = {
       throw new BadRequestError(`Missing required documents: ${missing.join(', ')}`)
     }
 
-    // Update entity status
+    // Auto-approve for MVP (manual review process not yet implemented)
+    const now = new Date().toISOString()
     const { data: updatedOrg, error: updateError } = await supabase
       .from('organizations')
       .update({
-        entity_status: 'pending_review',
-        entity_submitted_at: new Date().toISOString()
+        entity_status: 'approved',
+        entity_submitted_at: now,
+        entity_reviewed_at: now
       })
       .eq('id', organizationId)
       .eq('owner_id', userId)

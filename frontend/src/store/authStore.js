@@ -92,6 +92,8 @@ export const useAuthStore = create((set, get) => ({
 
         const profile = response.data.profile
 
+        localStorage.setItem('user_role', profile?.role || '')
+
         set({
           user: response.data.user,
           profile: profile,
@@ -119,6 +121,7 @@ export const useAuthStore = create((set, get) => ({
 
     // Clear local state FIRST to prevent any race conditions
     localStorage.removeItem('access_token')
+    localStorage.removeItem('user_role')
     set({
       user: null,
       profile: null,
@@ -180,6 +183,9 @@ export const useAuthStore = create((set, get) => ({
 
       if (response.success && response.data) {
         const { user, profile, organization, membership, pendingInvitations } = response.data
+
+        localStorage.setItem('user_role', profile?.role || '')
+
         set({
           user,
           profile,

@@ -1,4 +1,6 @@
 import { payrollService } from '../services/payroll.service.js'
+import { paymentsService } from '../services/payments.service.js'
+// import { wisePayout } from '../services/wisePayout.service.js' // Wise payout — disabled while Wise is decoupled
 import {
   successResponse,
   createdResponse,
@@ -89,6 +91,12 @@ export const payrollController = {
         return badRequestResponse(res, 'Status is required')
       }
 
+      // Route "processing" through Stripe ACH pull instead of direct status update
+      if (status === 'processing') {
+        const result = await paymentsService.processPayrollRun(id, req.user.organizationId)
+        return successResponse(res, result, 'Payroll run submitted for ACH processing')
+      }
+
       const run = await payrollService.updatePayrollRunStatus(id, req.user.organizationId, status)
       return successResponse(res, run, 'Payroll run status updated')
     } catch (error) {
@@ -96,10 +104,10 @@ export const payrollController = {
       if (error.message === 'Payroll run not found') {
         return notFoundResponse(res, error.message)
       }
-      if (error.message === 'Invalid status') {
+      if (error.message?.includes('draft status') || error.message === 'Invalid status') {
         return badRequestResponse(res, error.message)
       }
-      return errorResponse(res, 'Failed to update payroll run status', 500, error)
+      return errorResponse(res, error.message || 'Failed to update payroll run status', 500, error)
     }
   },
 
@@ -164,6 +172,21 @@ export const payrollController = {
    * DELETE /api/payroll/runs/:id
    * Delete a payroll run (only if draft)
    */
+  // Wise payout retry — disabled while Wise is decoupled
+  // async retryTransfer(req, res) {
+  //   try {
+  //     const { id } = req.params
+  //     const result = await wisePayout.retryTransfer(id, req.user.organizationId)
+  //     return successResponse(res, result, 'Transfer retry initiated')
+  //   } catch (error) {
+  //     console.error('[PayrollController] RetryTransfer error:', error)
+  //     if (error.message?.includes('not found')) {
+  //       return notFoundResponse(res, error.message)
+  //     }
+  //     return badRequestResponse(res, error.message || 'Failed to retry transfer')
+  //   }
+  // },
+
   async deleteRun(req, res) {
     try {
       const { id } = req.params

@@ -16,9 +16,11 @@ export default function ProtectedRoute({ children, allowedRoles = [], requireOnb
     )
   }
 
-  // Not authenticated - redirect to login
+  // Not authenticated - redirect to role-appropriate login
   if (!isAuthenticated) {
-    return <Navigate to="/login/employer" replace />
+    const lastRole = localStorage.getItem('user_role')
+    const loginPath = lastRole === 'candidate' ? '/login/employee' : '/login/employer'
+    return <Navigate to={loginPath} replace />
   }
 
   // Onboarding checks for employers
@@ -33,6 +35,19 @@ export default function ProtectedRoute({ children, allowedRoles = [], requireOnb
     // Onboarding page should redirect away if already complete
     if (!requireOnboarding && onboardingComplete) {
       return <Navigate to="/dashboard" replace />
+    }
+  }
+
+  // Onboarding checks for candidates
+  if (profile?.role === 'candidate') {
+    const onboardingComplete = profile.onboarding_completed === true
+
+    if (requireOnboarding && !onboardingComplete) {
+      return <Navigate to="/onboarding/employee" replace />
+    }
+
+    if (!requireOnboarding && onboardingComplete) {
+      return <Navigate to="/dashboard-employee" replace />
     }
   }
 

@@ -199,9 +199,9 @@ export default function EntityDocumentUpload({ stepData, onComplete }) {
       )}
 
       {isPendingReview && (
-        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-400 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
-          <span className="material-icons-outlined text-lg">hourglass_top</span>
-          Your entity documents are under review. We'll notify you once approved.
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+          <span className="material-icons-outlined text-lg">check_circle</span>
+          Your entity documents have been submitted successfully.
         </div>
       )}
 
@@ -226,11 +226,11 @@ export default function EntityDocumentUpload({ stepData, onComplete }) {
             disabled={!allUploaded || submitting}
             className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? 'Submitting...' : 'Submit for Review'}
+            {submitting ? 'Submitting...' : 'Submit Documents'}
           </button>
           {!allUploaded && (
             <p className="text-xs text-subtext-light dark:text-subtext-dark mt-2">
-              Upload all 3 documents to submit for review
+              Upload all 3 documents to continue
             </p>
           )}
         </div>

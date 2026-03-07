@@ -110,6 +110,27 @@ export default function Payroll() {
     )
   }
 
+  const getPaymentStatusBadge = (paymentStatus) => {
+    if (!paymentStatus) return null
+    const styles = {
+      ach_processing: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+      succeeded: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+      funded: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+      failed: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+    }
+    const labels = {
+      ach_processing: 'ACH Processing',
+      succeeded: 'Funded',
+      funded: 'Funded',
+      failed: 'Payment Failed'
+    }
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${styles[paymentStatus] || 'bg-gray-100 text-gray-700'}`}>
+        {labels[paymentStatus] || paymentStatus}
+      </span>
+    )
+  }
+
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '-'
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
@@ -234,6 +255,7 @@ export default function Payroll() {
                   <th className="px-6 py-4">Period</th>
                   <th className="px-6 py-4">Pay Date</th>
                   <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Payment</th>
                   <th className="px-6 py-4">Total Amount</th>
                   <th className="px-6 py-4">Actions</th>
                 </tr>
@@ -247,6 +269,7 @@ export default function Payroll() {
                       </td>
                       <td className="px-6 py-4 text-text-light dark:text-text-dark">{formatDate(run.pay_date)}</td>
                       <td className="px-6 py-4">{getStatusBadge(run.status)}</td>
+                      <td className="px-6 py-4">{getPaymentStatusBadge(run.payment_status)}</td>
                       <td className="px-6 py-4 text-text-light dark:text-text-dark font-medium">{formatCurrency(run.total_amount)}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -268,7 +291,8 @@ export default function Payroll() {
                               </button>
                             </>
                           )}
-                          {run.status === 'processing' && (
+                          {/* Hide Complete/Cancel when ACH is processing (webhook auto-completes) */}
+                          {run.status === 'processing' && run.payment_status !== 'ach_processing' && (
                             <>
                               <button
                                 onClick={() => handleStatusChange(run.id, 'completed')}
@@ -286,6 +310,16 @@ export default function Payroll() {
                               </button>
                             </>
                           )}
+                          {/* Retry button when payment failed */}
+                          {run.payment_status === 'failed' && run.status === 'draft' && (
+                            <button
+                              onClick={() => handleStatusChange(run.id, 'processing')}
+                              disabled={actionLoading}
+                              className="text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 text-xs font-medium"
+                            >
+                              Retry Payment
+                            </button>
+                          )}
                           <button
                             onClick={() => handleExpandRun(run.id)}
                             className="text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark"
@@ -299,7 +333,7 @@ export default function Payroll() {
                     </tr>
                     {expandedRunId === run.id && (
                       <tr key={`${run.id}-detail`}>
-                        <td colSpan={5} className="px-6 py-4 bg-gray-50 dark:bg-gray-800/30">
+                        <td colSpan={6} className="px-6 py-4 bg-gray-50 dark:bg-gray-800/30">
                           {expandLoading ? (
                             <div className="text-center py-4">
                               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
@@ -319,7 +353,9 @@ export default function Payroll() {
                               <tbody className="divide-y divide-border-light dark:divide-border-dark">
                                 {expandedRunData.items.map(item => (
                                   <tr key={item.id}>
-                                    <td className="px-4 py-2 text-text-light dark:text-text-dark">{item.member_name || item.member_id}</td>
+                                    <td className="px-4 py-2 text-text-light dark:text-text-dark">
+                                      {item.member?.profile?.full_name || item.member_name || item.member_id}
+                                    </td>
                                     <td className="px-4 py-2 text-text-light dark:text-text-dark">{formatCurrency(item.base_salary)}</td>
                                     <td className="px-4 py-2 text-text-light dark:text-text-dark">{formatCurrency(item.bonus)}</td>
                                     <td className="px-4 py-2 text-text-light dark:text-text-dark">{formatCurrency(item.deductions)}</td>

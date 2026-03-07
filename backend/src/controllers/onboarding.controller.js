@@ -3,6 +3,42 @@ import { successResponse } from '../utils/response.js'
 
 export const onboardingController = {
   /**
+   * GET /api/onboarding/employee/status
+   */
+  async getEmployeeOnboardingStatus(req, res, next) {
+    try {
+      const result = await onboardingService.getEmployeeOnboardingStatus(req.user.id)
+      return successResponse(res, result)
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/onboarding/employee/advance-step
+   */
+  async advanceEmployeeStep(req, res, next) {
+    try {
+      const result = await onboardingService.advanceEmployeeStep(req.user.id, req.body.currentStep)
+      return successResponse(res, result, 'Step advanced')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/onboarding/employee/bank-details
+   */
+  async submitEmployeeBankDetails(req, res, next) {
+    try {
+      const result = await onboardingService.completeEmployeeBankDetails(req.user.id, req.body)
+      return successResponse(res, result, 'Bank details saved and onboarding completed')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
    * POST /api/onboarding/employer/profile - Step 1
    */
   async completeProfile(req, res, next) {

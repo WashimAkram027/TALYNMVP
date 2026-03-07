@@ -210,7 +210,8 @@ export const membersService = {
       'start_date',
       'job_description',
       'probation_period',
-      'status'
+      'status',
+      'quote_id'
     ]
 
     const filteredUpdates = {}

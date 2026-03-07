@@ -408,6 +408,46 @@ export const employerOnboardingServiceSchema = z.object({
   serviceType: z.enum(['eor', 'hire_talent', 'both'])
 })
 
+// Employee onboarding schemas
+export const employeeAdvanceStepSchema = z.object({
+  currentStep: z.number().int().min(1).max(4)
+})
+
+export const employeeBankDetailsSchema = z.object({
+  accountHolderName: z.string().min(1, 'Account holder name is required'),
+  bankName: z.string().optional(),
+  bankCode: z.string().min(1, 'Bank code is required'),
+  accountNumber: z.string().min(5, 'Account number is required'),
+  currency: z.string().optional().default('NPR')
+})
+
+// Payment schemas
+export const createSetupIntentSchema = z.object({
+  billingEmail: z.string().email().optional()
+})
+
+export const submitBankDetailsSchema = z.object({
+  accountHolderName: z.string().min(1, 'Account holder name is required'),
+  bankCode: z.string().min(1, 'Bank code is required'),
+  accountNumber: z.string().min(5, 'Account number is required'),
+  bankName: z.string().optional(),
+  currency: z.string().optional().default('NPR')
+})
+
+// EOR Quote schemas
+export const generateQuoteSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
+  jobTitle: z.string().optional(),
+  department: z.string().optional(),
+  employmentType: z.enum(['full_time', 'part_time', 'contract', 'freelance']).optional().default('full_time'),
+  salaryAmount: z.number().positive('Annual salary must be positive'),
+  salaryCurrency: z.string().optional().default('NPR'),
+  payFrequency: z.string().optional().default('monthly'),
+  startDate: z.string().nullable().optional()
+})
+
 // Common schemas
 export const paginationSchema = z.object({
   page: z.coerce.number().int().positive().optional().default(1),

@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
-import { supabase } from '../config/supabase.js'
+import { supabase, supabaseAuth } from '../config/supabase.js'
 import { env } from '../config/env.js'
 import { BadRequestError, UnauthorizedError, ConflictError } from '../utils/errors.js'
 import { membersService } from './members.service.js'
@@ -48,8 +48,8 @@ export const authService = {
 
     if (existingProfile) {
       profile = existingProfile
-      // For employers, set onboarding_step if not already set
-      if (role === 'employer' && !existingProfile.onboarding_step) {
+      // Set onboarding_step if not already set
+      if (!existingProfile.onboarding_step && !existingProfile.onboarding_completed) {
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ onboarding_step: 1 })
@@ -70,7 +70,7 @@ export const authService = {
           role: role,
           status: 'pending',
           email_verified: false,
-          onboarding_step: role === 'employer' ? 1 : null
+          onboarding_step: 1
         })
         .select()
         .single()
@@ -150,6 +150,8 @@ export const authService = {
       let redirectTo = '/dashboard-employee'
       if (role === 'employer') {
         redirectTo = profile?.onboarding_completed ? '/dashboard' : '/onboarding/employer'
+      } else if (role === 'candidate') {
+        redirectTo = profile?.onboarding_completed ? '/dashboard-employee' : '/onboarding/employee'
       }
 
       return { role, token: jwtToken, redirectTo }
@@ -224,6 +226,8 @@ export const authService = {
     let redirectTo = '/dashboard-employee'
     if (profile.role === 'employer') {
       redirectTo = profile.onboarding_completed ? '/dashboard' : '/onboarding/employer'
+    } else if (profile.role === 'candidate') {
+      redirectTo = profile.onboarding_completed ? '/dashboard-employee' : '/onboarding/employee'
     }
 
     return { role: profile.role, token: jwtToken, redirectTo }
@@ -333,8 +337,8 @@ export const authService = {
   async login({ email, password, expectedRole = null }) {
     console.log('[AuthService] Login attempt - email:', email, 'expectedRole:', expectedRole)
 
-    // Authenticate with Supabase
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    // Authenticate with isolated auth client (keeps main client as service_role)
+    const { data: authData, error: authError } = await supabaseAuth.auth.signInWithPassword({
       email,
       password
     })
@@ -419,10 +423,12 @@ export const authService = {
 
     console.log('[AuthService] Login successful, returning profile with role:', profile.role)
 
-    // Determine redirect for employers based on onboarding status
+    // Determine redirect based on onboarding status
     let redirectTo = null
     if (profile.role === 'employer' && !profile.onboarding_completed) {
       redirectTo = '/onboarding/employer'
+    } else if (profile.role === 'candidate' && !profile.onboarding_completed) {
+      redirectTo = '/onboarding/employee'
     }
 
     return {
@@ -440,8 +446,8 @@ export const authService = {
    * Logout user
    */
   async logout(userId) {
-    // Sign out from Supabase
-    await supabase.auth.signOut()
+    // Sign out from the isolated auth client (main client is unaffected)
+    await supabaseAuth.auth.signOut()
     return { success: true }
   },
 
@@ -615,8 +621,8 @@ export const authService = {
       throw new BadRequestError('User not found')
     }
 
-    // Verify current password by attempting to sign in
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    // Verify current password with isolated auth client
+    const { error: authError } = await supabaseAuth.auth.signInWithPassword({
       email: profile.email,
       password: currentPassword
     })

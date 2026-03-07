@@ -1,10 +1,39 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { profileAPI, authAPI } from '../services/api'
+import { paymentsService } from '../services/paymentsService'
+import StripeProvider from '../components/providers/StripeProvider'
+import PaymentSetupPrompt from '../components/features/onboarding/PaymentSetupPrompt'
 
 export default function Settings() {
   const { profile, fetchProfile } = useAuthStore()
   const isCandidate = profile?.role === 'candidate'
+  const isEmployer = profile?.role === 'employer'
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState('profile')
+
+  // Payment methods state (employer only)
+  const [paymentMethods, setPaymentMethods] = useState([])
+  const [methodsLoading, setMethodsLoading] = useState(false)
+
+  // Fetch payment methods when tab is active
+  useEffect(() => {
+    if (activeTab === 'payment' && isEmployer) {
+      const fetchMethods = async () => {
+        try {
+          setMethodsLoading(true)
+          const methods = await paymentsService.getPaymentMethods()
+          setPaymentMethods(methods || [])
+        } catch (err) {
+          console.error('Failed to load payment methods:', err)
+        } finally {
+          setMethodsLoading(false)
+        }
+      }
+      fetchMethods()
+    }
+  }, [activeTab, isEmployer])
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -228,8 +257,45 @@ export default function Settings() {
         </p>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="flex border-b border-border-light dark:border-border-dark mb-6">
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'profile'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark'
+          }`}
+        >
+          Profile
+        </button>
+        {isEmployer && (
+          <button
+            onClick={() => setActiveTab('payment')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'payment'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark'
+            }`}
+          >
+            Payment Methods
+          </button>
+        )}
+        <button
+          onClick={() => setActiveTab('password')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'password'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark'
+          }`}
+        >
+          Password
+        </button>
+      </div>
+
       <div className="space-y-6">
         {/* Profile Information Section */}
+        {activeTab === 'profile' && <>
         <div className="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
           <div className="p-6 border-b border-border-light dark:border-border-dark">
             <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Profile Information</h2>
@@ -429,9 +495,68 @@ export default function Settings() {
             </div>
           </div>
         )}
+        </>}
+
+        {/* Payment Methods Tab (Employer Only) */}
+        {activeTab === 'payment' && isEmployer && (
+          <div className="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
+            <div className="p-6 border-b border-border-light dark:border-border-dark">
+              <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Payment Methods</h2>
+              <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
+                Manage bank accounts used to fund payroll
+              </p>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Bank account linking */}
+              <StripeProvider>
+                <PaymentSetupPrompt onComplete={() => {
+                  paymentsService.getPaymentMethods().then(m => setPaymentMethods(m || [])).catch(() => {})
+                }} />
+              </StripeProvider>
+
+              {/* All linked payment methods */}
+              {methodsLoading ? (
+                <div className="flex items-center gap-3 py-4">
+                  <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                  <span className="text-sm text-subtext-light dark:text-subtext-dark">Loading payment methods...</span>
+                </div>
+              ) : paymentMethods.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-text-light dark:text-text-dark mb-3">All Payment Methods</h3>
+                  <div className="space-y-2">
+                    {paymentMethods.map((method) => (
+                      <div
+                        key={method.id}
+                        className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-border-light dark:border-border-dark"
+                      >
+                        <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                          <span className="material-icons-outlined text-lg">account_balance</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-text-light dark:text-text-dark">
+                            {method.bank_name || 'Bank Account'} ····{method.last_four || '****'}
+                          </p>
+                          <p className="text-xs text-subtext-light dark:text-subtext-dark">
+                            {method.is_default ? 'Default' : 'Linked'} · Added {new Date(method.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        {method.is_default && (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Change Password Section */}
-        <div className="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
+        {activeTab === 'password' && <div className="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
           <div className="p-6 border-b border-border-light dark:border-border-dark">
             <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Change Password</h2>
             <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
@@ -508,7 +633,7 @@ export default function Settings() {
               </button>
             </div>
           </form>
-        </div>
+        </div>}
       </div>
     </div>
   )
