@@ -136,6 +136,35 @@ export const quoteController = {
   },
 
   /**
+   * GET /api/quotes/:quoteId/pdf
+   * Generate and download quote PDF
+   */
+  async downloadQuotePdf(req, res) {
+    try {
+      const { quoteId } = req.params
+
+      const { pdfBuffer, quoteNumber } = await quoteService.generateQuotePdf(
+        quoteId,
+        req.user.organizationId
+      )
+
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="${quoteNumber}.pdf"`)
+      res.setHeader('Content-Length', pdfBuffer.length)
+      return res.send(pdfBuffer)
+    } catch (error) {
+      console.error('Download quote PDF error:', error)
+      if (error.statusCode === 404) {
+        return notFoundResponse(res, error.message)
+      }
+      if (error.statusCode === 400) {
+        return badRequestResponse(res, error.message)
+      }
+      return errorResponse(res, 'Failed to generate quote PDF', 500, error)
+    }
+  },
+
+  /**
    * GET /api/quotes
    * List quotes for the organization
    */

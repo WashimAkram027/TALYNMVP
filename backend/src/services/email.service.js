@@ -5,6 +5,17 @@ import { env } from '../config/env.js'
 // Initialize Resend client
 const resend = env.resendApiKey ? new Resend(env.resendApiKey) : null
 
+// Escape HTML entities to prevent XSS in email templates
+function escapeHtml(str) {
+  if (!str) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /**
  * Email service - handles sending emails via Resend
  */
@@ -1057,15 +1068,15 @@ If you didn't request a password reset, you can safely ignore this email. Your p
   },
 
   /**
-   * Send transfer completed notification to employee
+   * Send payroll payment disputed notification to employer
    */
-  async sendTransferCompletedEmail(email, name, amountNPR, period) {
-    const subject = `Payment received - ${amountNPR}`
+  async sendPayrollDisputedEmail(email, name, amount, period, reason) {
+    const subject = `Payroll payment disputed - action required`
     const displayName = name || 'there'
 
     if (!resend) {
-      console.log(`[EmailService] Mock: transfer completed email to ${email}`)
-      await this.logEmail(email, 'transfer_completed', subject, null, 'mock')
+      console.log(`[EmailService] Mock: payroll disputed email to ${email}`)
+      await this.logEmail(email, 'payroll_disputed', subject, null, 'mock')
       return { success: true, mock: true }
     }
 
@@ -1074,30 +1085,66 @@ If you didn't request a password reset, you can safely ignore this email. Your p
         from: env.emailFrom || 'Talyn <noreply@resend.dev>',
         to: [email],
         subject,
-        html: this._paymentEmailHtml('Payment Received', `Hi ${displayName},`, `Your payment of <strong>${amountNPR}</strong> for the pay period <strong>${period}</strong> has been sent to your bank account.`, 'The funds should appear in your account shortly.'),
-        text: `Hi ${displayName},\n\nYour payment of ${amountNPR} for the pay period ${period} has been sent to your bank account.\n\nThe funds should appear in your account shortly.\n\n- The Talyn Team`
+        html: this._paymentEmailHtml('Payment Disputed', `Hi ${displayName},`, `The ACH payment of <strong>${amount}</strong> for payroll period <strong>${period}</strong> has been disputed by your bank.`, `<strong>Reason:</strong> ${reason || 'Unknown'}<br><br>This means the funds have been reversed. Please contact your bank or reach out to our support team for next steps.`),
+        text: `Hi ${displayName},\n\nThe ACH payment of ${amount} for payroll period ${period} has been disputed by your bank.\n\nReason: ${reason || 'Unknown'}\n\nThis means the funds have been reversed. Please contact your bank or reach out to our support team for next steps.\n\n- The Talyn Team`
       })
 
       if (error) throw new Error(error.message)
-      await this.logEmail(email, 'transfer_completed', subject, data?.id, 'sent')
+      await this.logEmail(email, 'payroll_disputed', subject, data?.id, 'sent')
       return { success: true, messageId: data?.id }
     } catch (error) {
-      console.error('[EmailService] Failed to send transfer completed email:', error)
-      await this.logEmail(email, 'transfer_completed', subject, null, 'failed', null, error.message)
+      console.error('[EmailService] Failed to send payroll disputed email:', error)
+      await this.logEmail(email, 'payroll_disputed', subject, null, 'failed', null, error.message)
       return { success: false }
     }
   },
 
   /**
-   * Send transfer failed notification to employee
+   * Send admin notification when a payroll payment is disputed
    */
-  async sendTransferFailedEmail(email, name, amountUSD, period, reason) {
-    const subject = `Payment issue - action may be required`
+  async sendAdminPayrollDisputedEmail(adminEmail, orgName, amount, period, runId, reason, disputeId) {
+    const subject = `[URGENT] Payment disputed - ${orgName} - ${amount}`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: admin payroll disputed email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'admin_payroll_disputed', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html: this._paymentEmailHtml(
+          'ACH Payment Disputed',
+          'Hello Admin,',
+          `ACH payment of <strong>${amount}</strong> from <strong>${orgName}</strong> for period <strong>${period}</strong> has been disputed.`,
+          `<strong>Run ID:</strong> ${runId}<br><strong>Dispute ID:</strong> ${disputeId || 'N/A'}<br><strong>Reason:</strong> ${reason || 'Unknown'}<br><br>Funds have been reversed. Please review in the Stripe Dashboard and take appropriate action.`
+        ),
+        text: `ACH payment of ${amount} from ${orgName} for period ${period} has been disputed. Run ID: ${runId}. Dispute ID: ${disputeId || 'N/A'}. Reason: ${reason || 'Unknown'}. Funds have been reversed. Please review in the Stripe Dashboard.`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(adminEmail, 'admin_payroll_disputed', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send admin payroll disputed email:', error)
+      await this.logEmail(adminEmail, 'admin_payroll_disputed', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send payroll refund notification to employer
+   */
+  async sendPayrollRefundedEmail(email, name, amount, period) {
+    const subject = `Payroll payment refunded`
     const displayName = name || 'there'
 
     if (!resend) {
-      console.log(`[EmailService] Mock: transfer failed email to ${email}`)
-      await this.logEmail(email, 'transfer_failed', subject, null, 'mock')
+      console.log(`[EmailService] Mock: payroll refunded email to ${email}`)
+      await this.logEmail(email, 'payroll_refunded', subject, null, 'mock')
       return { success: true, mock: true }
     }
 
@@ -1106,60 +1153,498 @@ If you didn't request a password reset, you can safely ignore this email. Your p
         from: env.emailFrom || 'Talyn <noreply@resend.dev>',
         to: [email],
         subject,
-        html: this._paymentEmailHtml('Payment Issue', `Hi ${displayName},`, `We encountered an issue sending your payment of <strong>${amountUSD}</strong> for the pay period <strong>${period}</strong>.`, `<strong>Reason:</strong> ${reason || 'Unknown error'}<br><br>Your employer has been notified and will retry the transfer. Please ensure your bank details are up to date.`),
-        text: `Hi ${displayName},\n\nWe encountered an issue sending your payment of ${amountUSD} for the pay period ${period}.\n\nReason: ${reason || 'Unknown error'}\n\nYour employer has been notified and will retry the transfer. Please ensure your bank details are up to date.\n\n- The Talyn Team`
+        html: this._paymentEmailHtml('Payment Refunded', `Hi ${displayName},`, `A refund of <strong>${amount}</strong> has been issued for payroll period <strong>${period}</strong>.`, 'The refunded amount will be returned to your bank account. This typically takes 5-10 business days.'),
+        text: `Hi ${displayName},\n\nA refund of ${amount} has been issued for payroll period ${period}.\n\nThe refunded amount will be returned to your bank account. This typically takes 5-10 business days.\n\n- The Talyn Team`
       })
 
       if (error) throw new Error(error.message)
-      await this.logEmail(email, 'transfer_failed', subject, data?.id, 'sent')
+      await this.logEmail(email, 'payroll_refunded', subject, data?.id, 'sent')
       return { success: true, messageId: data?.id }
     } catch (error) {
-      console.error('[EmailService] Failed to send transfer failed email:', error)
-      await this.logEmail(email, 'transfer_failed', subject, null, 'failed', null, error.message)
+      console.error('[EmailService] Failed to send payroll refunded email:', error)
+      await this.logEmail(email, 'payroll_refunded', subject, null, 'failed', null, error.message)
       return { success: false }
     }
   },
 
   /**
-   * Send payroll complete summary to employer
+   * Send admin notification when a payroll payment is refunded
    */
-  async sendPayrollCompleteEmail(email, name, successCount, totalCount, period) {
-    const subject = `Payroll complete - ${successCount}/${totalCount} transfers successful`
-    const displayName = name || 'there'
+  async sendAdminPayrollRefundedEmail(adminEmail, orgName, amount, period, runId, chargeId) {
+    const subject = `Payment refunded - ${orgName} - ${amount}`
 
     if (!resend) {
-      console.log(`[EmailService] Mock: payroll complete email to ${email}`)
-      await this.logEmail(email, 'payroll_complete', subject, null, 'mock')
+      console.log(`[EmailService] Mock: admin payroll refunded email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'admin_payroll_refunded', subject, null, 'mock')
       return { success: true, mock: true }
     }
 
     try {
-      const failedCount = totalCount - successCount
-      const statusLine = failedCount > 0
-        ? `<strong>${successCount}</strong> of <strong>${totalCount}</strong> transfers completed successfully. <strong>${failedCount}</strong> failed and may need to be retried.`
-        : `All <strong>${totalCount}</strong> transfers completed successfully!`
-
       const { data, error } = await resend.emails.send({
         from: env.emailFrom || 'Talyn <noreply@resend.dev>',
-        to: [email],
+        to: [adminEmail],
         subject,
-        html: this._paymentEmailHtml('Payroll Complete', `Hi ${displayName},`, `Your payroll run for <strong>${period}</strong> has been completed.`, statusLine),
-        text: `Hi ${displayName},\n\nYour payroll run for ${period} has been completed.\n\n${failedCount > 0 ? `${successCount} of ${totalCount} transfers completed successfully. ${failedCount} failed and may need to be retried.` : `All ${totalCount} transfers completed successfully!`}\n\n- The Talyn Team`
+        html: this._paymentEmailHtml(
+          'ACH Payment Refunded',
+          'Hello Admin,',
+          `A refund of <strong>${amount}</strong> has been issued for <strong>${orgName}</strong>, payroll period <strong>${period}</strong>.`,
+          `<strong>Run ID:</strong> ${runId}<br><strong>Charge ID:</strong> ${chargeId || 'N/A'}<br><br>Please review in the Stripe Dashboard.`
+        ),
+        text: `A refund of ${amount} has been issued for ${orgName}, payroll period ${period}. Run ID: ${runId}. Charge ID: ${chargeId || 'N/A'}. Please review in the Stripe Dashboard.`
       })
 
       if (error) throw new Error(error.message)
-      await this.logEmail(email, 'payroll_complete', subject, data?.id, 'sent')
+      await this.logEmail(adminEmail, 'admin_payroll_refunded', subject, data?.id, 'sent')
       return { success: true, messageId: data?.id }
     } catch (error) {
-      console.error('[EmailService] Failed to send payroll complete email:', error)
-      await this.logEmail(email, 'payroll_complete', subject, null, 'failed', null, error.message)
+      console.error('[EmailService] Failed to send admin payroll refunded email:', error)
+      await this.logEmail(adminEmail, 'admin_payroll_refunded', subject, null, 'failed', null, error.message)
       return { success: false }
     }
   },
 
   /**
-   * Shared HTML template for payment emails (simpler than full branded ones)
+   * Send notification to employer when entity documents are submitted for review
    */
+  async sendEntitySubmittedEmail(email, firstName, orgName) {
+    const dashboardUrl = `${env.frontendUrl}/dashboard`
+    const displayName = escapeHtml(firstName || 'there')
+    const safeOrgName = escapeHtml(orgName)
+    const subject = `Entity verification submitted - ${orgName}`
+
+    if (!resend) {
+      console.warn('[EmailService] Resend not configured, skipping email send')
+      await this.logEmail(email, 'entity_submitted', subject, null, 'mock', { firstName, orgName })
+      return { success: true, mock: true }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entity Verification Submitted</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #eee;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #3B82F6;">Talyn</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; font-size: 20px; font-weight: 600; color: #1a1a1a;">Documents Submitted</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Hi ${displayName},
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Your entity verification documents for <strong>${safeOrgName}</strong> have been submitted successfully and are now under review.
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Our team will review your documents within 1-2 business days. You will receive an email once the review is complete.
+              </p>
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${dashboardUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #3B82F6; text-decoration: none; border-radius: 6px;">
+                      Go to Dashboard
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} Talyn. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim()
+
+    const text = `
+Documents Submitted
+
+Hi ${displayName},
+
+Your entity verification documents for ${orgName} have been submitted successfully and are now under review.
+
+Our team will review your documents within 1-2 business days. You will receive an email once the review is complete.
+
+Go to Dashboard: ${dashboardUrl}
+
+- The Talyn Team
+    `.trim()
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html,
+        text
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        await this.logEmail(email, 'entity_submitted', subject, null, 'failed', { firstName, orgName }, error.message)
+        return { success: false }
+      }
+
+      console.log('[EmailService] Entity submitted email sent:', data?.id)
+      await this.logEmail(email, 'entity_submitted', subject, data?.id, 'sent', { firstName, orgName })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send entity submitted email:', error)
+      await this.logEmail(email, 'entity_submitted', subject, null, 'failed', { firstName, orgName }, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send notification to employer when entity is approved
+   */
+  async sendEntityApprovedEmail(email, firstName, orgName) {
+    const dashboardUrl = `${env.frontendUrl}/dashboard`
+    const displayName = escapeHtml(firstName || 'there')
+    const safeOrgName = escapeHtml(orgName)
+    const subject = `Entity verification approved - ${orgName}`
+
+    if (!resend) {
+      console.warn('[EmailService] Resend not configured, skipping email send')
+      await this.logEmail(email, 'entity_approved', subject, null, 'mock', { firstName, orgName })
+      return { success: true, mock: true }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entity Verification Approved</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #eee;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #3B82F6;">Talyn</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; font-size: 20px; font-weight: 600; color: #1a1a1a;">Entity Approved!</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Hi ${displayName},
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Congratulations! Your entity verification for <strong>${safeOrgName}</strong> has been approved.
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                You can now proceed with setting up your payment method to start managing your team.
+              </p>
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${dashboardUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #10B981; text-decoration: none; border-radius: 6px;">
+                      Continue Setup
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} Talyn. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim()
+
+    const text = `
+Entity Approved!
+
+Hi ${displayName},
+
+Congratulations! Your entity verification for ${orgName} has been approved.
+
+You can now proceed with setting up your payment method to start managing your team.
+
+Continue Setup: ${dashboardUrl}
+
+- The Talyn Team
+    `.trim()
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html,
+        text
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        await this.logEmail(email, 'entity_approved', subject, null, 'failed', { firstName, orgName }, error.message)
+        return { success: false }
+      }
+
+      console.log('[EmailService] Entity approved email sent:', data?.id)
+      await this.logEmail(email, 'entity_approved', subject, data?.id, 'sent', { firstName, orgName })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send entity approved email:', error)
+      await this.logEmail(email, 'entity_approved', subject, null, 'failed', { firstName, orgName }, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send notification to employer when entity is rejected
+   */
+  async sendEntityRejectedEmail(email, firstName, orgName, rejectionReason) {
+    const dashboardUrl = `${env.frontendUrl}/dashboard`
+    const displayName = escapeHtml(firstName || 'there')
+    const safeOrgName = escapeHtml(orgName)
+    const safeReason = escapeHtml(rejectionReason)
+    const subject = `Entity verification requires attention - ${orgName}`
+
+    if (!resend) {
+      console.warn('[EmailService] Resend not configured, skipping email send')
+      await this.logEmail(email, 'entity_rejected', subject, null, 'mock', { firstName, orgName, rejectionReason })
+      return { success: true, mock: true }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entity Verification Requires Attention</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #eee;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #3B82F6;">Talyn</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; font-size: 20px; font-weight: 600; color: #1a1a1a;">Verification Requires Attention</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Hi ${displayName},
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Your entity verification for <strong>${safeOrgName}</strong> was not approved. Please review the feedback below and resubmit your documents.
+              </p>
+              <div style="margin: 0 0 20px; padding: 16px; background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px;">
+                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #991B1B;">Reason:</p>
+                <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: #991B1B;">${safeReason}</p>
+              </div>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                You can update your documents and resubmit from your dashboard.
+              </p>
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${dashboardUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #3B82F6; text-decoration: none; border-radius: 6px;">
+                      Review Documents
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} Talyn. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim()
+
+    const text = `
+Verification Requires Attention
+
+Hi ${displayName},
+
+Your entity verification for ${orgName} was not approved. Please review the feedback below and resubmit your documents.
+
+Reason: ${rejectionReason}
+
+You can update your documents and resubmit from your dashboard.
+
+Review Documents: ${dashboardUrl}
+
+- The Talyn Team
+    `.trim()
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html,
+        text
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        await this.logEmail(email, 'entity_rejected', subject, null, 'failed', { firstName, orgName, rejectionReason }, error.message)
+        return { success: false }
+      }
+
+      console.log('[EmailService] Entity rejected email sent:', data?.id)
+      await this.logEmail(email, 'entity_rejected', subject, data?.id, 'sent', { firstName, orgName, rejectionReason })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send entity rejected email:', error)
+      await this.logEmail(email, 'entity_rejected', subject, null, 'failed', { firstName, orgName, rejectionReason }, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send notification to admin when new entity documents are submitted for review
+   */
+  async sendAdminEntitySubmittedNotification(orgName, orgId) {
+    const adminUrl = `${env.adminFrontendUrl}/organizations/${orgId}`
+    const adminEmail = env.adminEmail
+    const safeOrgName = escapeHtml(orgName)
+    const subject = `New entity verification submission - ${orgName}`
+
+    if (!resend) {
+      console.warn('[EmailService] Resend not configured, skipping email send')
+      await this.logEmail(adminEmail, 'admin_entity_submitted', subject, null, 'mock', { orgName, orgId })
+      return { success: true, mock: true }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Entity Verification Submission</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #eee;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #3B82F6;">Talyn Admin</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; font-size: 20px; font-weight: 600; color: #1a1a1a;">New Entity Verification</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                <strong>${safeOrgName}</strong> has submitted their entity verification documents for review.
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Please review the submitted documents and approve or reject the verification.
+              </p>
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${adminUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #3B82F6; text-decoration: none; border-radius: 6px;">
+                      Review Entity
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} Talyn. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim()
+
+    const text = `
+New Entity Verification
+
+${orgName} has submitted their entity verification documents for review.
+
+Please review the submitted documents and approve or reject the verification.
+
+Review Entity: ${adminUrl}
+
+- Talyn System
+    `.trim()
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html,
+        text
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        await this.logEmail(adminEmail, 'admin_entity_submitted', subject, null, 'failed', { orgName, orgId }, error.message)
+        return { success: false }
+      }
+
+      console.log('[EmailService] Admin entity notification sent:', data?.id)
+      await this.logEmail(adminEmail, 'admin_entity_submitted', subject, data?.id, 'sent', { orgName, orgId })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send admin entity notification:', error)
+      await this.logEmail(adminEmail, 'admin_entity_submitted', subject, null, 'failed', { orgName, orgId }, error.message)
+      return { success: false }
+    }
+  },
+
   _paymentEmailHtml(title, greeting, body, footer) {
     return `
 <!DOCTYPE html>

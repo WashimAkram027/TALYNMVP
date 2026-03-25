@@ -27,14 +27,12 @@ export const env = {
   stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
 
-  // Wise
-  wiseApiUrl: process.env.WISE_API_URL || 'https://api.transferwise.com',
-  wiseApiToken: process.env.WISE_API_TOKEN,
-  wiseProfileId: process.env.WISE_PROFILE_ID,
-  wiseWebhookPublicKey: process.env.WISE_WEBHOOK_PUBLIC_KEY,
-
   // Admin
   adminEmail: process.env.ADMIN_EMAIL || 'admin@talynx.org',
+  adminFrontendUrl: process.env.ADMIN_FRONTEND_URL || 'http://localhost:5174',
+
+  // Anvil (PDF generation)
+  anvilApiKey: process.env.ANVIL_API_KEY,
 
   // Scheduler
   payrollPullCron: process.env.PAYROLL_PULL_CRON || '0 9 * * 1-5',

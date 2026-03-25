@@ -19,6 +19,13 @@ const DOC_TYPES = [
     title: 'Bank Statement',
     description: 'Recent bank statement for verification',
     icon: 'account_balance'
+  },
+  {
+    key: 'certificate_of_registration',
+    title: 'Certificate of Registration',
+    description: 'Business registration certificate (optional)',
+    icon: 'badge',
+    optional: true
   }
 ]
 
@@ -30,6 +37,7 @@ function DocumentCard({ docConfig, uploadedDoc, entityStatus, onUpload, onDelete
   const [dragOver, setDragOver] = useState(false)
   const isUploaded = !!uploadedDoc
   const isPendingReview = entityStatus === 'pending_review'
+  const isApproved = entityStatus === 'approved'
 
   const handleFile = async (file) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -92,7 +100,7 @@ function DocumentCard({ docConfig, uploadedDoc, entityStatus, onUpload, onDelete
             <div className="flex items-center gap-2 mt-2">
               <span className="material-icons-outlined text-sm text-green-600">attach_file</span>
               <span className="text-xs text-text-light dark:text-text-dark truncate">{uploadedDoc.fileName}</span>
-              {!isPendingReview && (
+              {!isPendingReview && !isApproved && (
                 <button
                   onClick={() => onDelete(docConfig.key)}
                   className="text-xs text-red-500 hover:text-red-700 ml-2 flex items-center gap-0.5"
@@ -112,7 +120,7 @@ function DocumentCard({ docConfig, uploadedDoc, entityStatus, onUpload, onDelete
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading || isPendingReview}
+                disabled={uploading || isPendingReview || isApproved}
                 className="text-xs text-primary hover:text-primary-hover font-medium flex items-center gap-1 disabled:opacity-50"
               >
                 <span className="material-icons-outlined text-sm">upload_file</span>
@@ -144,7 +152,10 @@ export default function EntityDocumentUpload({ stepData, onComplete }) {
 
   const entityStatus = stepData?.entityStatus || 'not_started'
   const isPendingReview = entityStatus === 'pending_review'
-  const allUploaded = DOC_TYPES.every(dt => documents.some(d => d.docType === dt.key))
+  const isApproved = entityStatus === 'approved'
+  const isRejected = entityStatus === 'rejected'
+  const requiredDocTypes = DOC_TYPES.filter(dt => !dt.optional)
+  const allUploaded = requiredDocTypes.every(dt => documents.some(d => d.docType === dt.key))
 
   const handleUpload = async (data) => {
     try {
@@ -199,9 +210,29 @@ export default function EntityDocumentUpload({ stepData, onComplete }) {
       )}
 
       {isPendingReview && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+          <span className="material-icons-outlined text-lg">hourglass_top</span>
+          Your entity documents have been submitted and are under review. We'll notify you once the review is complete.
+        </div>
+      )}
+
+      {isRejected && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded-lg text-sm">
+          <div className="flex items-center gap-2 font-medium mb-1">
+            <span className="material-icons-outlined text-lg">error_outline</span>
+            Your entity verification was not approved
+          </div>
+          {stepData?.rejectionReason && (
+            <p className="text-xs ml-7">Reason: {stepData.rejectionReason}</p>
+          )}
+          <p className="text-xs ml-7 mt-1">Please review the feedback, update your documents, and resubmit.</p>
+        </div>
+      )}
+
+      {isApproved && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
-          <span className="material-icons-outlined text-lg">check_circle</span>
-          Your entity documents have been submitted successfully.
+          <span className="material-icons-outlined text-lg">verified</span>
+          Your entity has been verified and approved!
         </div>
       )}
 
@@ -219,7 +250,7 @@ export default function EntityDocumentUpload({ stepData, onComplete }) {
         ))}
       </div>
 
-      {!isPendingReview && (
+      {!isPendingReview && !isApproved && (
         <div className="pt-2">
           <button
             onClick={handleSubmit}
@@ -230,7 +261,7 @@ export default function EntityDocumentUpload({ stepData, onComplete }) {
           </button>
           {!allUploaded && (
             <p className="text-xs text-subtext-light dark:text-subtext-dark mt-2">
-              Upload all 3 documents to continue
+              Upload all 3 required documents to continue. Certificate of Registration is optional.
             </p>
           )}
         </div>

@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase.js'
 import { BadRequestError } from '../utils/errors.js'
 import { authService } from './auth.service.js'
+import { emailService } from './email.service.js'
 
 export const onboardingService = {
   /**
@@ -192,7 +193,7 @@ export const onboardingService = {
     // Fetch org data
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .select('id, name, description, website, linkedin_url, employee_types_needed, entity_status, setup_step_1_completed_at')
+      .select('id, name, description, website, linkedin_url, employee_types_needed, entity_status, entity_rejection_reason, setup_step_1_completed_at')
       .eq('id', organizationId)
       .single()
 
@@ -231,9 +232,9 @@ export const onboardingService = {
       }
     }
 
-    // Step 3: Payment Setup (skeleton — gracefully handle missing table)
+    // Step 3: Payment Setup (unlock when step 2 is completed OR pending_review)
     let step3Status = 'locked'
-    if (step2Status === 'completed') {
+    if (step2Status === 'completed' || step2Status === 'pending_review') {
       // Check if payment_methods table exists and has data
       const { count: paymentCount, error: paymentError } = await supabase
         .from('payment_methods')
@@ -278,10 +279,11 @@ export const onboardingService = {
         {
           key: 'entity_verification',
           title: 'Entity Verification',
-          subtitle: 'Upload W-9, Articles of Incorporation, and Bank Statement',
+          subtitle: 'Upload W-9, Articles of Incorporation, Bank Statement, and optional Certificate of Registration',
           status: step2Status,
           data: {
             entityStatus: org.entity_status || 'not_started',
+            rejectionReason: org.entity_rejection_reason || null,
             documents: (entityDocs || []).map(d => ({
               docType: d.doc_type,
               fileName: d.file_name,
@@ -295,7 +297,9 @@ export const onboardingService = {
           title: 'Payment Setup',
           subtitle: 'Connect your US bank account to fund payroll',
           status: step3Status,
-          data: null
+          data: {
+            entityStatus: org.entity_status || 'not_started'
+          }
         },
         {
           key: 'invite_team',
@@ -474,6 +478,9 @@ export const onboardingService = {
     if (org?.entity_status === 'pending_review') {
       throw new BadRequestError('Cannot upload documents while entity is under review')
     }
+    if (org?.entity_status === 'approved') {
+      throw new BadRequestError('Cannot upload documents after entity is approved')
+    }
 
     // Decode base64
     const buffer = Buffer.from(fileBase64, 'base64')
@@ -539,6 +546,9 @@ export const onboardingService = {
     if (org?.entity_status === 'pending_review') {
       throw new BadRequestError('Cannot delete documents while entity is under review')
     }
+    if (org?.entity_status === 'approved') {
+      throw new BadRequestError('Cannot delete documents after entity is approved')
+    }
 
     // Find the document
     const { data: doc, error: findError } = await supabase
@@ -593,14 +603,14 @@ export const onboardingService = {
       throw new BadRequestError(`Missing required documents: ${missing.join(', ')}`)
     }
 
-    // Auto-approve for MVP (manual review process not yet implemented)
+    // Submit for admin review (no longer auto-approved)
     const now = new Date().toISOString()
     const { data: updatedOrg, error: updateError } = await supabase
       .from('organizations')
       .update({
-        entity_status: 'approved',
+        entity_status: 'pending_review',
         entity_submitted_at: now,
-        entity_reviewed_at: now
+        entity_rejection_reason: null
       })
       .eq('id', organizationId)
       .eq('owner_id', userId)
@@ -610,6 +620,22 @@ export const onboardingService = {
     if (updateError) {
       console.error('[OnboardingService] Entity submit error:', updateError)
       throw new BadRequestError('Failed to submit entity for review')
+    }
+
+    // Send notification emails (fire-and-forget)
+    try {
+      const { data: ownerProfile } = await supabase
+        .from('profiles')
+        .select('email, first_name')
+        .eq('id', userId)
+        .single()
+
+      if (ownerProfile) {
+        await emailService.sendEntitySubmittedEmail(ownerProfile.email, ownerProfile.first_name, updatedOrg.name)
+      }
+      await emailService.sendAdminEntitySubmittedNotification(updatedOrg.name, organizationId)
+    } catch (emailErr) {
+      console.error('[OnboardingService] Failed to send entity submission emails:', emailErr)
     }
 
     return updatedOrg

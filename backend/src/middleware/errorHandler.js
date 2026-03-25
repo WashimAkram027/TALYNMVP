@@ -1,3 +1,4 @@
+import Stripe from 'stripe'
 import { env } from '../config/env.js'
 import { AppError, ValidationError } from '../utils/errors.js'
 
@@ -8,6 +9,25 @@ export function errorHandler(err, req, res, next) {
   // Log error in development
   if (env.isDev) {
     console.error('Error:', err)
+  }
+
+  // Handle Stripe errors (before generic checks to avoid false matches on err.code)
+  if (err instanceof Stripe.errors.StripeError) {
+    const statusCode = err.statusCode || 500
+    // Never expose raw Stripe error details to clients in production
+    const message = err instanceof Stripe.errors.StripeAuthenticationError
+      ? 'Payment service configuration error. Please contact support.'
+      : err instanceof Stripe.errors.StripeRateLimitError
+        ? 'Payment service temporarily unavailable. Please try again shortly.'
+        : err instanceof Stripe.errors.StripeConnectionError
+          ? 'Unable to reach payment service. Please try again.'
+          : err.message || 'Payment processing error'
+    return res.status(statusCode >= 500 ? 502 : statusCode).json({
+      success: false,
+      data: null,
+      message,
+      error: env.isDev ? { type: err.type, code: err.code, requestId: err.requestId } : null
+    })
   }
 
   // Handle Zod validation errors

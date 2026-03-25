@@ -33,21 +33,5 @@ export const paymentsService = {
   async getActivePaymentMethod() {
     const response = await api.get('/payments/methods/active')
     return response.data
-  },
-
-  /**
-   * POST /payments/bank-details - Submit employee bank details
-   */
-  async submitBankDetails(bankDetails) {
-    const response = await api.post('/payments/bank-details', bankDetails)
-    return response.data
-  },
-
-  /**
-   * GET /payments/bank-details - Get employee bank details
-   */
-  async getBankDetails() {
-    const response = await api.get('/payments/bank-details')
-    return response.data
   }
 }

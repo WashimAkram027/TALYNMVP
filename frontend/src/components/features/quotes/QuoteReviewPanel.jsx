@@ -12,8 +12,9 @@ function formatRate(rate) {
   return `${(parseFloat(rate) * 100).toFixed(0)}%`
 }
 
-export default function QuoteReviewPanel({ quote, onBack, onAccept, loading }) {
-  const [showPdfTooltip, setShowPdfTooltip] = useState(false)
+export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPdf, loading }) {
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState(null)
 
   if (!quote) return null
 
@@ -153,24 +154,40 @@ export default function QuoteReviewPanel({ quote, onBack, onAccept, loading }) {
         </button>
 
         <div className="flex items-center gap-2">
-          {/* PDF Download - disabled */}
-          <div className="relative">
-            <button
-              type="button"
-              disabled
-              onMouseEnter={() => setShowPdfTooltip(true)}
-              onMouseLeave={() => setShowPdfTooltip(false)}
-              className="px-3 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-subtext-light dark:text-subtext-dark opacity-50 cursor-not-allowed flex items-center gap-1"
-            >
-              <span className="material-icons-outlined text-base">picture_as_pdf</span>
-              PDF
-            </button>
-            {showPdfTooltip && (
-              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                Coming soon
-              </div>
+          {/* PDF Download */}
+          <button
+            type="button"
+            disabled={pdfLoading}
+            onClick={async () => {
+              if (!onDownloadPdf) return
+              setPdfLoading(true)
+              setPdfError(null)
+              try {
+                await onDownloadPdf()
+              } catch (err) {
+                setPdfError('Failed to generate PDF')
+                console.error('PDF download error:', err)
+              } finally {
+                setPdfLoading(false)
+              }
+            }}
+            className="px-3 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition flex items-center gap-1"
+          >
+            {pdfLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                <span className="material-icons-outlined text-base">picture_as_pdf</span>
+                PDF
+              </>
             )}
-          </div>
+          </button>
+          {pdfError && (
+            <span className="text-xs text-red-500">{pdfError}</span>
+          )}
 
           <button
             type="button"

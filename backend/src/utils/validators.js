@@ -384,7 +384,7 @@ export const orgProfileEnrichmentSchema = z.object({
 })
 
 export const entityDocumentUploadSchema = z.object({
-  docType: z.enum(['w9', 'articles_of_incorporation', 'bank_statement']),
+  docType: z.enum(['w9', 'articles_of_incorporation', 'bank_statement', 'certificate_of_registration']),
   fileBase64: z.string().min(1, 'File data is required'),
   fileName: z.string().min(1, 'File name is required'),
   fileType: z.string().min(1, 'File type is required')
@@ -426,14 +426,6 @@ export const createSetupIntentSchema = z.object({
   billingEmail: z.string().email().optional()
 })
 
-export const submitBankDetailsSchema = z.object({
-  accountHolderName: z.string().min(1, 'Account holder name is required'),
-  bankCode: z.string().min(1, 'Bank code is required'),
-  accountNumber: z.string().min(5, 'Account number is required'),
-  bankName: z.string().optional(),
-  currency: z.string().optional().default('NPR')
-})
-
 // EOR Quote schemas
 export const generateQuoteSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -446,6 +438,46 @@ export const generateQuoteSchema = z.object({
   salaryCurrency: z.string().optional().default('NPR'),
   payFrequency: z.string().optional().default('monthly'),
   startDate: z.string().nullable().optional()
+})
+
+// Admin schemas
+export const adminLoginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required')
+})
+
+export const entityReviewSchema = z.object({
+  reason: z.string().min(1, 'Rejection reason is required').optional()
+})
+
+export const adminUserActionSchema = z.object({
+  reason: z.string().optional()
+})
+
+export const adminPayrollActionSchema = z.object({
+  notes: z.string().optional()
+})
+
+export const adminBankVerifySchema = z.object({
+  verified: z.boolean()
+})
+
+export const adminEorConfigSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  country: z.string().min(1, 'Country is required'),
+  baseFeeMonthly: z.number().nonnegative().optional(),
+  baseFeeCurrency: z.string().optional().default('USD'),
+  employerCostPercent: z.number().nonnegative().optional(),
+  config: z.record(z.any()).optional()
+})
+
+export const adminFiltersSchema = z.object({
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20),
+  search: z.string().optional(),
+  status: z.string().optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional().default('desc')
 })
 
 // Common schemas

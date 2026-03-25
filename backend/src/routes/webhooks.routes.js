@@ -13,13 +13,4 @@ router.post(
   webhooksController.handleStripeWebhook
 )
 
-// POST /api/webhooks/wise
-// Uses raw body parsing for RSA-SHA256 signature verification
-// No authenticate middleware — Wise calls this directly
-router.post(
-  '/wise',
-  express.raw({ type: 'application/json' }),
-  webhooksController.handleWiseWebhook
-)
-
 export default router

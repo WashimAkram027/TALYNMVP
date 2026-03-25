@@ -31,6 +31,12 @@ router.get('/', quoteController.listQuotes)
 router.post('/generate', requireEmployer, validateBody(generateQuoteSchema), quoteController.generateQuote)
 
 /**
+ * GET /api/quotes/:quoteId/pdf
+ * Generate and download quote PDF (employer only)
+ */
+router.get('/:quoteId/pdf', requireEmployer, quoteController.downloadQuotePdf)
+
+/**
  * POST /api/quotes/:quoteId/accept-and-invite
  * Accept quote and send invitation (employer only)
  */

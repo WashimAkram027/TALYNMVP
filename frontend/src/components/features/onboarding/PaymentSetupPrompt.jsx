@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useStripe } from '@stripe/react-stripe-js'
 import { paymentsService } from '../../../services/paymentsService'
 
-export default function PaymentSetupPrompt({ onComplete, orgName, billingEmail }) {
+export default function PaymentSetupPrompt({ onComplete, orgName, billingEmail, stepData }) {
   const stripe = useStripe()
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
@@ -28,6 +28,7 @@ export default function PaymentSetupPrompt({ onComplete, orgName, billingEmail }
     checkExisting()
   }, [checkExisting])
 
+  const entityPendingReview = stepData?.entityStatus === 'pending_review'
   const stripeNotConfigured = !loading && stripe === null
 
   const handleConnectBank = async () => {
@@ -109,10 +110,26 @@ export default function PaymentSetupPrompt({ onComplete, orgName, billingEmail }
     )
   }
 
+  // Entity docs under review banner (shown above payment content)
+  const entityReviewBanner = entityPendingReview ? (
+    <div className="mb-4 flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+      <span className="material-icons-outlined text-blue-500 text-xl mt-0.5">info</span>
+      <div>
+        <h4 className="text-sm font-medium text-blue-700 dark:text-blue-400">
+          Thank you for submitting your documents!
+        </h4>
+        <p className="text-xs text-blue-600 dark:text-blue-400/80 mt-1">
+          Your entity verification documents are currently being reviewed. You can proceed with payment setup while we review them.
+        </p>
+      </div>
+    </div>
+  ) : null
+
   // Bank linked state
   if (activeMethod) {
     return (
       <div className="space-y-4">
+        {entityReviewBanner}
         <div className="flex items-start gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
           <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
             <span className="material-icons-outlined text-xl">check_circle</span>
@@ -138,6 +155,8 @@ export default function PaymentSetupPrompt({ onComplete, orgName, billingEmail }
   // Stripe not configured — clear message
   if (stripeNotConfigured) {
     return (
+      <div>
+      {entityReviewBanner}
       <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
         <span className="material-icons-outlined text-amber-500 text-xl mt-0.5">info</span>
         <div>
@@ -149,12 +168,14 @@ export default function PaymentSetupPrompt({ onComplete, orgName, billingEmail }
           </p>
         </div>
       </div>
+      </div>
     )
   }
 
   // No bank — connect state
   return (
     <div className="space-y-4">
+      {entityReviewBanner}
       <div className="flex items-start gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-border-light dark:border-border-dark">
         <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
           <span className="material-icons-outlined text-xl">account_balance</span>

@@ -270,8 +270,8 @@ export default function TimeOff() {
                   <tbody className="divide-y divide-border-light dark:divide-border-dark text-sm">
                     {requests.map(req => (
                       <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{req.member_name || req.member_id || '-'}</td>
-                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{req.policy_name || req.policy_id || '-'}</td>
+                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{req.member?.profile?.full_name || req.member_name || '-'}</td>
+                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{req.policy?.name || req.policy_name || '-'}</td>
                         <td className="px-6 py-4 text-text-light dark:text-text-dark">{formatDate(req.start_date)}</td>
                         <td className="px-6 py-4 text-text-light dark:text-text-dark">{formatDate(req.end_date)}</td>
                         <td className="px-6 py-4 text-text-light dark:text-text-dark">{calcDays(req.start_date, req.end_date)}</td>

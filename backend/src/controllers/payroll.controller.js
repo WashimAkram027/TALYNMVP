@@ -1,6 +1,5 @@
 import { payrollService } from '../services/payroll.service.js'
 import { paymentsService } from '../services/payments.service.js'
-// import { wisePayout } from '../services/wisePayout.service.js' // Wise payout — disabled while Wise is decoupled
 import {
   successResponse,
   createdResponse,
@@ -172,21 +171,6 @@ export const payrollController = {
    * DELETE /api/payroll/runs/:id
    * Delete a payroll run (only if draft)
    */
-  // Wise payout retry — disabled while Wise is decoupled
-  // async retryTransfer(req, res) {
-  //   try {
-  //     const { id } = req.params
-  //     const result = await wisePayout.retryTransfer(id, req.user.organizationId)
-  //     return successResponse(res, result, 'Transfer retry initiated')
-  //   } catch (error) {
-  //     console.error('[PayrollController] RetryTransfer error:', error)
-  //     if (error.message?.includes('not found')) {
-  //       return notFoundResponse(res, error.message)
-  //     }
-  //     return badRequestResponse(res, error.message || 'Failed to retry transfer')
-  //   }
-  // },
-
   async deleteRun(req, res) {
     try {
       const { id } = req.params

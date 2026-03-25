@@ -5,6 +5,6 @@ import { env } from './env.js'
 // Returns null if key not configured (dev mode)
 export const stripe = env.stripeSecretKey
   ? new Stripe(env.stripeSecretKey, {
-      apiVersion: '2024-12-18.acacia'
+      apiVersion: '2026-02-25.clover'
     })
   : null

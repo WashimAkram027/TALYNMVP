@@ -91,6 +91,16 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
     }
   }
 
+  const handleDownloadPdf = async () => {
+    const blob = await quoteService.downloadQuotePdf(quote.id)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${quote.quote_number}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleBackToForm = () => {
     setPhase('form')
     setError(null)
@@ -127,6 +137,7 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
               quote={quote}
               onBack={handleBackToForm}
               onAccept={handleAcceptAndInvite}
+              onDownloadPdf={handleDownloadPdf}
               loading={loading}
             />
           ) : (

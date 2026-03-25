@@ -27,10 +27,13 @@ export default function OnboardingChecklist({ checklist, onRefresh, onBrowseCand
       return
     }
 
-    // Find which step just became completed
+    // Find which step just became completed or moved to pending_review
     let newlyCompleted = null
     for (let i = 0; i < currSteps.length; i++) {
-      if (currSteps[i].status === 'completed' && prevSteps[i]?.status !== 'completed') {
+      if (
+        (currSteps[i].status === 'completed' && prevSteps[i]?.status !== 'completed') ||
+        (currSteps[i].status === 'pending_review' && prevSteps[i]?.status !== 'pending_review')
+      ) {
         newlyCompleted = i
         break
       }
@@ -139,6 +142,7 @@ export default function OnboardingChecklist({ checklist, onRefresh, onBrowseCand
                   onComplete={handleStepComplete}
                   orgName={orgName}
                   billingEmail={billingEmail}
+                  stepData={step.data}
                 />
               </StripeProvider>
             )}

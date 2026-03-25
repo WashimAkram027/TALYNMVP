@@ -1,4 +1,6 @@
 import { supabase } from '../config/supabase.js'
+import { anvilClient } from '../config/anvil.js'
+import { buildQuoteHtml } from './pdfTemplate.service.js'
 import { BadRequestError, NotFoundError } from '../utils/errors.js'
 
 export const quoteService = {
@@ -212,5 +214,84 @@ export const quoteService = {
     const { data, error } = await query
     if (error) throw error
     return data || []
+  },
+
+  /**
+   * Generate a PDF for a quote using Anvil
+   * Returns { pdfBuffer, pdfUrl } — buffer for immediate download, url for future access
+   * Caches the PDF in Supabase Storage and stores the URL on the quote record
+   */
+  async generateQuotePdf(quoteId, orgId) {
+    if (!anvilClient) {
+      throw new BadRequestError('PDF generation is not configured. Set ANVIL_API_KEY in environment.')
+    }
+
+    // Fetch quote
+    const quote = await this.getQuoteById(quoteId, orgId)
+
+    // If PDF already generated, fetch from storage
+    if (quote.pdf_url) {
+      const storagePath = `quotes/${orgId}/${quote.quote_number}.pdf`
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .download(storagePath)
+
+      if (!error && data) {
+        const buffer = Buffer.from(await data.arrayBuffer())
+        return { pdfBuffer: buffer, pdfUrl: quote.pdf_url, quoteNumber: quote.quote_number }
+      }
+      // If download failed, regenerate below
+    }
+
+    // Fetch organization and generating user for the template
+    const [orgResult, userResult] = await Promise.all([
+      supabase.from('organizations').select('*').eq('id', orgId).single(),
+      supabase.from('profiles').select('full_name, email').eq('id', quote.generated_by).single()
+    ])
+
+    const organization = orgResult.data
+    const generatedByUser = userResult.data
+
+    // Build HTML/CSS template
+    const { html, css } = buildQuoteHtml(quote, organization, generatedByUser)
+
+    // Generate PDF via Anvil
+    const { statusCode, data: pdfData } = await anvilClient.generatePDF({
+      title: `EOR Quote ${quote.quote_number}`,
+      type: 'html',
+      data: { html, css }
+    })
+
+    if (statusCode !== 200 || !pdfData) {
+      throw new BadRequestError(`PDF generation failed with status: ${statusCode}`)
+    }
+
+    // Upload to Supabase Storage
+    const storagePath = `quotes/${orgId}/${quote.quote_number}.pdf`
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(storagePath, pdfData, {
+        contentType: 'application/pdf',
+        upsert: true
+      })
+
+    if (uploadError) {
+      console.error('[QuoteService] PDF upload error:', uploadError)
+      // Still return the buffer even if storage fails
+      return { pdfBuffer: pdfData, pdfUrl: null }
+    }
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('documents')
+      .getPublicUrl(storagePath)
+
+    // Update quote record with PDF URL
+    await supabase
+      .from('eor_quotes')
+      .update({ pdf_url: publicUrl, updated_at: new Date().toISOString() })
+      .eq('id', quoteId)
+
+    return { pdfBuffer: pdfData, pdfUrl: publicUrl, quoteNumber: quote.quote_number }
   }
 }

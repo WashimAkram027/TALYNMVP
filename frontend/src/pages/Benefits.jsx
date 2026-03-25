@@ -90,7 +90,7 @@ export default function Benefits() {
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '-'
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+    return `NPR ${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
   }
 
   const formatDate = (dateStr) => {

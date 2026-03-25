@@ -29,6 +29,11 @@ export async function authenticate(req, res, next) {
       return unauthorizedResponse(res, 'Invalid token')
     }
 
+    // Block admin tokens from accessing user endpoints
+    if (decoded.isAdmin) {
+      return unauthorizedResponse(res, 'Admin tokens cannot access user endpoints')
+    }
+
     // Get user from database
     const { data: profile, error } = await supabase
       .from('profiles')

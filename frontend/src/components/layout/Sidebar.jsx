@@ -105,7 +105,7 @@ export default function Sidebar({ onClose }) {
 
             <NavLink to="/invoices" onClick={handleNavClick} className={navLinkClass}>
               <span className="material-icons-outlined">receipt_long</span>
-              Invoices
+              Payslips
             </NavLink>
 
             <NavLink to="/documents" onClick={handleNavClick} className={navLinkClass}>

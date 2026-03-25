@@ -108,8 +108,8 @@ export default function Invoices() {
     setShowModal(true)
   }
 
-  const formatCurrency = (amount, currency = 'NPR') => {
-    return `${currency} ${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const formatCurrency = (amount, currency = 'USD') => {
+    return `$${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
   }
 
   if (loading) {
@@ -140,25 +140,16 @@ export default function Invoices() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-text-light dark:text-text-dark">Invoices</h1>
-          <p className="text-subtext-light dark:text-subtext-dark">Manage billing and invoices</p>
+          <h1 className="text-2xl font-bold text-text-light dark:text-text-dark">Payslips</h1>
+          <p className="text-subtext-light dark:text-subtext-dark">Employee payslips and payment records</p>
         </div>
-        {isEmployer && (
-          <button
-            onClick={openCreateModal}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition"
-          >
-            <span className="material-icons-outlined text-sm mr-1 align-middle">add</span>
-            Create Invoice
-          </button>
-        )}
       </div>
 
       {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Total Invoices</p>
+            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Total Payslips</p>
             <p className="text-2xl font-bold text-text-light dark:text-text-dark mt-1">{stats.total_count || 0}</p>
           </div>
           <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
@@ -187,7 +178,7 @@ export default function Invoices() {
             <span className="material-icons-outlined absolute left-3 top-1/2 -translate-y-1/2 text-subtext-light dark:text-subtext-dark text-lg">search</span>
             <input
               type="text"
-              placeholder="Search by client or invoice number..."
+              placeholder="Search by employee name or payslip number..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg pl-10 pr-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
@@ -209,18 +200,15 @@ export default function Invoices() {
       {invoices.length === 0 ? (
         <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl p-8 text-center">
           <span className="material-icons-outlined text-4xl text-subtext-light dark:text-subtext-dark mb-2">receipt_long</span>
-          <p className="text-subtext-light dark:text-subtext-dark">No invoices found</p>
-          {isEmployer && (
-            <button onClick={openCreateModal} className="mt-4 text-primary hover:underline">Create your first invoice</button>
-          )}
+          <p className="text-subtext-light dark:text-subtext-dark">No payslips found</p>
         </div>
       ) : (
         <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl overflow-hidden">
           <table className="min-w-full divide-y divide-border-light dark:divide-border-dark">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Invoice #</th>
-                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Client</th>
+                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Payslip #</th>
+                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Employee</th>
                 <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Amount</th>
                 <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Due Date</th>
                 <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Status</th>
@@ -254,29 +242,18 @@ export default function Invoices() {
                   </td>
                   {isEmployer && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-2">
-                        {(invoice.status === 'pending' || invoice.status === 'overdue') && (
-                          <button
-                            onClick={() => handleMarkPaid(invoice.id)}
-                            disabled={actionLoading}
-                            className="text-green-600 hover:text-green-800 text-xs font-medium"
-                          >
-                            Mark Paid
-                          </button>
-                        )}
+                      <div className="flex gap-3">
                         <button
-                          onClick={() => openEditModal(invoice)}
-                          disabled={actionLoading}
-                          className="text-primary hover:text-primary-hover"
+                          className="text-primary hover:text-primary-hover flex items-center gap-1 text-xs font-medium"
                         >
-                          <span className="material-icons-outlined text-lg">edit</span>
+                          <span className="material-icons-outlined text-lg">visibility</span>
+                          View
                         </button>
                         <button
-                          onClick={() => handleDelete(invoice.id)}
-                          disabled={actionLoading}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-green-600 hover:text-green-800 flex items-center gap-1 text-xs font-medium"
                         >
-                          <span className="material-icons-outlined text-lg">delete</span>
+                          <span className="material-icons-outlined text-lg">download</span>
+                          Download
                         </button>
                       </div>
                     </td>
