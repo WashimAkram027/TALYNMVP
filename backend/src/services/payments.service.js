@@ -599,5 +599,185 @@ export const paymentsService = {
       .then(({ error }) => {
         if (error) console.error('Failed to insert refund transaction record:', error)
       })
+  },
+
+  // ─── Invoice ACH Pull ─────────────────────────────────────────
+
+  /**
+   * Process an invoice payment via Stripe ACH pull.
+   * Mirrors processPayrollRun() pattern with optimistic locking and idempotency.
+   */
+  async processInvoicePayment(invoiceId, orgId) {
+    if (!stripe) throw new BadRequestError('Stripe is not configured')
+
+    // 1. Atomically claim the invoice — only update if currently approved
+    const { data: claimed, error: claimError } = await supabase
+      .from('invoices')
+      .update({ status: 'processing', updated_at: new Date().toISOString() })
+      .eq('id', invoiceId)
+      .eq('organization_id', orgId)
+      .eq('status', 'approved')
+      .eq('type', 'billing')
+      .select('*')
+      .single()
+
+    if (claimError || !claimed) {
+      const { data: existing } = await supabase
+        .from('invoices')
+        .select('status')
+        .eq('id', invoiceId)
+        .single()
+      if (!existing) throw new NotFoundError('Invoice not found')
+      throw new BadRequestError(`Invoice must be in approved status to process (current: ${existing.status})`)
+    }
+
+    const invoice = claimed
+    const totalCents = Number(invoice.total_amount_cents)
+    if (!totalCents || totalCents <= 0) throw new BadRequestError('Invoice total must be greater than zero')
+
+    try {
+      // 2. Get active payment method + stripe customer
+      const paymentMethod = await this.getActivePaymentMethod(orgId)
+      if (!paymentMethod) throw new BadRequestError('No active payment method. Please link a bank account first.')
+
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('stripe_customer_id')
+        .eq('id', orgId)
+        .single()
+
+      if (!org?.stripe_customer_id) throw new BadRequestError('No Stripe customer found for organization')
+
+      // 3. Create PaymentIntent with idempotency key
+      const idempotencyKey = `invoice_${invoiceId}_${totalCents}`
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: totalCents,
+        currency: 'usd',
+        customer: org.stripe_customer_id,
+        payment_method: paymentMethod.stripe_payment_method_id,
+        payment_method_types: ['us_bank_account'],
+        off_session: true,
+        confirm: true,
+        description: `Invoice ${invoice.invoice_number} — ${invoice.billing_period_start} to ${invoice.billing_period_end}`,
+        metadata: {
+          organization_id: orgId,
+          invoice_id: invoiceId,
+          invoice_number: invoice.invoice_number,
+          billing_period_start: invoice.billing_period_start,
+          billing_period_end: invoice.billing_period_end
+        }
+      }, { idempotencyKey })
+
+      // 4. Record PI on invoice
+      await supabase
+        .from('invoices')
+        .update({
+          stripe_payment_intent_id: paymentIntent.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', invoiceId)
+
+      // 5. Record payment transaction
+      await supabase
+        .from('payment_transactions')
+        .insert({
+          organization_id: orgId,
+          invoice_id: invoiceId,
+          payroll_run_id: invoice.payroll_run_id || null,
+          stripe_payment_intent_id: paymentIntent.id,
+          type: 'ach_debit',
+          amount_cents: totalCents,
+          currency: 'usd',
+          status: paymentIntent.status === 'processing' ? 'processing' : 'pending',
+          idempotency_key: idempotencyKey
+        })
+
+      return { paymentIntentId: paymentIntent.id, status: paymentIntent.status }
+    } catch (error) {
+      // Revert to approved on error so employer can retry
+      const revertStatus = (error instanceof Stripe.errors.StripeAuthenticationError)
+        ? 'payment_failed' : 'approved'
+
+      await supabase
+        .from('invoices')
+        .update({ status: revertStatus, updated_at: new Date().toISOString() })
+        .eq('id', invoiceId)
+        .eq('status', 'processing')
+
+      if (error instanceof Stripe.errors.StripeError) {
+        if (error instanceof Stripe.errors.StripeAuthenticationError) {
+          throw new BadRequestError('Payment service configuration error. Please contact support.')
+        }
+        if (error instanceof Stripe.errors.StripeConnectionError || error instanceof Stripe.errors.StripeRateLimitError) {
+          throw new BadRequestError('Payment service temporarily unavailable. Please try again shortly.')
+        }
+        throw new BadRequestError(error.message || 'Payment failed. Please check your payment method and try again.')
+      }
+      throw error
+    }
+  },
+
+  /**
+   * Handle payment_intent.succeeded for an invoice.
+   */
+  async handleInvoicePaymentSucceeded(paymentIntentId, invoiceId) {
+    // Update invoice to paid
+    await supabase
+      .from('invoices')
+      .update({
+        status: 'paid',
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invoiceId)
+
+    // Update payment transaction
+    await supabase
+      .from('payment_transactions')
+      .update({
+        status: 'succeeded',
+        completed_at: new Date().toISOString()
+      })
+      .eq('stripe_payment_intent_id', paymentIntentId)
+
+    // Also mark linked payroll run as completed
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('payroll_run_id')
+      .eq('id', invoiceId)
+      .single()
+
+    if (invoice?.payroll_run_id) {
+      await supabase
+        .from('payroll_runs')
+        .update({
+          status: 'completed',
+          payment_status: 'succeeded',
+          funded_at: new Date().toISOString()
+        })
+        .eq('id', invoice.payroll_run_id)
+    }
+  },
+
+  /**
+   * Handle payment_intent.payment_failed for an invoice.
+   */
+  async handleInvoicePaymentFailed(paymentIntentId, invoiceId, errorMsg) {
+    await supabase
+      .from('invoices')
+      .update({
+        status: 'payment_failed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invoiceId)
+
+    await supabase
+      .from('payment_transactions')
+      .update({
+        status: 'failed',
+        error_message: errorMsg || 'Payment failed'
+      })
+      .eq('stripe_payment_intent_id', paymentIntentId)
   }
 }

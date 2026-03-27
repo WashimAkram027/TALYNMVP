@@ -19,6 +19,7 @@ import onboardingRoutes from './onboarding.routes.js'
 import paymentsRoutes from './payments.routes.js'
 import quoteRoutes from './quote.routes.js'
 import adminRoutes from './admin/index.js'
+import cronRoutes from './cron.routes.js'
 
 const router = Router()
 
@@ -52,5 +53,6 @@ router.use('/onboarding', onboardingRoutes)
 router.use('/payments', paymentsRoutes)
 router.use('/quotes', quoteRoutes)
 router.use('/admin', adminRoutes)
+router.use('/cron', cronRoutes)
 
 export default router

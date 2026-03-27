@@ -1645,6 +1645,193 @@ Review Entity: ${adminUrl}
     }
   },
 
+  // ─── Invoice Billing Emails ───────────────────────────────────────
+
+  /**
+   * Notify employer that their monthly invoice is ready for review
+   */
+  async sendInvoiceReadyEmail(email, employerName, invoiceNumber, totalAmount, dueDate) {
+    const subject = `Invoice ${invoiceNumber} ready for review - ${totalAmount}`
+    const displayName = employerName || 'there'
+    const dashboardUrl = `${env.frontendUrl}/billing`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: invoice ready email to ${email}`)
+      await this.logEmail(email, 'invoice_ready', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml(
+          'Monthly Invoice Ready',
+          `Hi ${escapeHtml(displayName)},`,
+          `Your monthly EOR invoice <strong>${escapeHtml(invoiceNumber)}</strong> for <strong>${escapeHtml(totalAmount)}</strong> is now available for review. Payment is due by <strong>${escapeHtml(dueDate)}</strong>.<br><br><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;padding:12px 24px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">Review Invoice</a>`,
+          'Please log in to your dashboard to approve or reject this invoice.'
+        ),
+        text: `Hi ${displayName},\n\nYour monthly EOR invoice ${invoiceNumber} for ${totalAmount} is ready. Payment due: ${dueDate}.\n\nReview at: ${dashboardUrl}\n\n- The Talyn Team`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'invoice_ready', subject, data?.id, 'sent', { invoiceNumber })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send invoice ready email:', error)
+      await this.logEmail(email, 'invoice_ready', subject, null, 'failed', { invoiceNumber }, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Notify admin that an employer approved their invoice
+   */
+  async sendInvoiceApprovedEmail(adminEmail, orgName, invoiceNumber, amount, paymentType) {
+    const subject = `Invoice approved - ${orgName} - ${invoiceNumber}`
+    const paymentNote = paymentType === 'automatic'
+      ? 'ACH payment has been initiated automatically.'
+      : '<strong>Action Required:</strong> This is a manual payment org. Monitor for wire transfer receipt.'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: invoice approved email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'invoice_approved', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html: this._paymentEmailHtml(
+          'Invoice Approved',
+          'Hello Admin,',
+          `<strong>${escapeHtml(orgName)}</strong> has approved invoice <strong>${escapeHtml(invoiceNumber)}</strong> for <strong>${escapeHtml(amount)}</strong>.<br><br>${paymentNote}`,
+          `Payment type: ${paymentType}`
+        ),
+        text: `${orgName} approved invoice ${invoiceNumber} for ${amount}. Payment type: ${paymentType}.\n\n- Talyn System`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(adminEmail, 'invoice_approved', subject, data?.id, 'sent', { orgName, invoiceNumber })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send invoice approved email:', error)
+      await this.logEmail(adminEmail, 'invoice_approved', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Escalate rejected invoice to admin
+   */
+  async sendInvoiceRejectedEmail(adminEmail, orgName, invoiceNumber, reason, employerEmail) {
+    const subject = `[Action Required] Invoice rejected - ${orgName} - ${invoiceNumber}`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: invoice rejected email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'invoice_rejected', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html: this._paymentEmailHtml(
+          'Invoice Rejected — Escalation',
+          'Hello Admin,',
+          `<strong>${escapeHtml(orgName)}</strong> has rejected invoice <strong>${escapeHtml(invoiceNumber)}</strong>.<br><br><strong>Reason:</strong> ${escapeHtml(reason)}<br><br><strong>Employer contact:</strong> ${escapeHtml(employerEmail)}`,
+          'Please review and resolve this in the admin panel.'
+        ),
+        text: `${orgName} rejected invoice ${invoiceNumber}.\nReason: ${reason}\nEmployer: ${employerEmail}\n\nPlease resolve in admin panel.\n- Talyn System`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(adminEmail, 'invoice_rejected', subject, data?.id, 'sent', { orgName, invoiceNumber, reason })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send invoice rejected email:', error)
+      await this.logEmail(adminEmail, 'invoice_rejected', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Remind manual-payment employer to send wire transfer
+   */
+  async sendPaymentReminderEmail(email, employerName, invoiceNumber, amount, dueDate) {
+    const subject = `Payment reminder - Invoice ${invoiceNumber} due ${dueDate}`
+    const displayName = employerName || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: payment reminder email to ${email}`)
+      await this.logEmail(email, 'payment_reminder', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml(
+          'Payment Reminder',
+          `Hi ${escapeHtml(displayName)},`,
+          `This is a reminder that invoice <strong>${escapeHtml(invoiceNumber)}</strong> for <strong>${escapeHtml(amount)}</strong> is due by <strong>${escapeHtml(dueDate)}</strong>.<br><br>Please initiate a wire transfer to Talyn's bank account. If you have already sent payment, please disregard this message.`,
+          'Contact support@talynx.org if you need wire transfer details.'
+        ),
+        text: `Hi ${displayName},\n\nReminder: Invoice ${invoiceNumber} for ${amount} is due ${dueDate}. Please send wire transfer.\n\n- The Talyn Team`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payment_reminder', subject, data?.id, 'sent', { invoiceNumber })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send payment reminder email:', error)
+      await this.logEmail(email, 'payment_reminder', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send payment receipt to employer after payment is confirmed
+   */
+  async sendPaymentReceiptEmail(email, employerName, invoiceNumber, amount, receiptUrl) {
+    const subject = `Payment receipt - Invoice ${invoiceNumber}`
+    const displayName = employerName || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: payment receipt email to ${email}`)
+      await this.logEmail(email, 'payment_receipt', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const receiptLink = receiptUrl
+        ? `<br><br><a href="${escapeHtml(receiptUrl)}" style="display:inline-block;padding:12px 24px;background-color:#059669;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">Download Receipt</a>`
+        : ''
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml(
+          'Payment Confirmed',
+          `Hi ${escapeHtml(displayName)},`,
+          `Payment of <strong>${escapeHtml(amount)}</strong> for invoice <strong>${escapeHtml(invoiceNumber)}</strong> has been confirmed. Thank you!${receiptLink}`,
+          'A receipt is available for download from your billing dashboard.'
+        ),
+        text: `Hi ${displayName},\n\nPayment of ${amount} for invoice ${invoiceNumber} confirmed.\n\nReceipt: ${receiptUrl || 'Available in dashboard'}\n\n- The Talyn Team`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payment_receipt', subject, data?.id, 'sent', { invoiceNumber })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send payment receipt email:', error)
+      await this.logEmail(email, 'payment_receipt', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
   _paymentEmailHtml(title, greeting, body, footer) {
     return `
 <!DOCTYPE html>

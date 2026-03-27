@@ -6,6 +6,7 @@ import Dashboard from '../pages/Dashboard'
 import DocumentReview from '../pages/DocumentReview'
 import Payroll from '../pages/Payroll'
 import Users from '../pages/Users'
+import Invoices from '../pages/Invoices'
 
 export default function AppRoutes() {
   return (
@@ -21,6 +22,7 @@ export default function AppRoutes() {
           <Route path="/payroll" element={<Payroll />} />
           <Route path="/payroll/:id" element={<Payroll />} />
           <Route path="/users" element={<Users />} />
+          <Route path="/invoices" element={<Invoices />} />
         </Route>
       </Route>
 

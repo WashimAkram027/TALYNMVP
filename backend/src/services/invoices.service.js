@@ -155,6 +155,139 @@ export const invoicesService = {
     return data
   },
 
+  // ─── Billing Invoice Methods ──────────────────────────────────
+
+  async getBillingInvoices(orgId, filters = {}) {
+    let query = supabase
+      .from('invoices')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('type', 'billing')
+      .order('billing_period_start', { ascending: false })
+
+    if (filters.status) query = query.eq('status', filters.status)
+    if (filters.fromDate) query = query.gte('billing_period_start', filters.fromDate)
+    if (filters.toDate) query = query.lte('billing_period_start', filters.toDate)
+
+    const { data, error } = await query
+    if (error) throw new BadRequestError(error.message)
+    return data || []
+  },
+
+  async getBillingInvoice(invoiceId, orgId) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select(`
+        *,
+        organization:organizations!invoices_organization_id_fkey(
+          id, name, email, billing_email, payment_type,
+          address_line1, address_line2, city, state, postal_code, country
+        ),
+        approved_by_profile:profiles!invoices_approved_by_fkey(full_name, email),
+        rejected_by_profile:profiles!invoices_rejected_by_fkey(full_name, email)
+      `)
+      .eq('id', invoiceId)
+      .eq('organization_id', orgId)
+      .eq('type', 'billing')
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') throw new NotFoundError('Billing invoice not found')
+      throw new BadRequestError(error.message)
+    }
+    return data
+  },
+
+  async approveInvoice(invoiceId, orgId, userId) {
+    // Validate current status
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('status')
+      .eq('id', invoiceId)
+      .eq('organization_id', orgId)
+      .eq('type', 'billing')
+      .single()
+
+    if (!inv) throw new NotFoundError('Billing invoice not found')
+    if (inv.status !== 'pending') {
+      throw new BadRequestError(`Invoice cannot be approved — current status: ${inv.status}`)
+    }
+
+    const { data, error } = await supabase
+      .from('invoices')
+      .update({
+        status: 'approved',
+        approved_by: userId,
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invoiceId)
+      .eq('status', 'pending')
+      .select()
+      .single()
+
+    if (error) throw new BadRequestError(error.message)
+    return data
+  },
+
+  async rejectInvoice(invoiceId, orgId, userId, reason) {
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('status')
+      .eq('id', invoiceId)
+      .eq('organization_id', orgId)
+      .eq('type', 'billing')
+      .single()
+
+    if (!inv) throw new NotFoundError('Billing invoice not found')
+    if (inv.status !== 'pending') {
+      throw new BadRequestError(`Invoice cannot be rejected — current status: ${inv.status}`)
+    }
+
+    const { data, error } = await supabase
+      .from('invoices')
+      .update({
+        status: 'rejected',
+        rejected_by: userId,
+        rejected_at: new Date().toISOString(),
+        rejection_reason: reason,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invoiceId)
+      .eq('status', 'pending')
+      .select()
+      .single()
+
+    if (error) throw new BadRequestError(error.message)
+    return data
+  },
+
+  async getBillingStats(orgId) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('status, total_amount_cents')
+      .eq('organization_id', orgId)
+      .eq('type', 'billing')
+
+    if (error) throw new BadRequestError(error.message)
+
+    const stats = {
+      total: data.length,
+      totalAmountCents: data.reduce((sum, inv) => sum + Number(inv.total_amount_cents || 0), 0),
+      byStatus: {}
+    }
+
+    data.forEach(inv => {
+      if (!stats.byStatus[inv.status]) {
+        stats.byStatus[inv.status] = { count: 0, amountCents: 0 }
+      }
+      stats.byStatus[inv.status].count++
+      stats.byStatus[inv.status].amountCents += Number(inv.total_amount_cents || 0)
+    })
+
+    return stats
+  },
+
   async updateOverdueStatus(orgId) {
     const today = new Date().toISOString().split('T')[0]
 

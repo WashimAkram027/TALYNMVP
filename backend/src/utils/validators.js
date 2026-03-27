@@ -489,3 +489,9 @@ export const paginationSchema = z.object({
 export const idParamSchema = z.object({
   id: z.string().uuid('Invalid ID format')
 })
+
+// ─── Billing Invoice Schemas ─────────────────────────────────
+
+export const rejectInvoiceSchema = z.object({
+  reason: z.string().min(1, 'Rejection reason is required').max(1000)
+})

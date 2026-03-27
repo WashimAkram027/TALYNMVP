@@ -497,3 +497,321 @@ export function buildQuoteHtml(quote, organization, generatedByUser) {
 
   return { html, css }
 }
+
+/**
+ * Format USD cents as dollar string
+ */
+function formatUsd(cents) {
+  const dollars = cents / 100
+  return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/**
+ * Build the HTML content for a billing invoice PDF
+ * @param {Object} invoice - The invoice record with line_items JSONB
+ * @param {Object} organization - The organization record
+ * @returns {{ html: string, css: string }}
+ */
+export function buildInvoiceHtml(invoice, organization) {
+  const orgName = escapeHtml(organization?.name || '—')
+  const orgAddress = [
+    organization?.address_line1,
+    organization?.address_line2,
+    [organization?.city, organization?.state, organization?.postal_code].filter(Boolean).join(', '),
+    organization?.country
+  ].filter(Boolean).map(escapeHtml).join('<br>')
+  const billingEmail = escapeHtml(organization?.billing_email || organization?.email || '—')
+
+  const issueDate = formatDate(invoice.issue_date)
+  const dueDate = formatDate(invoice.due_date)
+  const billingPeriod = `${formatDate(invoice.billing_period_start)} — ${formatDate(invoice.billing_period_end)}`
+
+  const lineItems = invoice.line_items || []
+  const config = invoice.config_snapshot || {}
+  const exchangeRate = parseFloat(invoice.exchange_rate) || 0
+  const rateDisplay = exchangeRate > 0 ? `1 NPR = $${exchangeRate.toFixed(4)} USD` : '—'
+
+  // Build line items rows
+  const lineItemRows = lineItems.map((item, i) => `
+    <tr class="${i % 2 === 1 ? 'alt-row' : ''}">
+      <td class="cell">${escapeHtml(item.member_name)}</td>
+      <td class="cell">${escapeHtml(item.job_title || '—')}</td>
+      <td class="cell right">${formatAmount(item.monthly_gross_local, item.salary_currency || 'NPR')}</td>
+      <td class="cell right">${formatAmount(item.employer_ssf_local, item.salary_currency || 'NPR')}</td>
+      <td class="cell right">${formatAmount(item.total_cost_local, item.salary_currency || 'NPR')}</td>
+      <td class="cell right">${formatUsd(item.cost_usd_cents)}</td>
+      <td class="cell right">${formatUsd(item.platform_fee_cents)}</td>
+    </tr>
+  `).join('')
+
+  const subtotalLocalCents = invoice.subtotal_local_cents || 0
+  const subtotalUsdCents = lineItems.reduce((sum, item) => sum + (item.cost_usd_cents || 0), 0)
+  const platformFeeCents = invoice.platform_fee_cents || 0
+  const totalAmountCents = invoice.total_amount_cents || 0
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+  <div class="page">
+    <!-- Header -->
+    <div class="header">
+      <div class="brand">
+        <div class="brand-name">TALYN</div>
+        <div class="brand-tagline">Workforce Management</div>
+      </div>
+      <div class="invoice-meta">
+        <div class="invoice-title">INVOICE</div>
+        <table class="meta-table">
+          <tr><td class="meta-label">Invoice #</td><td class="meta-value">${escapeHtml(invoice.invoice_number)}</td></tr>
+          <tr><td class="meta-label">Issue Date</td><td class="meta-value">${issueDate}</td></tr>
+          <tr><td class="meta-label">Due Date</td><td class="meta-value due-date">${dueDate}</td></tr>
+          <tr><td class="meta-label">Billing Period</td><td class="meta-value">${billingPeriod}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Bill To -->
+    <div class="section">
+      <div class="section-row">
+        <div class="bill-to">
+          <div class="label">BILL TO</div>
+          <div class="org-name">${orgName}</div>
+          <div class="address">${orgAddress}</div>
+          <div class="sub-text">${billingEmail}</div>
+        </div>
+        <div class="bill-from">
+          <div class="label">FROM</div>
+          <div class="org-name">Talyn Inc.</div>
+          <div class="sub-text">support@talynx.org</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Employee Line Items -->
+    <div class="section">
+      <div class="section-header accent">Employee Cost Breakdown (${lineItems.length} employee${lineItems.length !== 1 ? 's' : ''})</div>
+      <div class="rate-note">Exchange Rate: ${rateDisplay}</div>
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th class="th">Employee</th>
+            <th class="th">Role</th>
+            <th class="th right">Gross (NPR)</th>
+            <th class="th right">SSF ${formatRate(config.employer_ssf_rate || 0)}</th>
+            <th class="th right">Cost (NPR)</th>
+            <th class="th right">Cost (USD)</th>
+            <th class="th right">Platform Fee</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lineItemRows}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Totals -->
+    <div class="totals-box">
+      <table class="totals-table">
+        <tr>
+          <td class="total-label">Local Currency Subtotal</td>
+          <td class="total-value">${formatAmount(subtotalLocalCents, 'NPR')}</td>
+        </tr>
+        <tr>
+          <td class="total-label">USD Conversion (@ ${rateDisplay})</td>
+          <td class="total-value">${formatUsd(subtotalUsdCents)}</td>
+        </tr>
+        <tr>
+          <td class="total-label">Platform Fees (${lineItems.length} x ${formatUsd(config.platform_fee_amount || 0)}/mo)</td>
+          <td class="total-value">${formatUsd(platformFeeCents)}</td>
+        </tr>
+        <tr class="grand-total-row">
+          <td class="total-label"><strong>TOTAL DUE (USD)</strong></td>
+          <td class="total-value grand-total"><strong>${formatUsd(totalAmountCents)}</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Payment Terms -->
+    <div class="section">
+      <div class="payment-terms">
+        <strong>Payment Terms:</strong> Payment is due by ${dueDate}. For automatic payment accounts,
+        funds will be collected via ACH from your linked bank account. For manual payment accounts,
+        please remit payment via wire transfer to Talyn's US bank account.
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="disclaimer">
+        This invoice is generated based on active employees during the billing period.
+        Rates are based on Nepal Social Security Fund (SSF) regulations under the Social Security Act 2018.
+        Exchange rates are set by Talyn administration and may differ from market rates.
+      </div>
+      <div class="footer-brand">
+        Talyn &middot; talynx.org &middot; support@talynx.org
+      </div>
+    </div>
+  </div>
+</body>
+</html>`
+
+  const css = buildInvoiceCss()
+  return { html, css }
+}
+
+/**
+ * Build the HTML content for a payment receipt PDF
+ */
+export function buildReceiptHtml(invoice, organization, paymentDate) {
+  const orgName = escapeHtml(organization?.name || '—')
+  const billingEmail = escapeHtml(organization?.billing_email || organization?.email || '—')
+  const paidDate = formatDate(paymentDate || invoice.paid_at)
+  const billingPeriod = `${formatDate(invoice.billing_period_start)} — ${formatDate(invoice.billing_period_end)}`
+  const lineItems = invoice.line_items || []
+  const totalAmountCents = invoice.total_amount_cents || 0
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+  <div class="page">
+    <!-- Header -->
+    <div class="header">
+      <div class="brand">
+        <div class="brand-name">TALYN</div>
+        <div class="brand-tagline">Workforce Management</div>
+      </div>
+      <div class="invoice-meta">
+        <div class="receipt-title">PAYMENT RECEIPT</div>
+        <table class="meta-table">
+          <tr><td class="meta-label">Invoice #</td><td class="meta-value">${escapeHtml(invoice.invoice_number)}</td></tr>
+          <tr><td class="meta-label">Payment Date</td><td class="meta-value">${paidDate}</td></tr>
+          <tr><td class="meta-label">Billing Period</td><td class="meta-value">${billingPeriod}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Paid stamp -->
+    <div class="paid-badge">PAID</div>
+
+    <!-- Receipt Details -->
+    <div class="section">
+      <div class="section-row">
+        <div class="bill-to">
+          <div class="label">RECEIVED FROM</div>
+          <div class="org-name">${orgName}</div>
+          <div class="sub-text">${billingEmail}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Summary -->
+    <div class="section">
+      <div class="section-header accent">Payment Summary</div>
+      <table class="totals-table">
+        <tr>
+          <td class="total-label">Employees Covered</td>
+          <td class="total-value">${invoice.employee_count || lineItems.length}</td>
+        </tr>
+        <tr>
+          <td class="total-label">Local Salary Costs (USD)</td>
+          <td class="total-value">${formatUsd(lineItems.reduce((s, i) => s + (i.cost_usd_cents || 0), 0))}</td>
+        </tr>
+        <tr>
+          <td class="total-label">Platform Fees</td>
+          <td class="total-value">${formatUsd(invoice.platform_fee_cents || 0)}</td>
+        </tr>
+        <tr class="grand-total-row">
+          <td class="total-label"><strong>TOTAL PAID</strong></td>
+          <td class="total-value grand-total"><strong>${formatUsd(totalAmountCents)}</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="disclaimer">
+        This receipt confirms payment for the above invoice. Please retain for your records.
+      </div>
+      <div class="footer-brand">
+        Talyn &middot; talynx.org &middot; support@talynx.org
+      </div>
+    </div>
+  </div>
+</body>
+</html>`
+
+  const css = buildInvoiceCss()
+  return { html, css }
+}
+
+/**
+ * Shared CSS for invoice and receipt PDFs
+ */
+function buildInvoiceCss() {
+  return `
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 13px; color: #1e293b; line-height: 1.5; background: #fff; }
+    .page { padding: 48px 52px; max-width: 800px; margin: 0 auto; }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+    .brand-name { font-size: 28px; font-weight: 800; color: #4f46e5; letter-spacing: 3px; }
+    .brand-tagline { font-size: 11px; color: #64748b; letter-spacing: 1px; margin-top: 2px; }
+    .invoice-meta { text-align: right; }
+    .invoice-title, .receipt-title { font-size: 22px; font-weight: 800; color: #1e293b; margin-bottom: 8px; letter-spacing: 2px; }
+    .receipt-title { color: #059669; }
+    .meta-table { border-collapse: collapse; }
+    .meta-table td { padding: 1px 0; font-size: 12px; }
+    .meta-label { color: #64748b; padding-right: 12px; text-align: right; }
+    .meta-value { color: #1e293b; font-weight: 600; text-align: right; }
+    .due-date { color: #dc2626; }
+
+    .divider { height: 1px; background: #e2e8f0; margin: 16px 0; }
+    .section { margin-bottom: 20px; }
+    .section-row { display: flex; justify-content: space-between; }
+    .section-header { font-size: 13px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; }
+    .section-header.accent { border-bottom-color: #4f46e5; }
+
+    .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .org-name { font-size: 18px; font-weight: 700; color: #1e293b; }
+    .address { font-size: 12px; color: #475569; margin-top: 4px; line-height: 1.6; }
+    .sub-text { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .rate-note { font-size: 11px; color: #64748b; margin-bottom: 8px; }
+
+    .inv-table { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; font-size: 11px; }
+    .th { padding: 8px 10px; background: #4f46e5; color: #fff; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+    .th.right { text-align: right; }
+    .cell { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #475569; }
+    .cell.right { text-align: right; font-weight: 600; color: #1e293b; }
+    .alt-row { background: #f8fafc; }
+
+    .totals-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
+    .totals-table { width: 100%; border-collapse: collapse; }
+    .totals-table tr { border-bottom: 1px solid #e2e8f0; }
+    .totals-table tr:last-child { border-bottom: none; }
+    .total-label { padding: 8px 0; color: #475569; font-size: 13px; }
+    .total-value { padding: 8px 0; text-align: right; font-weight: 600; color: #1e293b; font-size: 13px; }
+    .grand-total-row { background: #4f46e5; border-radius: 4px; }
+    .grand-total-row .total-label { color: #fff; padding: 12px 8px; }
+    .grand-total-row .total-value { color: #fff; padding: 12px 8px; font-size: 16px; }
+
+    .paid-badge { display: inline-block; background: #059669; color: #fff; font-size: 18px; font-weight: 800; letter-spacing: 4px; padding: 8px 24px; border-radius: 4px; margin-bottom: 16px; }
+    .payment-terms { font-size: 12px; color: #475569; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 12px 16px; }
+
+    .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+    .disclaimer { font-size: 10px; color: #94a3b8; line-height: 1.6; margin-bottom: 12px; }
+    .footer-brand { font-size: 11px; color: #4f46e5; font-weight: 600; text-align: center; letter-spacing: 0.5px; }
+  `
+}

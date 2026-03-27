@@ -10,6 +10,7 @@ import adminPaymentsRoutes from './payments.routes.js'
 import adminMembersRoutes from './members.routes.js'
 import adminEorConfigRoutes from './eorConfig.routes.js'
 import adminAuditLogRoutes from './auditLog.routes.js'
+import adminInvoicesRoutes from './invoices.routes.js'
 
 const router = Router()
 
@@ -25,5 +26,6 @@ router.use('/payments', adminPaymentsRoutes)
 router.use('/members', adminMembersRoutes)
 router.use('/eor-config', adminEorConfigRoutes)
 router.use('/audit-log', adminAuditLogRoutes)
+router.use('/invoices', adminInvoicesRoutes)
 
 export default router

@@ -51,5 +51,53 @@ export const invoicesService = {
   async updateOverdueStatus(orgId) {
     const response = await api.post('/invoices/update-overdue')
     return response.data
+  },
+
+  // ─── Billing Invoice Methods ──────────────────────────────────
+
+  async getBillingInvoices(filters = {}) {
+    const params = new URLSearchParams()
+    if (filters.status) params.append('status', filters.status)
+    if (filters.fromDate) params.append('fromDate', filters.fromDate)
+    if (filters.toDate) params.append('toDate', filters.toDate)
+    const queryString = params.toString()
+    const url = queryString ? `/invoices/billing?${queryString}` : '/invoices/billing'
+    const response = await api.get(url)
+    return response.data
+  },
+
+  async getBillingInvoice(invoiceId) {
+    const response = await api.get(`/invoices/billing/${invoiceId}`)
+    return response.data
+  },
+
+  async getBillingStats() {
+    const response = await api.get('/invoices/billing/stats')
+    return response.data
+  },
+
+  async approveBillingInvoice(invoiceId) {
+    const response = await api.post(`/invoices/billing/${invoiceId}/approve`)
+    return response.data
+  },
+
+  async rejectBillingInvoice(invoiceId, reason) {
+    const response = await api.post(`/invoices/billing/${invoiceId}/reject`, { reason })
+    return response.data
+  },
+
+  async downloadInvoicePdf(invoiceId) {
+    const response = await api.get(`/invoices/billing/${invoiceId}/pdf`, { responseType: 'blob' })
+    return response.data
+  },
+
+  async downloadReceiptPdf(invoiceId) {
+    const response = await api.get(`/invoices/billing/${invoiceId}/receipt`, { responseType: 'blob' })
+    return response.data
+  },
+
+  async retryBillingPayment(invoiceId) {
+    const response = await api.post(`/invoices/billing/${invoiceId}/retry`)
+    return response.data
   }
 }

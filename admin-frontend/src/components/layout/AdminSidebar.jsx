@@ -5,6 +5,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { path: '/documents', label: 'Documents', icon: 'description' },
   { path: '/payroll', label: 'Payroll', icon: 'payments' },
+  { path: '/invoices', label: 'Invoices', icon: 'request_quote' },
   { path: '/users', label: 'Users', icon: 'people' },
 ]
 

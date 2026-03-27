@@ -78,13 +78,21 @@ export const webhooksService = {
         case 'payment_intent.processing': {
           const pi = event.data.object
           const runId = pi.metadata?.payroll_run_id
-          if (runId) {
+          const invoiceId = pi.metadata?.invoice_id
+
+          if (invoiceId) {
+            // Invoice billing payment processing
+            await supabase
+              .from('payment_transactions')
+              .update({ status: 'processing' })
+              .eq('stripe_payment_intent_id', pi.id)
+            console.log(`PaymentIntent ${pi.id} processing for invoice ${invoiceId}`)
+          } else if (runId) {
             await supabase
               .from('payroll_runs')
               .update({ payment_status: 'ach_processing' })
               .eq('id', runId)
 
-            // Also update the payment transaction
             await supabase
               .from('payment_transactions')
               .update({ status: 'processing' })
@@ -98,7 +106,53 @@ export const webhooksService = {
         case 'payment_intent.succeeded': {
           const pi = event.data.object
           const runId = pi.metadata?.payroll_run_id
-          if (runId) {
+          const invoiceId = pi.metadata?.invoice_id
+
+          if (invoiceId) {
+            // Invoice billing payment succeeded
+            await paymentsService.handleInvoicePaymentSucceeded(pi.id, invoiceId)
+            console.log(`Invoice ${invoiceId} payment succeeded (PI: ${pi.id})`)
+
+            // Generate receipt PDF and send receipt email
+            try {
+              const { emailService } = await import('./email.service.js')
+              const { invoiceGenerationService } = await import('./invoiceGeneration.service.js')
+
+              const { data: inv } = await supabase
+                .from('invoices')
+                .select('invoice_number, total_amount_cents, organization_id')
+                .eq('id', invoiceId)
+                .single()
+
+              if (inv) {
+                // Generate receipt PDF (non-fatal)
+                let receiptUrl = null
+                try {
+                  const result = await invoiceGenerationService.generateReceiptPdf(invoiceId, inv.organization_id)
+                  receiptUrl = result.pdfUrl
+                } catch (pdfErr) {
+                  console.error('Failed to generate receipt PDF:', pdfErr.message)
+                }
+
+                // Send receipt email to employer
+                const { data: org } = await supabase
+                  .from('organizations')
+                  .select('owner_id, name, billing_email, email')
+                  .eq('id', inv.organization_id)
+                  .single()
+
+                if (org) {
+                  const employerEmail = org.billing_email || org.email
+                  const amount = `$${((inv.total_amount_cents || 0) / 100).toFixed(2)}`
+                  if (employerEmail) {
+                    await emailService.sendPaymentReceiptEmail(employerEmail, org.name, inv.invoice_number, amount, receiptUrl)
+                  }
+                }
+              }
+            } catch (emailErr) {
+              console.error('Failed to send invoice receipt email:', emailErr)
+            }
+          } else if (runId) {
             await paymentsService.handlePaymentIntentSucceeded(pi.id, runId)
 
             // Send funded emails to employer and admin
@@ -121,7 +175,6 @@ export const webhooksService = {
                 const period = `${run.pay_period_start} to ${run.pay_period_end}`
 
                 if (org) {
-                  // Employer notification
                   const { data: owner } = await supabase
                     .from('profiles')
                     .select('email, first_name')
@@ -132,7 +185,6 @@ export const webhooksService = {
                     await emailService.sendPayrollFundedEmail(owner.email, owner.first_name, amount, period)
                   }
 
-                  // Admin notification — funds ready for distribution
                   try {
                     const { env } = await import('../config/env.js')
                     await emailService.sendAdminPayrollFundedEmail(
@@ -145,7 +197,6 @@ export const webhooksService = {
               }
             } catch (emailErr) {
               console.error('Failed to send funded email:', emailErr)
-              // Email failures should not cause the webhook to fail
             }
           }
           break
@@ -154,11 +205,44 @@ export const webhooksService = {
         case 'payment_intent.payment_failed': {
           const pi = event.data.object
           const runId = pi.metadata?.payroll_run_id
+          const invoiceId = pi.metadata?.invoice_id
           const errorMsg = pi.last_payment_error?.message || 'Payment failed'
-          if (runId) {
+
+          if (invoiceId) {
+            // Invoice billing payment failed
+            await paymentsService.handleInvoicePaymentFailed(pi.id, invoiceId, errorMsg)
+            console.log(`Invoice ${invoiceId} payment failed: ${errorMsg}`)
+
+            // Send failure notification
+            try {
+              const { emailService } = await import('./email.service.js')
+              const { data: inv } = await supabase
+                .from('invoices')
+                .select('invoice_number, total_amount_cents, organization_id')
+                .eq('id', invoiceId)
+                .single()
+
+              if (inv) {
+                const { data: org } = await supabase
+                  .from('organizations')
+                  .select('owner_id, name, billing_email, email')
+                  .eq('id', inv.organization_id)
+                  .single()
+
+                if (org) {
+                  const employerEmail = org.billing_email || org.email
+                  const amount = `$${((inv.total_amount_cents || 0) / 100).toFixed(2)}`
+                  if (employerEmail) {
+                    await emailService.sendPayrollFailedEmail(employerEmail, org.name, amount, inv.invoice_number, errorMsg)
+                  }
+                }
+              }
+            } catch (emailErr) {
+              console.error('Failed to send invoice failure email:', emailErr)
+            }
+          } else if (runId) {
             await paymentsService.handlePaymentIntentFailed(pi.id, runId, errorMsg)
 
-            // Send failure email to employer
             try {
               const { emailService } = await import('./email.service.js')
               const { data: run } = await supabase
@@ -190,7 +274,6 @@ export const webhooksService = {
               }
             } catch (emailErr) {
               console.error('Failed to send failure email:', emailErr)
-              // Email failures should not cause the webhook to fail
             }
           }
           break

@@ -37,6 +37,9 @@ export const env = {
   // Scheduler
   payrollPullCron: process.env.PAYROLL_PULL_CRON || '0 9 * * 1-5',
 
+  // Cron secret (for Railway cron → backend endpoint auth)
+  cronSecret: process.env.CRON_SECRET,
+
   // Helpers
   isDev: process.env.NODE_ENV === 'development',
   isProd: process.env.NODE_ENV === 'production'

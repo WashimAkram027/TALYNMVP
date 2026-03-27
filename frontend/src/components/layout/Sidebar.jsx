@@ -103,6 +103,11 @@ export default function Sidebar({ onClose }) {
               Announcements
             </NavLink>
 
+            <NavLink to="/billing" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">request_quote</span>
+              Billing
+            </NavLink>
+
             <NavLink to="/invoices" onClick={handleNavClick} className={navLinkClass}>
               <span className="material-icons-outlined">receipt_long</span>
               Payslips

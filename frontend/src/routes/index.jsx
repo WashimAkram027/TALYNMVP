@@ -23,6 +23,7 @@ import Documents from '../pages/Documents'
 import JobPostings from '../pages/JobPostings'
 import Applications from '../pages/Applications'
 import Compliance from '../pages/Compliance'
+import BillingInvoices from '../pages/BillingInvoices'
 import Settings from '../pages/Settings'
 
 // New split auth pages
@@ -187,6 +188,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['employer']}>
               <Compliance />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="billing"
+          element={
+            <ProtectedRoute allowedRoles={['employer']}>
+              <BillingInvoices />
             </ProtectedRoute>
           }
         />
