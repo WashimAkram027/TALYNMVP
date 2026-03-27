@@ -98,6 +98,53 @@ export default function Invoices() {
     }
   }
 
+  const handleApprove = async (id) => {
+    if (!confirm('Approve this invoice? For automatic payment, ACH will be initiated immediately.')) return
+    try {
+      setActionLoading(true)
+      await invoicesService.approveBillingInvoice(id)
+      await fetchInvoices()
+      await fetchStats()
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to approve invoice')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDownload = async (invoice) => {
+    try {
+      let blob
+      if (invoice.type === 'billing') {
+        blob = await invoicesService.downloadInvoicePdf(invoice.id)
+      } else if (invoice.pdf_url) {
+        const response = await fetch(invoice.pdf_url)
+        blob = await response.blob()
+      } else {
+        alert('No PDF available for this invoice')
+        return
+      }
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${invoice.invoice_number}.pdf`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      alert('Failed to download: ' + (err.message || 'Unknown error'))
+    }
+  }
+
+  const handleView = (invoice) => {
+    if (invoice.pdf_url) {
+      window.open(invoice.pdf_url, '_blank')
+    } else if (invoice.type === 'billing') {
+      handleDownload(invoice)
+    } else {
+      alert('No PDF available to view')
+    }
+  }
+
   const openEditModal = (invoice) => {
     setEditingInvoice(invoice)
     setShowModal(true)
@@ -244,17 +291,29 @@ export default function Invoices() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex gap-3">
                         <button
+                          onClick={() => handleView(invoice)}
                           className="text-primary hover:text-primary-hover flex items-center gap-1 text-xs font-medium"
                         >
                           <span className="material-icons-outlined text-lg">visibility</span>
                           View
                         </button>
                         <button
+                          onClick={() => handleDownload(invoice)}
                           className="text-green-600 hover:text-green-800 flex items-center gap-1 text-xs font-medium"
                         >
                           <span className="material-icons-outlined text-lg">download</span>
                           Download
                         </button>
+                        {invoice.status === 'pending' && invoice.type === 'billing' && (
+                          <button
+                            onClick={() => handleApprove(invoice.id)}
+                            disabled={actionLoading}
+                            className="text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded flex items-center gap-1 text-xs font-medium disabled:opacity-50"
+                          >
+                            <span className="material-icons-outlined text-lg">check_circle</span>
+                            Approve
+                          </button>
+                        )}
                       </div>
                     </td>
                   )}

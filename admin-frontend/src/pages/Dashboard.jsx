@@ -14,7 +14,7 @@ export default function Dashboard() {
         const metrics = await dashboardService.getMetrics()
         setCounts({
           pendingDocs: metrics.pendingVerifications || 0,
-          pendingPayroll: metrics.payrollRunsMtd || 0,
+          pendingPayroll: metrics.pendingPayrollRuns || 0,
           totalUsers: metrics.totalUsers || 0,
         })
       } catch (err) {

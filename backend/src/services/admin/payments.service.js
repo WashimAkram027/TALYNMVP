@@ -9,7 +9,7 @@ export const adminPaymentsService = {
 
     let query = supabase
       .from('payment_methods')
-      .select('*, organization:organizations!payment_methods_organization_id_fkey(id, name, email)', { count: 'exact' })
+      .select('*, organization:organizations!fk_payment_methods_organization(id, name, email)', { count: 'exact' })
 
     if (status) query = query.eq('status', status)
 

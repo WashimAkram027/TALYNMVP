@@ -87,13 +87,14 @@ export const invoicesService = {
   },
 
   async downloadInvoicePdf(invoiceId) {
-    const response = await api.get(`/invoices/billing/${invoiceId}/pdf`, { responseType: 'blob' })
-    return response.data
+    // api interceptor already unwraps response.data, so 'response' IS the blob
+    const blob = await api.get(`/invoices/billing/${invoiceId}/pdf`, { responseType: 'blob' })
+    return blob
   },
 
   async downloadReceiptPdf(invoiceId) {
-    const response = await api.get(`/invoices/billing/${invoiceId}/receipt`, { responseType: 'blob' })
-    return response.data
+    const blob = await api.get(`/invoices/billing/${invoiceId}/receipt`, { responseType: 'blob' })
+    return blob
   },
 
   async retryBillingPayment(invoiceId) {

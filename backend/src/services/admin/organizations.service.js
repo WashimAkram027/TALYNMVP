@@ -10,7 +10,7 @@ export const adminOrganizationsService = {
   async listOrgs({ page = 1, limit = 20, search, status, entityStatus, industry, sortBy = 'created_at', sortOrder = 'desc' }) {
     let query = supabase
       .from('organizations')
-      .select('id, name, email, industry, status, entity_status, entity_submitted_at, entity_reviewed_at, created_at, owner_id, owner:profiles!organizations_owner_id_fkey(id, email, first_name, last_name)', { count: 'exact' })
+      .select('id, name, email, industry, status, entity_status, entity_submitted_at, entity_reviewed_at, created_at, owner_id, owner:profiles!fk_organizations_owner(id, email, first_name, last_name)', { count: 'exact' })
 
     if (search) {
       query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`)
@@ -44,7 +44,7 @@ export const adminOrganizationsService = {
       .from('organizations')
       .select(`
         *,
-        owner:profiles!organizations_owner_id_fkey(id, email, first_name, last_name, phone)
+        owner:profiles!fk_organizations_owner(id, email, first_name, last_name, phone)
       `)
       .eq('id', orgId)
       .single()
@@ -79,7 +79,30 @@ export const adminOrganizationsService = {
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
 
-    return { ...org, documents: docs || [] }
+    // Generate signed URLs for private bucket documents
+    const BUCKET = 'enitity-document'
+    const docsWithSignedUrls = await Promise.all(
+      (docs || []).map(async (doc) => {
+        try {
+          // Extract storage path from the stored URL
+          const bucketPrefix = `/object/public/${BUCKET}/`
+          const idx = doc.file_url?.indexOf(bucketPrefix)
+          if (idx === -1 || !doc.file_url) return doc
+
+          const storagePath = decodeURIComponent(doc.file_url.substring(idx + bucketPrefix.length))
+          const { data: signedData, error: signError } = await supabase.storage
+            .from(BUCKET)
+            .createSignedUrl(storagePath, 3600) // 1 hour expiry
+
+          if (signError || !signedData?.signedUrl) return doc
+          return { ...doc, file_url: signedData.signedUrl }
+        } catch {
+          return doc
+        }
+      })
+    )
+
+    return { ...org, documents: docsWithSignedUrls }
   },
 
   /**

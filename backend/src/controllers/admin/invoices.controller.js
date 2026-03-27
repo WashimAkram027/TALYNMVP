@@ -1,6 +1,7 @@
 import { adminInvoicesService } from '../../services/admin/invoices.service.js'
 import { invoiceGenerationService } from '../../services/invoiceGeneration.service.js'
 import { emailService } from '../../services/email.service.js'
+import { successResponse, errorResponse } from '../../utils/response.js'
 
 export const adminInvoicesController = {
   async list(req, res) {
@@ -13,19 +14,19 @@ export const adminInvoicesController = {
         sortBy: req.query.sortBy,
         sortOrder: req.query.sortOrder
       })
-      res.json({ success: true, ...result })
+      return successResponse(res, result)
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message })
+      return errorResponse(res, error.message, 500)
     }
   },
 
   async getDetail(req, res) {
     try {
       const invoice = await adminInvoicesService.getInvoiceDetail(req.params.id)
-      res.json({ success: true, data: invoice })
+      return successResponse(res, invoice)
     } catch (error) {
       const status = error.statusCode === 404 ? 404 : 500
-      res.status(status).json({ success: false, error: error.message })
+      return errorResponse(res, error.message, status)
     }
   },
 
@@ -52,10 +53,9 @@ export const adminInvoicesController = {
         console.error('Failed to generate receipt or send email:', pdfErr.message)
       }
 
-      res.json({ success: true, data: invoice, message: 'Invoice marked as paid' })
+      return successResponse(res, invoice, 'Invoice marked as paid')
     } catch (error) {
-      const status = error.statusCode || 500
-      res.status(status).json({ success: false, error: error.message })
+      return errorResponse(res, error.message, error.statusCode || 500)
     }
   },
 
@@ -67,10 +67,9 @@ export const adminInvoicesController = {
         req.body.notes,
         req.ip
       )
-      res.json({ success: true, data: invoice, message: 'Rejection resolved — invoice returned to pending' })
+      return successResponse(res, invoice, 'Rejection resolved — invoice returned to pending')
     } catch (error) {
-      const status = error.statusCode || 500
-      res.status(status).json({ success: false, error: error.message })
+      return errorResponse(res, error.message, error.statusCode || 500)
     }
   },
 
@@ -82,10 +81,9 @@ export const adminInvoicesController = {
         req.body.notes,
         req.ip
       )
-      res.json({ success: true, data: invoice, message: 'Invoice cancelled' })
+      return successResponse(res, invoice, 'Invoice cancelled')
     } catch (error) {
-      const status = error.statusCode || 500
-      res.status(status).json({ success: false, error: error.message })
+      return errorResponse(res, error.message, error.statusCode || 500)
     }
   }
 }

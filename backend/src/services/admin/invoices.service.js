@@ -103,14 +103,7 @@ export const adminInvoicesService = {
     }
 
     // Audit log
-    await auditLogService.log({
-      action: 'invoice_marked_paid',
-      resource_type: 'invoice',
-      resource_id: invoiceId,
-      admin_id: adminId,
-      ip_address: ip,
-      details: { invoice_number: invoice.invoice_number, notes }
-    })
+    await auditLogService.log(adminId, 'invoice_marked_paid', 'invoice', invoiceId, { invoice_number: invoice.invoice_number, notes }, ip)
 
     return data
   },
@@ -148,14 +141,7 @@ export const adminInvoicesService = {
 
     if (error) throw error
 
-    await auditLogService.log({
-      action: 'invoice_rejection_resolved',
-      resource_type: 'invoice',
-      resource_id: invoiceId,
-      admin_id: adminId,
-      ip_address: ip,
-      details: { invoice_number: invoice.invoice_number, notes }
-    })
+    await auditLogService.log(adminId, 'invoice_rejection_resolved', 'invoice', invoiceId, { invoice_number: invoice.invoice_number, notes }, ip)
 
     return data
   },
@@ -189,14 +175,7 @@ export const adminInvoicesService = {
 
     if (error) throw error
 
-    await auditLogService.log({
-      action: 'invoice_cancelled',
-      resource_type: 'invoice',
-      resource_id: invoiceId,
-      admin_id: adminId,
-      ip_address: ip,
-      details: { invoice_number: invoice.invoice_number, notes }
-    })
+    await auditLogService.log(adminId, 'invoice_cancelled', 'invoice', invoiceId, { invoice_number: invoice.invoice_number, notes }, ip)
 
     return data
   }

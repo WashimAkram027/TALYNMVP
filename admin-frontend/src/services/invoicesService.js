@@ -3,7 +3,7 @@ import api from './api'
 const invoicesService = {
   async list(params = {}) {
     const { data } = await api.get('/admin/invoices', { params })
-    return data
+    return data.data
   },
 
   async getDetail(id) {

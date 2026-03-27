@@ -15,7 +15,7 @@ export const adminDashboardService = {
       orgCount,
       pendingVerifications,
       activeMembers,
-      payrollRunsMtd,
+      pendingPayrollRuns,
       payrollVolumeMtd,
       failedWebhooks,
       totalUsers,
@@ -27,8 +27,8 @@ export const adminDashboardService = {
       supabase.from('organizations').select('id', { count: 'exact', head: true }).eq('entity_status', 'pending_review'),
       // Active members across all orgs
       supabase.from('organization_members').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-      // Payroll runs this month
-      supabase.from('payroll_runs').select('id', { count: 'exact', head: true }).gte('created_at', mtdStart),
+      // Pending payroll runs (awaiting admin approval)
+      supabase.from('payroll_runs').select('id', { count: 'exact', head: true }).in('status', ['draft', 'pending_approval']),
       // Total payroll volume this month
       supabase.from('payroll_runs').select('total_amount').gte('created_at', mtdStart).in('status', ['completed', 'processing']),
       // Failed webhooks (table may not exist)
@@ -45,7 +45,7 @@ export const adminDashboardService = {
       totalOrgs: orgCount.count || 0,
       pendingVerifications: pendingVerifications.count || 0,
       activeMembers: activeMembers.count || 0,
-      payrollRunsMtd: payrollRunsMtd.count || 0,
+      pendingPayrollRuns: pendingPayrollRuns.count || 0,
       payrollVolumeMtd: totalVolume,
       failedWebhooks: failedWebhooks.count || 0,
       totalUsers: totalUsers.count || 0,

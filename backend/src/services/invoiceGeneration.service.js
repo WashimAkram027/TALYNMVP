@@ -36,6 +36,7 @@ export const invoiceGenerationService = {
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', org.id)
           .eq('status', 'active')
+          .neq('member_role', 'owner')
 
         if (countError) throw countError
         if (!count || count === 0) {
@@ -85,6 +86,7 @@ export const invoiceGenerationService = {
       `)
       .eq('organization_id', orgId)
       .eq('status', 'active')
+      .neq('member_role', 'owner')
 
     if (membersError) throw membersError
     if (!members || members.length === 0) {
@@ -183,8 +185,7 @@ export const invoiceGenerationService = {
         due_date: dueDate,
         billing_period_start: periodStart,
         billing_period_end: periodEnd,
-        amount: totalAmountCents / 100, // legacy field in dollars
-        total_amount: totalAmountCents / 100, // legacy field in dollars
+        amount: totalAmountCents / 100, // populates legacy 'amount' field; total_amount is auto-generated
         subtotal_local_cents: subtotalLocalCents,
         platform_fee_cents: totalPlatformFeeCents,
         total_amount_cents: totalAmountCents,

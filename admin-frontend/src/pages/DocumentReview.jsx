@@ -18,6 +18,7 @@ export default function DocumentReview() {
   const [rejectModal, setRejectModal] = useState({ open: false, orgId: null })
   const [rejectReason, setRejectReason] = useState('')
   const [toast, setToast] = useState(null)
+  const [previewDoc, setPreviewDoc] = useState(null)
 
   const fetchOrgs = useCallback(async () => {
     setLoading(true)
@@ -163,17 +164,15 @@ export default function DocumentReview() {
                   <div className="flex flex-wrap gap-2">
                     {org.entityDocs.length > 0 ? (
                       org.entityDocs.map((doc) => (
-                        <a
+                        <button
                           key={doc.id}
-                          href={doc.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          onClick={() => setPreviewDoc(doc)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
                         >
                           <span className="material-icons text-[16px]">description</span>
                           {docTypeLabels[doc.doc_type] || doc.doc_type}
-                          <span className="material-icons text-[14px] opacity-60">open_in_new</span>
-                        </a>
+                          <span className="material-icons text-[14px] opacity-60">visibility</span>
+                        </button>
                       ))
                     ) : (
                       <span className="text-sm text-text-secondary italic">No documents uploaded</span>
@@ -220,6 +219,78 @@ export default function DocumentReview() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setPreviewDoc(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-5xl mx-4 shadow-xl flex flex-col" style={{ height: '90vh' }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-border-main shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="material-icons text-blue-600">description</span>
+                <div>
+                  <h3 className="font-semibold text-text-primary">
+                    {docTypeLabels[previewDoc.doc_type] || previewDoc.doc_type}
+                  </h3>
+                  <p className="text-xs text-text-secondary truncate max-w-md">{previewDoc.file_name}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDoc.file_url}
+                  download={previewDoc.file_name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <span className="material-icons text-[16px]">download</span>
+                  Download
+                </a>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <span className="material-icons text-text-secondary">close</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Document Viewer */}
+            <div className="flex-1 min-h-0 bg-gray-100">
+              {previewDoc.file_type === 'application/pdf' ? (
+                <iframe
+                  src={previewDoc.file_url}
+                  title={previewDoc.file_name}
+                  className="w-full h-full border-0"
+                />
+              ) : previewDoc.file_type?.startsWith('image/') ? (
+                <div className="w-full h-full flex items-center justify-center p-4 overflow-auto">
+                  <img
+                    src={previewDoc.file_url}
+                    alt={previewDoc.file_name}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-text-secondary">
+                  <span className="material-icons text-[64px] mb-4 opacity-40">insert_drive_file</span>
+                  <p className="text-sm mb-4">Preview not available for this file type</p>
+                  <a
+                    href={previewDoc.file_url}
+                    download={previewDoc.file_name}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <span className="material-icons text-[16px]">download</span>
+                    Download File
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
