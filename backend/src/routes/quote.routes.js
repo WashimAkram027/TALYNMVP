@@ -43,6 +43,12 @@ router.get('/:quoteId/pdf', requireEmployer, quoteController.downloadQuotePdf)
 router.post('/:quoteId/accept-and-invite', requireEmployer, quoteController.acceptQuoteAndInvite)
 
 /**
+ * DELETE /api/quotes/:quoteId
+ * Delete a draft quote (employer only)
+ */
+router.delete('/:quoteId', requireEmployer, quoteController.deleteQuote)
+
+/**
  * GET /api/quotes/:quoteId
  * Get a single quote
  */

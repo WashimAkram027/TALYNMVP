@@ -83,6 +83,13 @@ export default function PaymentSetupPrompt({ onComplete, orgName, billingEmail, 
 
         // 4. Handle the result
         if (setupIntent.status === 'succeeded') {
+          // Synchronously confirm and activate the payment method in the DB
+          // (avoids race condition with the async webhook)
+          try {
+            await paymentsService.confirmSetup(setupIntent.id)
+          } catch (confirmErr) {
+            console.warn('Confirm-setup call failed, falling back to webhook:', confirmErr.message)
+          }
           await checkExisting()
           if (onComplete) onComplete()
         } else if (setupIntent.status === 'requires_action' || setupIntent.next_action?.type === 'verify_with_microdeposits') {

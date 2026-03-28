@@ -41,6 +41,11 @@ export const quoteService = {
     return response.data
   },
 
+  async deleteQuote(quoteId) {
+    const response = await api.delete(`/quotes/${quoteId}`)
+    return response.data
+  },
+
   async downloadQuotePdf(quoteId) {
     // Interceptor already unwraps response.data, so result IS the Blob
     const blob = await api.get(`/quotes/${quoteId}/pdf`, { responseType: 'blob' })

@@ -37,7 +37,7 @@ export const membersService = {
 
     if (filters.search) {
       const pattern = `%${filters.search}%`
-      query = query.or(`invitation_email.ilike.${pattern},job_title.ilike.${pattern},department.ilike.${pattern}`)
+      query = query.or(`invitation_email.ilike.${pattern},job_title.ilike.${pattern},department.ilike.${pattern},first_name.ilike.${pattern},last_name.ilike.${pattern}`)
     }
 
     const { data, error } = await query
@@ -138,6 +138,8 @@ export const membersService = {
         organization_id: orgId,
         profile_id: existingProfile?.id || null,
         invitation_email: email,
+        first_name: memberData.firstName || null,
+        last_name: memberData.lastName || null,
         member_role: memberData.memberRole || 'employee',
         job_title: memberData.jobTitle,
         department: memberData.department,
@@ -199,6 +201,8 @@ export const membersService = {
    */
   async update(memberId, orgId, updates) {
     const allowedFields = [
+      'first_name',
+      'last_name',
       'member_role',
       'job_title',
       'department',

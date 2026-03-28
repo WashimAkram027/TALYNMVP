@@ -25,6 +25,15 @@ export const dashboardService = {
     return response.data
   },
 
+  // Get Nepal public holidays (MOHA gazette)
+  async getNepalPublicHolidays(limit = 10, fiscalYear = null) {
+    const params = new URLSearchParams()
+    if (limit) params.append('limit', limit)
+    if (fiscalYear) params.append('fiscalYear', fiscalYear)
+    const response = await api.get(`/dashboard/nepal-holidays?${params}`)
+    return response.data
+  },
+
   // Get company announcements
   async getAnnouncements(limit = 3) {
     const response = await api.get(`/dashboard/announcements?limit=${limit}`)

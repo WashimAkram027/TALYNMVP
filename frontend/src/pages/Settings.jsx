@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../store/authStore'
-import { profileAPI, authAPI } from '../services/api'
+import { profileAPI, authAPI, onboardingAPI } from '../services/api'
 import { paymentsService } from '../services/paymentsService'
 import StripeProvider from '../components/providers/StripeProvider'
 import PaymentSetupPrompt from '../components/features/onboarding/PaymentSetupPrompt'
+import BankDetailsForm from '../components/employee/BankDetailsForm'
 
 export default function Settings() {
   const { profile, fetchProfile } = useAuthStore()
@@ -51,10 +52,9 @@ export default function Settings() {
   const [avatarPreview, setAvatarPreview] = useState(null)
   const avatarInputRef = useRef(null)
 
-  // Resume state (candidates only)
-  const [resumeLoading, setResumeLoading] = useState(false)
-  const [resumeSuccess, setResumeSuccess] = useState('')
-  const resumeInputRef = useRef(null)
+  // Bank account state (candidates only)
+  const [bankEditing, setBankEditing] = useState(false)
+  const [bankSuccess, setBankSuccess] = useState('')
 
   // Password form state
   const [passwordForm, setPasswordForm] = useState({
@@ -95,11 +95,11 @@ export default function Settings() {
   }, [passwordSuccess])
 
   useEffect(() => {
-    if (resumeSuccess) {
-      const timer = setTimeout(() => setResumeSuccess(''), 3000)
+    if (bankSuccess) {
+      const timer = setTimeout(() => setBankSuccess(''), 3000)
       return () => clearTimeout(timer)
     }
-  }, [resumeSuccess])
+  }, [bankSuccess])
 
   // Handle profile form submit
   const handleProfileSubmit = async (e) => {
@@ -158,36 +158,13 @@ export default function Settings() {
     }
   }
 
-  // Handle resume upload
-  const handleResumeChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Validate file type
-    const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-    if (!validTypes.includes(file.type)) {
-      setProfileError('Please select a PDF or Word document')
-      return
-    }
-
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      setProfileError('Resume must be less than 10MB')
-      return
-    }
-
-    setResumeLoading(true)
-    setProfileError('')
-
-    try {
-      await profileAPI.uploadResume(file)
-      await fetchProfile()
-      setResumeSuccess('Resume updated successfully')
-    } catch (err) {
-      setProfileError(err.message || 'Failed to upload resume')
-    } finally {
-      setResumeLoading(false)
-    }
+  // Handle bank details update (via shared BankDetailsForm)
+  const handleBankSubmit = async (bankData) => {
+    const response = await onboardingAPI.submitEmployeeBankDetails(bankData)
+    if (!response.success) throw new Error(response.error || 'Failed to update bank details')
+    await fetchProfile()
+    setBankSuccess('Bank details updated successfully')
+    setBankEditing(false)
   }
 
   // Handle password change
@@ -423,75 +400,77 @@ export default function Settings() {
           </form>
         </div>
 
-        {/* Resume Section (Candidates Only) */}
+        {/* Bank Account Section (Candidates Only) */}
         {isCandidate && (
           <div className="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
-            <div className="p-6 border-b border-border-light dark:border-border-dark">
-              <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Resume</h2>
-              <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
-                Upload your resume for job applications
-              </p>
+            <div className="p-6 border-b border-border-light dark:border-border-dark flex justify-between items-center">
+              <div>
+                <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Bank Account</h2>
+                <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
+                  Your bank account details for receiving payments
+                </p>
+              </div>
+              {profile?.pending_bank_details && !bankEditing && (
+                <button
+                  onClick={() => setBankEditing(true)}
+                  className="px-3 py-1.5 text-sm font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors flex items-center gap-1.5"
+                >
+                  <span className="material-icons-outlined text-base">edit</span>
+                  Update
+                </button>
+              )}
             </div>
 
             <div className="p-6">
-              {resumeSuccess && (
+              {bankSuccess && (
                 <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
                   <span className="material-icons text-sm">check_circle</span>
-                  {resumeSuccess}
+                  {bankSuccess}
                 </div>
               )}
 
-              <div className="flex items-center gap-4">
-                {profile?.resume_url ? (
-                  <div className="flex items-center gap-3 flex-grow">
-                    <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                      <span className="material-icons text-red-600 dark:text-red-400">description</span>
+              {profile?.pending_bank_details && !bankEditing ? (
+                /* Display mode */
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-border-light dark:border-border-dark">
+                    <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <span className="material-icons-outlined text-blue-600 dark:text-blue-400 text-lg">account_balance</span>
                     </div>
-                    <div className="flex-grow">
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-text-light dark:text-text-dark">
-                        {profile.resume_filename || 'Resume uploaded'}
+                        {profile.pending_bank_details.bankName || 'Bank Account'}
                       </p>
-                      <a
-                        href={profile.resume_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline"
-                      >
-                        View resume
-                      </a>
+                      <p className="text-xs text-subtext-light dark:text-subtext-dark">
+                        Account: ····{profile.pending_bank_details.accountNumber?.slice(-4) || '****'}
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
+                      Connected
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-subtext-light dark:text-subtext-dark text-xs mb-0.5">Account Holder</p>
+                      <p className="text-text-light dark:text-text-dark font-medium">{profile.pending_bank_details.accountHolderName || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-subtext-light dark:text-subtext-dark text-xs mb-0.5">SWIFT / Bank Code</p>
+                      <p className="text-text-light dark:text-text-dark font-medium">{profile.pending_bank_details.bankCode || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-subtext-light dark:text-subtext-dark text-xs mb-0.5">Currency</p>
+                      <p className="text-text-light dark:text-text-dark font-medium">{profile.pending_bank_details.currency || 'NPR'}</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-3 flex-grow text-subtext-light dark:text-subtext-dark">
-                    <span className="material-icons">description</span>
-                    <span className="text-sm">No resume uploaded</span>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => resumeInputRef.current?.click()}
-                  disabled={resumeLoading}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {resumeLoading ? (
-                    <span className="material-icons text-sm animate-spin">refresh</span>
-                  ) : (
-                    <span className="material-icons text-sm">upload</span>
-                  )}
-                  {profile?.resume_url ? 'Replace' : 'Upload'}
-                </button>
-                <input
-                  ref={resumeInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleResumeChange}
-                  className="hidden"
+                </div>
+              ) : (
+                /* Edit / empty mode — reuse shared BankDetailsForm */
+                <BankDetailsForm
+                  initialValues={profile?.pending_bank_details}
+                  onSubmit={handleBankSubmit}
+                  onCancel={bankEditing ? () => setBankEditing(false) : undefined}
                 />
-              </div>
-              <p className="text-xs text-subtext-light dark:text-subtext-dark mt-3">
-                PDF or Word document, max 10MB
-              </p>
+              )}
             </div>
           </div>
         )}

@@ -16,6 +16,7 @@ router.get('/employee', dashboardController.getEmployeeStats)
 
 // Shared dashboard data
 router.get('/holidays', dashboardController.getHolidays)
+router.get('/nepal-holidays', dashboardController.getNepalPublicHolidays)
 router.get('/announcements', dashboardController.getAnnouncements)
 
 export default router

@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react'
-import { timeOffService } from '../services/timeOffService'
+import { leaveService } from '../services/leaveService'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
 
 const TABS = [
   { id: 'requests', label: 'Requests', icon: 'event_available' },
-  { id: 'policies', label: 'Policies', icon: 'description' },
+  { id: 'leave_types', label: 'Leave Types', icon: 'gavel' },
   { id: 'balances', label: 'Balances', icon: 'account_balance' }
 ]
 
-const REQUEST_STATUS_OPTIONS = [
+const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
   { value: 'pending', label: 'Pending' },
   { value: 'approved', label: 'Approved' },
@@ -17,163 +17,196 @@ const REQUEST_STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Cancelled' }
 ]
 
+const LEAVE_TYPE_OPTIONS = [
+  { value: '', label: 'All Types' },
+  { value: 'sick_leave', label: 'Sick Leave' },
+  { value: 'home_leave', label: 'Home Leave' },
+  { value: 'maternity_leave', label: 'Maternity Leave' },
+  { value: 'paternity_leave', label: 'Paternity Leave' },
+  { value: 'mourning_leave', label: 'Mourning Leave' },
+  { value: 'special_leave', label: 'Special Leave' },
+  { value: 'compensatory_leave', label: 'Compensatory Leave' }
+]
+
+const LEAVE_TYPES_INFO = [
+  { code: 'sick_leave', name: 'Sick Leave', nameNe: 'बिरामी बिदा', days: '12/yr', accrual: '1/BS month', carryForward: 'Yes (max 45)', encashable: 'Yes', section: '§44', color: 'blue' },
+  { code: 'home_leave', name: 'Home Leave', nameNe: 'घर बिदा', days: '18/yr', accrual: '1.5/BS month', carryForward: 'No', encashable: 'No', section: '§43', color: 'green' },
+  { code: 'maternity_leave', name: 'Maternity Leave', nameNe: 'प्रसुति बिदा', days: '98 total', accrual: 'Event', carryForward: 'No', encashable: 'No', section: '§45', color: 'pink' },
+  { code: 'paternity_leave', name: 'Paternity Leave', nameNe: 'पितृत्व बिदा', days: '15', accrual: 'Event', carryForward: 'No', encashable: 'No', section: '§45', color: 'indigo' },
+  { code: 'mourning_leave', name: 'Mourning Leave', nameNe: 'किरिया बिदा', days: '13', accrual: 'Event', carryForward: 'No', encashable: 'No', section: '§46', color: 'gray' },
+  { code: 'special_leave', name: 'Special Leave', nameNe: 'विशेष बिदा', days: '30/yr', accrual: 'On request', carryForward: 'No', encashable: 'No', section: '§47', color: 'amber' },
+  { code: 'compensatory_leave', name: 'Compensatory Leave', nameNe: 'प्रतिपूरक बिदा', days: 'Earned', accrual: 'Per holiday worked', carryForward: 'No', encashable: 'No', section: '§42', color: 'purple' }
+]
+
+function formatLeaveType(code) {
+  return code?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || code
+}
+
+function statusBadge(status) {
+  const styles = {
+    pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+    approved: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+    cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+  }
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
+      {status?.charAt(0).toUpperCase() + status?.slice(1)}
+    </span>
+  )
+}
+
 export default function TimeOff() {
   const { profile } = useAuthStore()
   const isEmployer = profile?.role === 'employer'
 
   const [activeTab, setActiveTab] = useState('requests')
-
-  // Requests state
   const [requests, setRequests] = useState([])
-  const [requestsLoading, setRequestsLoading] = useState(true)
-  const [requestsError, setRequestsError] = useState(null)
-  const [requestStatusFilter, setRequestStatusFilter] = useState('')
-  const [showRequestModal, setShowRequestModal] = useState(false)
-
-  // Policies state
-  const [policies, setPolicies] = useState([])
-  const [policiesLoading, setPoliciesLoading] = useState(false)
-  const [policiesError, setPoliciesError] = useState(null)
-  const [showPolicyModal, setShowPolicyModal] = useState(false)
-  const [editingPolicy, setEditingPolicy] = useState(null)
-
-  // Balances state
   const [members, setMembers] = useState([])
-  const [selectedMemberId, setSelectedMemberId] = useState('')
-  const [balances, setBalances] = useState([])
-  const [balancesLoading, setBalancesLoading] = useState(false)
+  const [selectedMember, setSelectedMember] = useState(null)
+  const [balances, setBalances] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [feedback, setFeedback] = useState(null)
 
-  const [actionLoading, setActionLoading] = useState(false)
+  // Filters
+  const [statusFilter, setStatusFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
 
+  // Modal
+  const [showRequestModal, setShowRequestModal] = useState(false)
+  const [requestForm, setRequestForm] = useState({
+    memberId: '', leaveTypeCode: 'sick_leave', startDate: '', endDate: '', reason: '',
+    // Event-specific
+    expectedDeliveryDate: '', childBirthDate: '', deceasedName: '', relationship: '', deathDate: ''
+  })
+  const [submitting, setSubmitting] = useState(false)
+
+  // Fetch requests
   const fetchRequests = async () => {
     try {
-      setRequestsLoading(true)
-      setRequestsError(null)
+      setLoading(true)
       const filters = {}
-      if (requestStatusFilter) filters.status = requestStatusFilter
-      const data = await timeOffService.getRequests(filters)
+      if (statusFilter) filters.status = statusFilter
+      if (typeFilter) filters.leaveType = typeFilter
+      const data = await leaveService.listRequests(filters)
       setRequests(data || [])
     } catch (err) {
-      console.error('Failed to fetch requests:', err)
-      setRequestsError(err.message || 'Failed to load time off requests')
+      setError(err.message)
     } finally {
-      setRequestsLoading(false)
+      setLoading(false)
     }
   }
 
-  const fetchPolicies = async () => {
-    try {
-      setPoliciesLoading(true)
-      setPoliciesError(null)
-      const data = await timeOffService.getPolicies()
-      setPolicies(data || [])
-    } catch (err) {
-      console.error('Failed to fetch policies:', err)
-      setPoliciesError(err.message || 'Failed to load policies')
-    } finally {
-      setPoliciesLoading(false)
-    }
-  }
-
+  // Fetch members (for employer)
   const fetchMembers = async () => {
     try {
-      const data = await membersService.getMembers({ status: 'active' })
-      setMembers(data || [])
-    } catch (err) {
-      console.error('Failed to fetch members:', err)
-    }
+      const data = await membersService.getMembers({})
+      setMembers((data || []).filter(m => m.member_role !== 'owner'))
+    } catch { /* ignore */ }
   }
 
-  const fetchBalances = async (memberId) => {
-    if (!memberId) { setBalances([]); return }
+  // Fetch balance for selected member
+  const fetchBalance = async (memberId) => {
+    if (!memberId) { setBalances(null); return }
     try {
-      setBalancesLoading(true)
-      const data = await timeOffService.getBalances(memberId)
-      setBalances(data || [])
-    } catch (err) {
-      console.error('Failed to fetch balances:', err)
-    } finally {
-      setBalancesLoading(false)
+      const data = await leaveService.getBalanceSummary(memberId)
+      setBalances(data)
+    } catch {
+      setBalances(null)
     }
   }
 
   useEffect(() => {
     fetchRequests()
-    fetchPolicies()
     if (isEmployer) fetchMembers()
-  }, [])
+  }, [statusFilter, typeFilter])
 
-  useEffect(() => {
-    fetchRequests()
-  }, [requestStatusFilter])
-
-  useEffect(() => {
-    if (selectedMemberId) fetchBalances(selectedMemberId)
-  }, [selectedMemberId])
-
-  const handleReview = async (requestId, approved) => {
-    const action = approved ? 'approve' : 'reject'
-    if (!confirm(`Are you sure you want to ${action} this request?`)) return
+  const handleApprove = async (id) => {
     try {
-      setActionLoading(true)
-      await timeOffService.reviewRequest(requestId, approved)
-      await fetchRequests()
+      await leaveService.approveRequest(id)
+      setFeedback({ type: 'success', message: 'Leave request approved' })
+      fetchRequests()
     } catch (err) {
-      alert(err.message || `Failed to ${action} request`)
-    } finally {
-      setActionLoading(false)
+      setFeedback({ type: 'error', message: err.message })
     }
+    setTimeout(() => setFeedback(null), 3000)
   }
 
-  const handleCancelRequest = async (requestId) => {
-    if (!confirm('Are you sure you want to cancel this request?')) return
+  const handleReject = async (id) => {
+    const reason = window.prompt('Rejection reason (optional):')
     try {
-      setActionLoading(true)
-      await timeOffService.cancelRequest(requestId)
-      await fetchRequests()
+      await leaveService.rejectRequest(id, reason || '')
+      setFeedback({ type: 'success', message: 'Leave request rejected' })
+      fetchRequests()
     } catch (err) {
-      alert(err.message || 'Failed to cancel request')
-    } finally {
-      setActionLoading(false)
+      setFeedback({ type: 'error', message: err.message })
     }
+    setTimeout(() => setFeedback(null), 3000)
   }
 
-  const handleDeletePolicy = async (policyId) => {
-    if (!confirm('Are you sure you want to delete this policy?')) return
+  const handleSubmitRequest = async (e) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setError(null)
     try {
-      setActionLoading(true)
-      await timeOffService.deletePolicy(policyId)
-      await fetchPolicies()
+      const type = requestForm.leaveTypeCode
+      if (type === 'maternity_leave') {
+        await leaveService.createMaternityRequest({
+          memberId: requestForm.memberId || undefined,
+          expectedDeliveryDate: requestForm.expectedDeliveryDate,
+          leaveStartDate: requestForm.startDate,
+          coverWithAccumulated: true
+        })
+      } else if (type === 'paternity_leave') {
+        await leaveService.createPaternityRequest({
+          memberId: requestForm.memberId || undefined,
+          childBirthDate: requestForm.childBirthDate,
+          leaveStartDate: requestForm.startDate
+        })
+      } else if (type === 'mourning_leave') {
+        await leaveService.createMourningRequest({
+          memberId: requestForm.memberId || undefined,
+          deceasedName: requestForm.deceasedName,
+          relationship: requestForm.relationship,
+          deathDate: requestForm.deathDate,
+          leaveStartDate: requestForm.startDate
+        })
+      } else if (type === 'special_leave') {
+        await leaveService.createSpecialRequest({
+          memberId: requestForm.memberId || undefined,
+          startDate: requestForm.startDate,
+          endDate: requestForm.endDate,
+          reason: requestForm.reason
+        })
+      } else {
+        await leaveService.createRequest({
+          memberId: requestForm.memberId || undefined,
+          leaveTypeCode: type,
+          startDate: requestForm.startDate,
+          endDate: requestForm.endDate,
+          reason: requestForm.reason
+        })
+      }
+      setShowRequestModal(false)
+      setFeedback({ type: 'success', message: 'Leave request submitted' })
+      fetchRequests()
+      setRequestForm({ memberId: '', leaveTypeCode: 'sick_leave', startDate: '', endDate: '', reason: '', expectedDeliveryDate: '', childBirthDate: '', deceasedName: '', relationship: '', deathDate: '' })
     } catch (err) {
-      alert(err.message || 'Failed to delete policy')
+      setError(err.message || 'Failed to submit request')
     } finally {
-      setActionLoading(false)
+      setSubmitting(false)
     }
+    setTimeout(() => setFeedback(null), 3000)
   }
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      pending: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
-      approved: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-      rejected: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
-      cancelled: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300'
-    }
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    )
-  }
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-  }
-
-  const calcDays = (start, end) => {
-    if (!start || !end) return '-'
-    const diff = (new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)
-    return Math.max(1, Math.ceil(diff) + 1)
+  const getEmployeeName = (req) => {
+    const emp = req.employee
+    if (!emp) return 'Unknown'
+    return emp.profile?.full_name
+      || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()
+      || emp.invitation_email
+      || 'Unknown'
   }
 
   return (
@@ -182,39 +215,31 @@ export default function TimeOff() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text-light dark:text-text-dark">Time Off</h1>
-          <p className="text-subtext-light dark:text-subtext-dark">Manage leave requests and policies</p>
+          <p className="text-subtext-light dark:text-subtext-dark text-sm">Nepal Labour Act 2074 Leave Management</p>
         </div>
-        {activeTab === 'requests' && (
-          <button
-            onClick={() => setShowRequestModal(true)}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover text-sm font-medium flex items-center gap-2"
-          >
-            <span className="material-icons-outlined text-lg">add</span>
-            New Request
-          </button>
-        )}
-        {activeTab === 'policies' && isEmployer && (
-          <button
-            onClick={() => { setEditingPolicy(null); setShowPolicyModal(true) }}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover text-sm font-medium flex items-center gap-2"
-          >
-            <span className="material-icons-outlined text-lg">add</span>
-            Add Policy
-          </button>
-        )}
+        <button
+          onClick={() => setShowRequestModal(true)}
+          className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition flex items-center gap-2"
+        >
+          <span className="material-icons-outlined text-lg">add</span>
+          New Request
+        </button>
       </div>
 
+      {/* Feedback */}
+      {feedback && (
+        <div className={`mb-4 px-4 py-3 rounded-lg text-sm ${feedback.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          {feedback.message}
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-surface-light dark:bg-surface-dark rounded-lg p-1 border border-border-light dark:border-border-dark w-fit">
+      <div className="flex border-b border-border-light dark:border-border-dark mb-6">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
-              activeTab === tab.id
-                ? 'bg-primary text-white'
-                : 'text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark'
-            }`}
+            className={`px-4 py-3 text-sm font-medium flex items-center gap-2 border-b-2 transition ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-subtext-light dark:text-subtext-dark hover:text-text-light'}`}
           >
             <span className="material-icons-outlined text-lg">{tab.icon}</span>
             {tab.label}
@@ -222,165 +247,66 @@ export default function TimeOff() {
         ))}
       </div>
 
-      {/* Requests Tab */}
+      {/* ─── Tab: Requests ─── */}
       {activeTab === 'requests' && (
-        <>
-          <div className="mb-4">
-            <select
-              value={requestStatusFilter}
-              onChange={(e) => setRequestStatusFilter(e.target.value)}
-              className="border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {REQUEST_STATUS_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
+        <div>
+          {/* Filters */}
+          <div className="flex gap-4 mb-4">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark">
+              {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark">
+              {LEAVE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
 
-          <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm">
-            <div className="p-6 border-b border-border-light dark:border-border-dark">
-              <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Time Off Requests</h2>
-            </div>
-            {requestsLoading ? (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-subtext-light dark:text-subtext-dark">Loading requests...</p>
-              </div>
-            ) : requestsError ? (
-              <div className="p-8 text-center text-red-600 dark:text-red-400">{requestsError}</div>
-            ) : requests.length === 0 ? (
-              <div className="p-8 text-center">
-                <span className="material-icons-outlined text-4xl text-subtext-light dark:text-subtext-dark mb-2">event_available</span>
-                <p className="text-subtext-light dark:text-subtext-dark">No time off requests found</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 dark:bg-gray-800/50 text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">
-                    <tr>
-                      <th className="px-6 py-4">Employee</th>
-                      <th className="px-6 py-4">Type</th>
-                      <th className="px-6 py-4">Start</th>
-                      <th className="px-6 py-4">End</th>
-                      <th className="px-6 py-4">Days</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-light dark:divide-border-dark text-sm">
-                    {requests.map(req => (
-                      <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{req.member?.profile?.full_name || req.member_name || '-'}</td>
-                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{req.policy?.name || req.policy_name || '-'}</td>
-                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{formatDate(req.start_date)}</td>
-                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{formatDate(req.end_date)}</td>
-                        <td className="px-6 py-4 text-text-light dark:text-text-dark">{calcDays(req.start_date, req.end_date)}</td>
-                        <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            {req.status === 'pending' && isEmployer && (
-                              <>
-                                <button
-                                  onClick={() => handleReview(req.id, true)}
-                                  disabled={actionLoading}
-                                  className="text-green-600 dark:text-green-400 hover:text-green-800 text-xs font-medium"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handleReview(req.id, false)}
-                                  disabled={actionLoading}
-                                  className="text-red-600 dark:text-red-400 hover:text-red-800 text-xs font-medium"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
-                            {req.status === 'pending' && (
-                              <button
-                                onClick={() => handleCancelRequest(req.id)}
-                                disabled={actionLoading}
-                                className="text-gray-600 dark:text-gray-400 hover:text-gray-800 text-xs font-medium"
-                              >
-                                Cancel
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Policies Tab */}
-      {activeTab === 'policies' && (
-        <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm">
-          <div className="p-6 border-b border-border-light dark:border-border-dark">
-            <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Time Off Policies</h2>
-          </div>
-          {policiesLoading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-subtext-light dark:text-subtext-dark">Loading policies...</p>
-            </div>
-          ) : policiesError ? (
-            <div className="p-8 text-center text-red-600 dark:text-red-400">{policiesError}</div>
-          ) : policies.length === 0 ? (
-            <div className="p-8 text-center">
-              <span className="material-icons-outlined text-4xl text-subtext-light dark:text-subtext-dark mb-2">description</span>
-              <p className="text-subtext-light dark:text-subtext-dark">No policies configured</p>
-            </div>
+          {loading ? (
+            <div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div></div>
+          ) : requests.length === 0 ? (
+            <div className="text-center py-12 text-subtext-light dark:text-subtext-dark">No leave requests found</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-gray-50 dark:bg-gray-800/50 text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">
+            <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-800/50">
                   <tr>
-                    <th className="px-6 py-4">Name</th>
-                    <th className="px-6 py-4">Days / Year</th>
-                    <th className="px-6 py-4">Type</th>
-                    <th className="px-6 py-4">Accrual Rate</th>
-                    <th className="px-6 py-4">Max Carryover</th>
-                    {isEmployer && <th className="px-6 py-4">Actions</th>}
+                    <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Employee</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Leave Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Dates</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Days</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Status</th>
+                    {isEmployer && <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Actions</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-light dark:divide-border-dark text-sm">
-                  {policies.map(policy => (
-                    <tr key={policy.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                      <td className="px-6 py-4 text-text-light dark:text-text-dark font-medium">{policy.name}</td>
-                      <td className="px-6 py-4 text-text-light dark:text-text-dark">{policy.days_per_year ?? '-'}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                          policy.is_paid !== false
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                            : 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300'
-                        }`}>
-                          {policy.is_paid !== false ? 'Paid' : 'Unpaid'}
-                        </span>
+                <tbody className="divide-y divide-border-light dark:divide-border-dark">
+                  {requests.map(req => (
+                    <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                      <td className="px-4 py-3 text-text-light dark:text-text-dark font-medium">{getEmployeeName(req)}</td>
+                      <td className="px-4 py-3 text-subtext-light dark:text-subtext-dark">{formatLeaveType(req.leave_type_code)}</td>
+                      <td className="px-4 py-3 text-subtext-light dark:text-subtext-dark">
+                        {new Date(req.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {req.start_date !== req.end_date && ` — ${new Date(req.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
                       </td>
-                      <td className="px-6 py-4 text-text-light dark:text-text-dark">{policy.accrual_rate ?? '-'}</td>
-                      <td className="px-6 py-4 text-text-light dark:text-text-dark">{policy.max_carryover ?? '-'}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-text-light dark:text-text-dark font-medium">{req.total_days}d</span>
+                        {parseFloat(req.unpaid_days) > 0 && (
+                          <span className="text-xs text-red-500 ml-1">({req.unpaid_days} unpaid)</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{statusBadge(req.status)}</td>
                       {isEmployer && (
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => { setEditingPolicy(policy); setShowPolicyModal(true) }}
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 text-xs font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeletePolicy(policy.id)}
-                              disabled={actionLoading}
-                              className="text-red-600 dark:text-red-400 hover:text-red-800 text-xs font-medium"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                        <td className="px-4 py-3">
+                          {req.status === 'pending' && (
+                            <div className="flex gap-2">
+                              <button onClick={() => handleApprove(req.id)} className="text-green-600 hover:text-green-800 text-xs font-medium">Approve</button>
+                              <button onClick={() => handleReject(req.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">Reject</button>
+                            </div>
+                          )}
+                          {req.medical_certificate_required && (
+                            <span className="text-xs text-amber-600 flex items-center gap-1 mt-1">
+                              <span className="material-icons-outlined text-xs">assignment</span>
+                              Med cert required
+                            </span>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -392,325 +318,235 @@ export default function TimeOff() {
         </div>
       )}
 
-      {/* Balances Tab */}
-      {activeTab === 'balances' && (
+      {/* ─── Tab: Leave Types ─── */}
+      {activeTab === 'leave_types' && (
         <div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Select Employee</label>
-            <select
-              value={selectedMemberId}
-              onChange={(e) => setSelectedMemberId(e.target.value)}
-              className="border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary w-full max-w-xs"
-            >
-              <option value="">-- Select Employee --</option>
-              {members.map(m => (
-                <option key={m.id} value={m.id}>{m.profile?.full_name || m.profile?.email || m.id}</option>
-              ))}
-            </select>
-          </div>
-
-          {balancesLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-subtext-light dark:text-subtext-dark">Loading balances...</p>
-            </div>
-          ) : !selectedMemberId ? (
-            <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-8 text-center">
-              <span className="material-icons-outlined text-4xl text-subtext-light dark:text-subtext-dark mb-2">account_balance</span>
-              <p className="text-subtext-light dark:text-subtext-dark">Select an employee to view their time off balances</p>
-            </div>
-          ) : balances.length === 0 ? (
-            <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-8 text-center">
-              <p className="text-subtext-light dark:text-subtext-dark">No balance records found for this employee</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {balances.map(bal => (
-                <div key={bal.id} className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl border border-border-light dark:border-border-dark shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
-                      <span className="material-icons-outlined">calendar_today</span>
-                    </div>
+          <p className="text-sm text-subtext-light dark:text-subtext-dark mb-4">
+            Statutory leave entitlements under Nepal Labour Act 2074. These are mandatory and cannot be modified.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {LEAVE_TYPES_INFO.map(lt => (
+              <div key={lt.code} className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-semibold text-text-light dark:text-text-dark">{lt.name}</h3>
+                    <p className="text-xs text-subtext-light dark:text-subtext-dark">{lt.nameNe} &middot; Labour Act {lt.section}</p>
                   </div>
-                  <h3 className="text-lg font-semibold text-text-light dark:text-text-dark mb-2">{bal.policy_name || 'Policy'}</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-subtext-light dark:text-subtext-dark">Total Entitled</span>
-                      <span className="text-text-light dark:text-text-dark font-medium">{bal.total_days ?? '-'} days</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-subtext-light dark:text-subtext-dark">Used</span>
-                      <span className="text-text-light dark:text-text-dark font-medium">{bal.used_days ?? 0} days</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-subtext-light dark:text-subtext-dark">Remaining</span>
-                      <span className="text-green-600 dark:text-green-400 font-bold">{bal.remaining_days ?? '-'} days</span>
-                    </div>
-                    {bal.carried_over != null && bal.carried_over > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-subtext-light dark:text-subtext-dark">Carried Over</span>
-                        <span className="text-text-light dark:text-text-dark font-medium">{bal.carried_over} days</span>
-                      </div>
-                    )}
+                  <span className="text-lg font-bold text-primary">{lt.days}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <span className="text-subtext-light dark:text-subtext-dark block">Accrual</span>
+                    <span className="font-medium text-text-light dark:text-text-dark">{lt.accrual}</span>
+                  </div>
+                  <div>
+                    <span className="text-subtext-light dark:text-subtext-dark block">Carry Forward</span>
+                    <span className="font-medium text-text-light dark:text-text-dark">{lt.carryForward}</span>
+                  </div>
+                  <div>
+                    <span className="text-subtext-light dark:text-subtext-dark block">Encashable</span>
+                    <span className="font-medium text-text-light dark:text-text-dark">{lt.encashable}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Request Modal */}
-      {showRequestModal && (
-        <CreateRequestModal
-          policies={policies}
-          onClose={() => setShowRequestModal(false)}
-          onSuccess={() => {
-            setShowRequestModal(false)
-            fetchRequests()
-          }}
-        />
-      )}
-
-      {/* Policy Modal */}
-      {showPolicyModal && (
-        <PolicyModal
-          policy={editingPolicy}
-          onClose={() => { setShowPolicyModal(false); setEditingPolicy(null) }}
-          onSuccess={() => {
-            setShowPolicyModal(false)
-            setEditingPolicy(null)
-            fetchPolicies()
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-function CreateRequestModal({ policies, onClose, onSuccess }) {
-  const [formData, setFormData] = useState({
-    policyId: '',
-    startDate: '',
-    endDate: '',
-    reason: ''
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!formData.policyId || !formData.startDate || !formData.endDate) {
-      setError('Policy, start date, and end date are required')
-      return
-    }
-    try {
-      setLoading(true)
-      setError(null)
-      await timeOffService.requestTimeOff(formData.policyId, formData.startDate, formData.endDate, formData.reason || null)
-      onSuccess()
-    } catch (err) {
-      setError(err.message || 'Failed to submit request')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md mx-4">
-        <div className="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Request Time Off</h2>
-          <button onClick={onClose} className="text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark">
-            <span className="material-icons-outlined">close</span>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded text-sm">{error}</div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Leave Type</label>
-            <select
-              value={formData.policyId}
-              onChange={(e) => setFormData({ ...formData, policyId: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              required
-            >
-              <option value="">Select policy</option>
-              {policies.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Start Date</label>
-              <input
-                type="date"
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">End Date</label>
-              <input
-                type="date"
-                value={formData.endDate}
-                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                required
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Reason</label>
-            <textarea
-              value={formData.reason}
-              onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              rows={3}
-              placeholder="Optional reason..."
-            />
-          </div>
-          <div className="flex justify-end space-x-3 pt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50">
-              {loading ? 'Submitting...' : 'Submit Request'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function PolicyModal({ policy, onClose, onSuccess }) {
-  const isEdit = !!policy
-  const [formData, setFormData] = useState({
-    name: policy?.name || '',
-    days_per_year: policy?.days_per_year ?? '',
-    is_paid: policy?.is_paid !== false,
-    accrual_rate: policy?.accrual_rate ?? '',
-    max_carryover: policy?.max_carryover ?? ''
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!formData.name) {
-      setError('Policy name is required')
-      return
-    }
-    try {
-      setLoading(true)
-      setError(null)
-      const payload = {
-        name: formData.name,
-        days_per_year: formData.days_per_year ? Number(formData.days_per_year) : null,
-        is_paid: formData.is_paid,
-        accrual_rate: formData.accrual_rate ? Number(formData.accrual_rate) : null,
-        max_carryover: formData.max_carryover ? Number(formData.max_carryover) : null
-      }
-      if (isEdit) {
-        await timeOffService.updatePolicy(policy.id, payload)
-      } else {
-        await timeOffService.createPolicy(payload)
-      }
-      onSuccess()
-    } catch (err) {
-      setError(err.message || 'Failed to save policy')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md mx-4">
-        <div className="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">{isEdit ? 'Edit Policy' : 'Create Policy'}</h2>
-          <button onClick={onClose} className="text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark">
-            <span className="material-icons-outlined">close</span>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded text-sm">{error}</div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Policy Name</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="e.g. Annual Leave"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Days Per Year</label>
-              <input
-                type="number"
-                value={formData.days_per_year}
-                onChange={(e) => setFormData({ ...formData, days_per_year: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                min="0"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Type</label>
+      {/* ─── Tab: Balances ─── */}
+      {activeTab === 'balances' && (
+        <div>
+          {isEmployer && (
+            <div className="mb-4">
               <select
-                value={formData.is_paid ? 'paid' : 'unpaid'}
-                onChange={(e) => setFormData({ ...formData, is_paid: e.target.value === 'paid' })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                value={selectedMember || ''}
+                onChange={e => { setSelectedMember(e.target.value); fetchBalance(e.target.value) }}
+                className="border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark min-w-[250px]"
               >
-                <option value="paid">Paid</option>
-                <option value="unpaid">Unpaid</option>
+                <option value="">Select employee...</option>
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.profile?.full_name || `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.invitation_email}
+                  </option>
+                ))}
               </select>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Accrual Rate</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.accrual_rate}
-                onChange={(e) => setFormData({ ...formData, accrual_rate: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="e.g. 1.25"
-              />
+          )}
+
+          {balances ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Sick Leave */}
+              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
+                    <span className="material-icons-outlined text-lg">sick</span>
+                  </div>
+                  <h3 className="font-semibold text-text-light dark:text-text-dark">Sick Leave</h3>
+                </div>
+                <div className="text-3xl font-bold text-text-light dark:text-text-dark mb-1">
+                  {balances.sickLeave?.available ?? 0} <span className="text-lg font-normal text-subtext-light">/ 12 days</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mt-4 text-xs">
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+                    <span className="block text-subtext-light">Carry Fwd</span>
+                    <span className="font-semibold text-text-light dark:text-text-dark">{balances.sickLeave?.carryForward ?? 0}</span>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+                    <span className="block text-subtext-light">Accrued</span>
+                    <span className="font-semibold text-text-light dark:text-text-dark">{balances.sickLeave?.currentYearAccrued ?? 0}</span>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+                    <span className="block text-subtext-light">Taken</span>
+                    <span className="font-semibold text-text-light dark:text-text-dark">{balances.sickLeave?.taken ?? 0}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-subtext-light mt-3">FY {balances.sickLeave?.fiscalYear} &middot; Max accumulation: 45 days</p>
+              </div>
+
+              {/* Home Leave */}
+              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-8 w-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600">
+                    <span className="material-icons-outlined text-lg">home</span>
+                  </div>
+                  <h3 className="font-semibold text-text-light dark:text-text-dark">Home Leave</h3>
+                </div>
+                <div className="text-3xl font-bold text-text-light dark:text-text-dark mb-1">
+                  {balances.homeLeave?.available ?? 0} <span className="text-lg font-normal text-subtext-light">/ 18 days</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mt-4 text-xs">
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+                    <span className="block text-subtext-light">Carry Fwd</span>
+                    <span className="font-semibold text-text-light dark:text-text-dark">0</span>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+                    <span className="block text-subtext-light">Accrued</span>
+                    <span className="font-semibold text-text-light dark:text-text-dark">{balances.homeLeave?.currentYearAccrued ?? 0}</span>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+                    <span className="block text-subtext-light">Taken</span>
+                    <span className="font-semibold text-text-light dark:text-text-dark">{balances.homeLeave?.taken ?? 0}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-subtext-light mt-3">FY {balances.homeLeave?.fiscalYear} &middot; No carry-forward</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Max Carryover</label>
-              <input
-                type="number"
-                value={formData.max_carryover}
-                onChange={(e) => setFormData({ ...formData, max_carryover: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                min="0"
-                placeholder="e.g. 5"
-              />
+          ) : (
+            <div className="text-center py-12 text-subtext-light dark:text-subtext-dark">
+              {isEmployer ? 'Select an employee to view their leave balance' : 'No balance data available'}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── New Request Modal ─── */}
+      {showRequestModal && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md mx-4 border border-border-light dark:border-border-dark">
+            <div className="px-6 py-4 border-b border-border-light dark:border-border-dark flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">New Leave Request</h2>
+              <button onClick={() => { setShowRequestModal(false); setError(null) }} className="text-subtext-light hover:text-text-light">
+                <span className="material-icons-outlined">close</span>
+              </button>
+            </div>
+            <form onSubmit={handleSubmitRequest} className="p-6 space-y-4">
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>}
+
+              {/* Employee selector (employer only) */}
+              {isEmployer && (
+                <div>
+                  <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Employee</label>
+                  <select value={requestForm.memberId} onChange={e => setRequestForm({ ...requestForm, memberId: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark" required>
+                    <option value="">Select employee...</option>
+                    {members.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.profile?.full_name || `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.invitation_email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Leave Type */}
+              <div>
+                <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Leave Type</label>
+                <select value={requestForm.leaveTypeCode} onChange={e => setRequestForm({ ...requestForm, leaveTypeCode: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark">
+                  {LEAVE_TYPE_OPTIONS.filter(o => o.value).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+
+              {/* Conditional fields based on leave type */}
+              {requestForm.leaveTypeCode === 'maternity_leave' && (
+                <div>
+                  <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Expected Delivery Date *</label>
+                  <input type="date" required value={requestForm.expectedDeliveryDate} onChange={e => setRequestForm({ ...requestForm, expectedDeliveryDate: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark" />
+                </div>
+              )}
+
+              {requestForm.leaveTypeCode === 'paternity_leave' && (
+                <div>
+                  <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Child Birth Date *</label>
+                  <input type="date" required value={requestForm.childBirthDate} onChange={e => setRequestForm({ ...requestForm, childBirthDate: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark" />
+                </div>
+              )}
+
+              {requestForm.leaveTypeCode === 'mourning_leave' && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Deceased Name *</label>
+                      <input type="text" required value={requestForm.deceasedName} onChange={e => setRequestForm({ ...requestForm, deceasedName: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Relationship *</label>
+                      <select required value={requestForm.relationship} onChange={e => setRequestForm({ ...requestForm, relationship: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark">
+                        <option value="">Select...</option>
+                        <option value="parent">Parent</option>
+                        <option value="spouse">Spouse</option>
+                        <option value="child">Child</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Date of Death *</label>
+                    <input type="date" required value={requestForm.deathDate} onChange={e => setRequestForm({ ...requestForm, deathDate: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark" />
+                  </div>
+                </>
+              )}
+
+              {/* Start Date (all types) */}
+              <div>
+                <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">
+                  {['maternity_leave', 'paternity_leave', 'mourning_leave'].includes(requestForm.leaveTypeCode) ? 'Leave Start Date *' : 'Start Date *'}
+                </label>
+                <input type="date" required value={requestForm.startDate} onChange={e => setRequestForm({ ...requestForm, startDate: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark" />
+              </div>
+
+              {/* End Date (only for sick, home, special, compensatory) */}
+              {!['maternity_leave', 'paternity_leave', 'mourning_leave'].includes(requestForm.leaveTypeCode) && (
+                <div>
+                  <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">End Date *</label>
+                  <input type="date" required value={requestForm.endDate} onChange={e => setRequestForm({ ...requestForm, endDate: e.target.value })} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark" />
+                </div>
+              )}
+
+              {/* Reason */}
+              <div>
+                <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Reason</label>
+                <textarea value={requestForm.reason} onChange={e => setRequestForm({ ...requestForm, reason: e.target.value })} rows={2} className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark resize-none" placeholder="Optional reason..." />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => { setShowRequestModal(false); setError(null) }} className="px-4 py-2 border border-border-light dark:border-border-dark rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">Cancel</button>
+                <button type="submit" disabled={submitting} className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50 transition">
+                  {submitting ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </form>
           </div>
-          <div className="flex justify-end space-x-3 pt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50">
-              {loading ? 'Saving...' : (isEdit ? 'Save Changes' : 'Create Policy')}
-            </button>
-          </div>
-        </form>
-      </div>
+        </div>
+      )}
     </div>
   )
 }

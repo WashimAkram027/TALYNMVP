@@ -315,12 +315,35 @@ export const onboardingService = {
   },
 
   /**
-   * Get employee onboarding status
+   * Helper: get the employee's organization_members row
+   */
+  async _getEmployeeMember(userId) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, organization_id')
+      .eq('id', userId)
+      .single()
+
+    if (!profile?.organization_id) return null
+
+    const { data: member } = await supabase
+      .from('organization_members')
+      .select('id, organization_id')
+      .eq('profile_id', userId)
+      .eq('organization_id', profile.organization_id)
+      .not('status', 'in', '("offboarded","inactive")')
+      .single()
+
+    return member
+  },
+
+  /**
+   * Get employee onboarding status (with pre-filled data for form restore)
    */
   async getEmployeeOnboardingStatus(userId) {
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, first_name, role, onboarding_step, onboarding_completed, pending_bank_details')
+      .select('id, first_name, role, onboarding_step, onboarding_completed, pending_bank_details, pending_emergency_contact, pending_tax_info, date_of_birth, phone, address')
       .eq('id', userId)
       .single()
 
@@ -328,12 +351,68 @@ export const onboardingService = {
       throw new BadRequestError('User not found')
     }
 
-    return {
+    const result = {
       currentStep: profile.onboarding_step || null,
       isComplete: profile.onboarding_completed === true,
       hasBankDetails: !!profile.pending_bank_details,
-      firstName: profile.first_name
+      firstName: profile.first_name,
+      personalInfo: null,
+      emergencyContact: null,
+      taxInfo: null,
+      documents: []
     }
+
+    // Fetch member data if employee has an organization
+    const member = await this._getEmployeeMember(userId)
+
+    if (member) {
+      const { data: memberData } = await supabase
+        .from('organization_members')
+        .select('id, pan_number, ssf_number, emergency_contact')
+        .eq('id', member.id)
+        .single()
+
+      if (memberData) {
+        result.emergencyContact = memberData.emergency_contact || null
+        result.taxInfo = {
+          panNumber: memberData.pan_number || null,
+          ssfNumber: memberData.ssf_number || null
+        }
+      }
+
+      // Fetch uploaded identity documents by member_id
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('id, name, file_url, category, created_at')
+        .eq('member_id', member.id)
+        .eq('category', 'identity')
+
+      result.documents = docs || []
+    } else {
+      // No org yet — use pending data from profiles
+      result.emergencyContact = profile.pending_emergency_contact || null
+      if (profile.pending_tax_info) {
+        result.taxInfo = profile.pending_tax_info
+      }
+
+      // Fetch docs by uploaded_by instead of member_id
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('id, name, file_url, category, created_at')
+        .eq('uploaded_by', userId)
+        .eq('category', 'identity')
+
+      result.documents = docs || []
+    }
+
+    // Personal info from profile
+    result.personalInfo = {
+      dateOfBirth: profile.date_of_birth || null,
+      phone: profile.phone || null,
+      address: profile.address || null
+    }
+
+    return result
   },
 
   /**
@@ -386,6 +465,275 @@ export const onboardingService = {
   },
 
   /**
+   * Step 1: Save personal information
+   */
+  async completeEmployeePersonalInfo(userId, data) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, onboarding_step, onboarding_completed')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) throw new BadRequestError('User not found')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this onboarding')
+    if (profile.onboarding_completed) throw new BadRequestError('Onboarding already completed')
+    if (profile.onboarding_step !== 1) throw new BadRequestError('Please complete the steps in order')
+
+    const address = {
+      street: data.street,
+      city: data.city,
+      state: data.state || null,
+      country: data.country || 'Nepal',
+      nationality: data.nationality
+    }
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        date_of_birth: data.dateOfBirth,
+        phone: data.phone,
+        address,
+        onboarding_step: 2
+      })
+      .eq('id', userId)
+
+    if (updateError) throw new BadRequestError('Failed to save personal information')
+
+    return { currentStep: 2, isComplete: false }
+  },
+
+  /**
+   * Step 2: Save emergency contact
+   */
+  async completeEmployeeEmergencyContact(userId, data) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, onboarding_step, onboarding_completed')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) throw new BadRequestError('User not found')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this onboarding')
+    if (profile.onboarding_completed) throw new BadRequestError('Onboarding already completed')
+    if (profile.onboarding_step !== 2) throw new BadRequestError('Please complete the steps in order')
+
+    const emergencyContact = {
+      name: data.contactName,
+      phone: data.contactPhone,
+      relationship: data.relationship
+    }
+
+    const member = await this._getEmployeeMember(userId)
+
+    if (member) {
+      // Save directly to organization_members
+      const { error: memberError } = await supabase
+        .from('organization_members')
+        .update({ emergency_contact: emergencyContact })
+        .eq('id', member.id)
+
+      if (memberError) throw new BadRequestError('Failed to save emergency contact')
+    }
+
+    // Always save to profiles as pending data (works even without org)
+    const { error: stepError } = await supabase
+      .from('profiles')
+      .update({
+        onboarding_step: 3,
+        pending_emergency_contact: emergencyContact
+      })
+      .eq('id', userId)
+
+    if (stepError) throw new BadRequestError('Failed to save emergency contact')
+
+    return { currentStep: 3, isComplete: false }
+  },
+
+  /**
+   * Step 3: Save tax information
+   */
+  async completeEmployeeTaxInfo(userId, data) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, onboarding_step, onboarding_completed')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) throw new BadRequestError('User not found')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this onboarding')
+    if (profile.onboarding_completed) throw new BadRequestError('Onboarding already completed')
+    if (profile.onboarding_step !== 3) throw new BadRequestError('Please complete the steps in order')
+
+    const taxInfo = {
+      panNumber: data.panNumber,
+      ssfNumber: data.ssfNumber || null
+    }
+
+    const member = await this._getEmployeeMember(userId)
+
+    if (member) {
+      // Save directly to organization_members
+      const { error: memberError } = await supabase
+        .from('organization_members')
+        .update({
+          pan_number: data.panNumber,
+          ssf_number: data.ssfNumber || null
+        })
+        .eq('id', member.id)
+
+      if (memberError) throw new BadRequestError('Failed to save tax information')
+    }
+
+    // Always save to profiles as pending data (works even without org)
+    const { error: stepError } = await supabase
+      .from('profiles')
+      .update({
+        onboarding_step: 4,
+        pending_tax_info: taxInfo
+      })
+      .eq('id', userId)
+
+    if (stepError) throw new BadRequestError('Failed to save tax information')
+
+    return { currentStep: 4, isComplete: false }
+  },
+
+  /**
+   * Step 4: Upload an identity document
+   */
+  async uploadEmployeeDocument(userId, data) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, onboarding_step, onboarding_completed')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) throw new BadRequestError('User not found')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this onboarding')
+    if (profile.onboarding_completed) throw new BadRequestError('Onboarding already completed')
+    if (profile.onboarding_step !== 4) throw new BadRequestError('Please complete the steps in order')
+
+    // Server-side file validation
+    const allowedMimes = ['application/pdf', 'image/png', 'image/jpeg']
+    if (!allowedMimes.includes(data.fileType)) {
+      throw new BadRequestError('Invalid file type. Only PDF, PNG, and JPEG are allowed.')
+    }
+
+    const buffer = Buffer.from(data.fileBase64, 'base64')
+
+    if (buffer.length > 10 * 1024 * 1024) {
+      throw new BadRequestError('File size must be under 10MB')
+    }
+
+    // Sanitize filename
+    const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const fileExt = safeName.split('.').pop()
+
+    const member = await this._getEmployeeMember(userId)
+    const orgId = member?.organization_id || 'unassigned'
+    const storagePath = `${orgId}/employee-${userId}/${data.docType}-${Date.now()}.${fileExt}`
+
+    // Upload to Supabase Storage
+    const bucket = 'employee-documents'
+    let fileUrl = storagePath
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(storagePath, buffer, { contentType: data.fileType, upsert: true })
+
+    if (uploadError) {
+      // Fallback to documents bucket if employee-documents doesn't exist
+      if (uploadError.message?.includes('not found') || uploadError.statusCode === '404') {
+        const { error: fallbackError } = await supabase.storage
+          .from('documents')
+          .upload(storagePath, buffer, { contentType: data.fileType, upsert: true })
+        if (fallbackError) {
+          console.error('[OnboardingService] Employee doc upload error:', fallbackError)
+          throw new BadRequestError('Failed to upload document')
+        }
+        const { data: signedData } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+        fileUrl = signedData?.signedUrl || storagePath
+      } else {
+        console.error('[OnboardingService] Employee doc upload error:', uploadError)
+        throw new BadRequestError('Failed to upload document')
+      }
+    } else {
+      const { data: signedData } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+      fileUrl = signedData?.signedUrl || storagePath
+    }
+
+    // Insert into documents table (member_id may be null if not yet in an org)
+    const { data: doc, error: docError } = await supabase
+      .from('documents')
+      .insert({
+        organization_id: member?.organization_id || null,
+        member_id: member?.id || null,
+        name: safeName,
+        file_url: fileUrl,
+        category: 'identity',
+        is_sensitive: true,
+        uploaded_by: userId
+      })
+      .select()
+      .single()
+
+    if (docError) {
+      console.error('[OnboardingService] Employee doc insert error:', docError)
+      throw new BadRequestError('Failed to save document record')
+    }
+
+    return doc
+  },
+
+  /**
+   * Step 4: Complete document step (advance to step 5)
+   */
+  async completeEmployeeDocumentStep(userId) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, onboarding_step, onboarding_completed')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) throw new BadRequestError('User not found')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this onboarding')
+    if (profile.onboarding_completed) throw new BadRequestError('Onboarding already completed')
+    if (profile.onboarding_step !== 4) throw new BadRequestError('Please complete the steps in order')
+
+    // Check for identity docs by uploaded_by (works with or without org)
+    const member = await this._getEmployeeMember(userId)
+    let docQuery = supabase
+      .from('documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('category', 'identity')
+
+    if (member) {
+      docQuery = docQuery.eq('member_id', member.id)
+    } else {
+      docQuery = docQuery.eq('uploaded_by', userId)
+    }
+
+    const { count, error: countError } = await docQuery
+
+    if (countError || !count || count < 1) {
+      throw new BadRequestError('Please upload at least one identity document')
+    }
+
+    const { error: stepError } = await supabase
+      .from('profiles')
+      .update({ onboarding_step: 5 })
+      .eq('id', userId)
+
+    if (stepError) throw new BadRequestError('Failed to advance step')
+
+    return { currentStep: 5, isComplete: false }
+  },
+
+  /**
    * Complete employee bank details (step 5) and finish onboarding
    */
   async completeEmployeeBankDetails(userId, bankDetails) {
@@ -400,24 +748,23 @@ export const onboardingService = {
     }
 
     if (profile.role !== 'candidate') {
-      throw new BadRequestError('Only employees can complete this onboarding')
+      throw new BadRequestError('Only employees can update bank details')
     }
 
-    if (profile.onboarding_completed) {
-      throw new BadRequestError('Onboarding already completed')
-    }
-
-    if (profile.onboarding_step !== 5) {
+    // Allow during onboarding step 5 OR post-onboarding (for updates from Settings)
+    if (!profile.onboarding_completed && profile.onboarding_step !== 5) {
       throw new BadRequestError('Please complete previous steps first')
+    }
+
+    const updatePayload = { pending_bank_details: bankDetails }
+    if (!profile.onboarding_completed) {
+      updatePayload.onboarding_completed = true
+      updatePayload.onboarding_step = null
     }
 
     const { data: updatedProfile, error: updateError } = await supabase
       .from('profiles')
-      .update({
-        pending_bank_details: bankDetails,
-        onboarding_completed: true,
-        onboarding_step: null
-      })
+      .update(updatePayload)
       .eq('id', userId)
       .select('id, onboarding_step, onboarding_completed')
       .single()

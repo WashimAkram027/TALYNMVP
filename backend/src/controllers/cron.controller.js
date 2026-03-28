@@ -1,5 +1,6 @@
 import { env } from '../config/env.js'
 import { invoiceGenerationService } from '../services/invoiceGeneration.service.js'
+import { leaveAccrualService } from '../services/leaveAccrual.service.js'
 import { emailService } from '../services/email.service.js'
 import { supabase } from '../config/supabase.js'
 
@@ -184,6 +185,46 @@ export const cronController = {
     } catch (error) {
       console.error('[Cron] Mark overdue failed:', error)
       res.status(500).json({ error: 'Mark overdue failed', message: error.message })
+    }
+  },
+
+  /**
+   * POST /api/cron/leave-accrual
+   * Run monthly leave accrual. Normally only acts on BS month day 1.
+   * Pass { "force": true } in body to run regardless of date.
+   */
+  async runLeaveAccrual(req, res) {
+    if (!validateCronSecret(req, res)) return
+
+    try {
+      const force = req.body?.force === true
+      console.log(`[Cron] Running leave accrual (force=${force})...`)
+      const result = await leaveAccrualService.runMonthlyAccrual(force)
+      console.log('[Cron] Leave accrual result:', result)
+      res.json({ success: true, ...result })
+    } catch (error) {
+      console.error('[Cron] Leave accrual failed:', error)
+      res.status(500).json({ error: 'Leave accrual failed', message: error.message })
+    }
+  },
+
+  /**
+   * POST /api/cron/fiscal-year-rollover
+   * Run fiscal year rollover (home leave lapse, sick leave carry-forward).
+   * Normally only acts on Shrawan 1. Pass { "force": true } to run regardless.
+   */
+  async runFiscalYearRollover(req, res) {
+    if (!validateCronSecret(req, res)) return
+
+    try {
+      const force = req.body?.force === true
+      console.log(`[Cron] Running fiscal year rollover (force=${force})...`)
+      const result = await leaveAccrualService.runFiscalYearRollover(force)
+      console.log('[Cron] Fiscal year rollover result:', result)
+      res.json({ success: true, ...result })
+    } catch (error) {
+      console.error('[Cron] Fiscal year rollover failed:', error)
+      res.status(500).json({ error: 'Fiscal year rollover failed', message: error.message })
     }
   }
 }

@@ -13,7 +13,7 @@ export default function Sidebar({ onClose }) {
 
   // Determine user role for conditional rendering
   const isEmployer = profile?.role === 'employer'
-  const dashboardRoute = isEmployer ? '/dashboard' : '/dashboard-employee'
+  const dashboardRoute = isEmployer ? '/dashboard' : '/employee/overview'
 
   const handleNavClick = () => {
     // Close mobile sidebar on navigation
@@ -141,9 +141,33 @@ export default function Sidebar({ onClose }) {
               My Workspace
             </div>
 
-            <NavLink to="/documents" onClick={handleNavClick} className={navLinkClass}>
+            <NavLink to="/employee/payroll" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">payments</span>
+              My Payroll
+            </NavLink>
+
+            <NavLink to="/employee/time-off" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">event_available</span>
+              Time Off
+            </NavLink>
+
+            <NavLink to="/employee/benefits" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">health_and_safety</span>
+              Benefits
+            </NavLink>
+
+            <NavLink to="/employee/documents" onClick={handleNavClick} className={navLinkClass}>
               <span className="material-icons-outlined">folder_open</span>
               Documents
+            </NavLink>
+
+            <div className="pt-4 pb-2 text-xs font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wider pl-3">
+              Organization
+            </div>
+
+            <NavLink to="/employee/company" onClick={handleNavClick} className={navLinkClass}>
+              <span className="material-icons-outlined">business</span>
+              Company
             </NavLink>
           </>
         )}

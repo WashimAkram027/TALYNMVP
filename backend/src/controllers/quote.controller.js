@@ -84,6 +84,8 @@ export const quoteController = {
         req.user.id,
         {
           email: quote.employee_email,
+          firstName: quote.employee_first_name,
+          lastName: quote.employee_last_name,
           jobTitle: quote.job_title,
           department: quote.department,
           employmentType: quote.employment_type,
@@ -114,6 +116,23 @@ export const quoteController = {
         return notFoundResponse(res, error.message)
       }
       return errorResponse(res, 'Failed to accept quote', 500, error)
+    }
+  },
+
+  /**
+   * DELETE /api/quotes/:quoteId
+   * Delete a draft quote
+   */
+  async deleteQuote(req, res) {
+    try {
+      const { quoteId } = req.params
+      await quoteService.deleteQuote(quoteId, req.user.organizationId)
+      return successResponse(res, null, 'Quote deleted')
+    } catch (error) {
+      console.error('Delete quote error:', error)
+      if (error.statusCode === 404) return notFoundResponse(res, error.message)
+      if (error.statusCode === 400) return badRequestResponse(res, error.message)
+      return errorResponse(res, 'Failed to delete quote', 500, error)
     }
   },
 

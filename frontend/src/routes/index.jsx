@@ -12,7 +12,12 @@ import VerifyEmail from '../pages/VerifyEmail'
 import Dashboard from '../pages/Dashboard'
 import People from '../pages/People'
 import PersonDetail from '../pages/PersonDetail'
-import EmployeeDashboard from '../pages/EmployeeDashboard'
+import EmployeeOverview from '../pages/employee/EmployeeOverview'
+import EmployeePayroll from '../pages/employee/EmployeePayroll'
+import EmployeeTimeOff from '../pages/employee/EmployeeTimeOff'
+import EmployeeBenefits from '../pages/employee/EmployeeBenefits'
+import EmployeeDocuments from '../pages/employee/EmployeeDocuments'
+import EmployeeCompany from '../pages/employee/EmployeeCompany'
 import Invoices from '../pages/Invoices'
 import Payroll from '../pages/Payroll'
 import TimeOff from '../pages/TimeOff'
@@ -206,14 +211,60 @@ export default function AppRoutes() {
           element={<Navigate to="/invoices" replace />}
         />
 
-        {/* Candidate-only routes */}
+        {/* Employee routes */}
         <Route
-          path="dashboard-employee"
+          path="employee/overview"
           element={
             <ProtectedRoute allowedRoles={['candidate']}>
-              <EmployeeDashboard />
+              <EmployeeOverview />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="employee/payroll"
+          element={
+            <ProtectedRoute allowedRoles={['candidate']}>
+              <EmployeePayroll />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="employee/time-off"
+          element={
+            <ProtectedRoute allowedRoles={['candidate']}>
+              <EmployeeTimeOff />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="employee/benefits"
+          element={
+            <ProtectedRoute allowedRoles={['candidate']}>
+              <EmployeeBenefits />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="employee/documents"
+          element={
+            <ProtectedRoute allowedRoles={['candidate']}>
+              <EmployeeDocuments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="employee/company"
+          element={
+            <ProtectedRoute allowedRoles={['candidate']}>
+              <EmployeeCompany />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Legacy employee dashboard redirect */}
+        <Route
+          path="dashboard-employee"
+          element={<Navigate to="/employee/overview" replace />}
         />
 
         {/* Common routes (both roles) */}

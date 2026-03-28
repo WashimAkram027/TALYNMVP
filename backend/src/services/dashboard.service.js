@@ -117,6 +117,9 @@ export const dashboardService = {
       .from('organization_members')
       .select(`
         id,
+        first_name,
+        last_name,
+        invitation_email,
         status,
         member_role,
         job_title,
@@ -138,8 +141,12 @@ export const dashboardService = {
     // Format the response for frontend
     return data.map(member => ({
       id: member.id,
-      name: member.profile?.full_name || `${member.profile?.first_name || ''} ${member.profile?.last_name || ''}`.trim() || 'Unknown',
-      email: member.profile?.email,
+      name: member.profile?.full_name
+        || `${member.profile?.first_name || ''} ${member.profile?.last_name || ''}`.trim()
+        || `${member.first_name || ''} ${member.last_name || ''}`.trim()
+        || member.invitation_email
+        || 'Unknown',
+      email: member.profile?.email || member.invitation_email,
       avatar: member.profile?.avatar_url,
       department: member.department || 'Not specified',
       role: member.job_title || member.member_role || 'Team Member',
@@ -160,7 +167,7 @@ export const dashboardService = {
     if (organizationId) {
       const { data: memberData } = await supabase
         .from('organization_members')
-        .select('*')
+        .select('*, organization:organizations!organization_members_organization_id_fkey(name, industry)')
         .eq('profile_id', profileId)
         .eq('organization_id', organizationId)
         .single()
@@ -289,6 +296,47 @@ export const dashboardService = {
         { name: 'Labor Day', date: 'Monday, September 1', paid: true },
         { name: 'Thanksgiving', date: 'Thursday, November 27', paid: true }
       ]
+    }
+  },
+
+  /**
+   * Get upcoming Nepal public holidays (from MOHA gazette data).
+   * Returns holidays from today onwards, optionally filtered by fiscal year.
+   */
+  async getNepalPublicHolidays(organizationId, limit = 10, fiscalYear = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+
+      let query = supabase
+        .from('public_holidays')
+        .select('id, date_ad, bs_year, bs_month, bs_day, name, name_ne, holiday_category, fiscal_year')
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+        .in('holiday_category', ['national', 'women_only'])
+        .gte('date_ad', today)
+        .order('date_ad', { ascending: true })
+
+      if (fiscalYear) query = query.eq('fiscal_year', fiscalYear)
+      if (limit) query = query.limit(limit)
+
+      const { data, error } = await query
+      if (error) throw error
+
+      return (data || []).map(h => ({
+        id: h.id,
+        name: h.name,
+        nameNe: h.name_ne,
+        date: new Date(h.date_ad).toLocaleDateString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+        }),
+        rawDate: h.date_ad,
+        bsDate: `${h.bs_year}-${String(h.bs_month).padStart(2, '0')}-${String(h.bs_day).padStart(2, '0')}`,
+        category: h.holiday_category,
+        fiscalYear: h.fiscal_year,
+        paid: true
+      }))
+    } catch {
+      return []
     }
   },
 

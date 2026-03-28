@@ -199,19 +199,26 @@ export const documentsService = {
   },
 
   /**
-   * Get documents for a specific member
+   * Get documents for a specific member (also includes self-uploaded docs with no member_id)
    */
-  async getByMemberId(memberId, orgId) {
-    const { data, error } = await supabase
+  async getByMemberId(memberId, orgId, userId = null) {
+    let query = supabase
       .from('documents')
       .select(`
         *,
         uploaded_by_profile:profiles!documents_uploaded_by_fkey(full_name, email)
       `)
-      .eq('member_id', memberId)
-      .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
 
+    if (userId) {
+      // Fetch docs assigned to this member OR self-uploaded (for onboarding docs with no member_id)
+      query = query.or(`member_id.eq.${memberId},uploaded_by.eq.${userId}`)
+    } else {
+      query = query.eq('member_id', memberId)
+      if (orgId) query = query.eq('organization_id', orgId)
+    }
+
+    const { data, error } = await query
     if (error) throw error
     return data
   }

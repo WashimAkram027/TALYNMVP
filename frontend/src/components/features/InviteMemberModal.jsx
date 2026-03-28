@@ -18,6 +18,8 @@ const EMPLOYMENT_TYPE_OPTIONS = [
 
 export default function InviteMemberModal({ onClose, onSuccess, departments = [] }) {
   const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
     email: '',
     memberRole: 'employee',
     jobTitle: '',
@@ -38,6 +40,10 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
 
   const handleGenerateQuote = async (e) => {
     e.preventDefault()
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      setError('First name and last name are required')
+      return
+    }
     if (!formData.email) {
       setError('Email is required')
       return
@@ -57,8 +63,8 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
 
       const result = await quoteService.generateQuote({
         email: formData.email,
-        firstName: null,
-        lastName: null,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
         jobTitle: formData.jobTitle,
         department: formData.department,
         employmentType: formData.employmentType,
@@ -106,6 +112,11 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
     setError(null)
   }
 
+  const handleSaveAndExit = () => {
+    // Quote is already persisted as 'draft' in the DB when generated
+    onClose()
+  }
+
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col border border-border-light dark:border-border-dark">
@@ -138,10 +149,37 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
               onBack={handleBackToForm}
               onAccept={handleAcceptAndInvite}
               onDownloadPdf={handleDownloadPdf}
+              onSaveAndExit={handleSaveAndExit}
               loading={loading}
             />
           ) : (
             <form onSubmit={handleGenerateQuote} className="space-y-4">
+              {/* First Name + Last Name */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">First Name *</label>
+                  <input
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="John"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Last Name *</label>
+                  <input
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Doe"
+                    required
+                  />
+                </div>
+              </div>
+
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Email *</label>

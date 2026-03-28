@@ -81,7 +81,7 @@ export const invoiceGenerationService = {
     const { data: members, error: membersError } = await supabase
       .from('organization_members')
       .select(`
-        id, job_title, department, salary_amount, salary_currency, employment_type, start_date,
+        id, first_name, last_name, invitation_email, job_title, department, salary_amount, salary_currency, employment_type, start_date,
         profile:profiles!organization_members_profile_id_fkey(full_name, email)
       `)
       .eq('organization_id', orgId)
@@ -115,11 +115,29 @@ export const invoiceGenerationService = {
     const platformFeePerEmployee = config.platform_fee_amount // in USD cents (59900 = $599)
     const periodsPerYear = config.periods_per_year
 
-    // Build line items for each active employee
-    const lineItems = members.map(member => {
+    // Build line items for each active employee (with day-count adjustment)
+    const lineItems = await Promise.all(members.map(async (member) => {
       const annualSalary = member.salary_amount || 0
-      // Monthly gross in local currency minor units (paisa)
-      const monthlyGrossLocal = Math.round((annualSalary / periodsPerYear) * 100)
+      // Full monthly gross in local currency minor units (paisa)
+      const fullMonthlyGrossLocal = Math.round((annualSalary / periodsPerYear) * 100)
+
+      // Calculate payable days (deducting unpaid leave)
+      let dayCount = null
+      let monthlyGrossLocal = fullMonthlyGrossLocal
+      try {
+        const { payrollDayCountService } = await import('./payrollDayCount.service.js')
+        dayCount = await payrollDayCountService.calculatePayableDays(member.id, periodStart, periodEnd)
+
+        if (dayCount.deductionDays > 0 && dayCount.calendarDays > 0) {
+          // Prorate: daily rate × payable days
+          const dailyRate = Math.round(fullMonthlyGrossLocal / dayCount.calendarDays)
+          monthlyGrossLocal = dailyRate * dayCount.payableDays
+        }
+      } catch {
+        // If day-count service fails, fall back to full month billing
+        dayCount = null
+      }
+
       const employerSsfLocal = Math.round(monthlyGrossLocal * employerSsfRate)
       const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
       const totalCostLocal = monthlyGrossLocal + employerSsfLocal
@@ -129,21 +147,31 @@ export const invoiceGenerationService = {
 
       return {
         member_id: member.id,
-        member_name: member.profile?.full_name || 'Unknown',
-        member_email: member.profile?.email || null,
+        member_name: member.profile?.full_name
+          || `${member.first_name || ''} ${member.last_name || ''}`.trim()
+          || member.invitation_email
+          || 'Unknown',
+        member_email: member.profile?.email || member.invitation_email || null,
         job_title: member.job_title || null,
         department: member.department || null,
         employment_type: member.employment_type || 'full_time',
         salary_currency: member.salary_currency || 'NPR',
         annual_salary: annualSalary,
+        full_monthly_gross_local: fullMonthlyGrossLocal,
         monthly_gross_local: monthlyGrossLocal,
         employer_ssf_local: employerSsfLocal,
         employee_ssf_local: employeeSsfLocal,
         total_cost_local: totalCostLocal,
         cost_usd_cents: costUsdCents,
-        platform_fee_cents: platformFeePerEmployee
+        platform_fee_cents: platformFeePerEmployee,
+        // Day-count breakdown (for payslip/invoice detail)
+        payable_days: dayCount?.payableDays ?? null,
+        calendar_days: dayCount?.calendarDays ?? null,
+        deduction_days: dayCount?.deductionDays ?? 0,
+        paid_leave_days: dayCount?.paidLeaveDays ?? 0,
+        unpaid_leave_days: dayCount?.unpaidLeaveDays ?? 0
       }
-    })
+    }))
 
     // Calculate totals
     const subtotalLocalCents = lineItems.reduce((sum, item) => sum + item.total_cost_local, 0)

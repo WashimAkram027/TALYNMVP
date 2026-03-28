@@ -10,6 +10,9 @@ router.get('/config', authenticate, paymentsController.getConfig)
 // POST /api/payments/setup-intent - Create SetupIntent for bank linking
 router.post('/setup-intent', authenticate, requireEmployer, requireOrganization, paymentsController.createSetupIntent)
 
+// POST /api/payments/confirm-setup - Confirm SetupIntent and activate payment method
+router.post('/confirm-setup', authenticate, requireEmployer, requireOrganization, paymentsController.confirmSetup)
+
 // GET /api/payments/methods - List all payment methods
 router.get('/methods', authenticate, requireEmployer, requireOrganization, paymentsController.getPaymentMethods)
 

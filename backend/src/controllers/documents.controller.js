@@ -154,6 +154,26 @@ export const documentsController = {
   },
 
   /**
+   * GET /api/documents/my
+   * Get documents uploaded by the current user (works without org)
+   */
+  async getMyDocuments(req, res) {
+    try {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('uploaded_by', req.user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return successResponse(res, data || [])
+    } catch (error) {
+      console.error('[DocumentsController] GetMyDocuments error:', error)
+      return errorResponse(res, 'Failed to get documents', 500, error)
+    }
+  },
+
+  /**
    * GET /api/documents/member/:memberId
    * Get all documents for a specific member
    */
@@ -161,7 +181,7 @@ export const documentsController = {
     try {
       const { memberId } = req.params
 
-      const documents = await documentsService.getByMemberId(memberId, req.user.organizationId)
+      const documents = await documentsService.getByMemberId(memberId, req.user.organizationId, req.user.id)
 
       return successResponse(res, documents)
     } catch (error) {

@@ -39,6 +39,66 @@ export const onboardingController = {
   },
 
   /**
+   * POST /api/onboarding/employee/personal-info
+   */
+  async submitPersonalInfo(req, res, next) {
+    try {
+      const result = await onboardingService.completeEmployeePersonalInfo(req.user.id, req.body)
+      return successResponse(res, result, 'Personal information saved')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/onboarding/employee/emergency-contact
+   */
+  async submitEmergencyContact(req, res, next) {
+    try {
+      const result = await onboardingService.completeEmployeeEmergencyContact(req.user.id, req.body)
+      return successResponse(res, result, 'Emergency contact saved')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/onboarding/employee/tax-info
+   */
+  async submitTaxInfo(req, res, next) {
+    try {
+      const result = await onboardingService.completeEmployeeTaxInfo(req.user.id, req.body)
+      return successResponse(res, result, 'Tax information saved')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/onboarding/employee/document
+   */
+  async uploadEmployeeDocument(req, res, next) {
+    try {
+      const result = await onboardingService.uploadEmployeeDocument(req.user.id, req.body)
+      return successResponse(res, result, 'Document uploaded')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/onboarding/employee/complete-documents
+   */
+  async completeDocumentStep(req, res, next) {
+    try {
+      const result = await onboardingService.completeEmployeeDocumentStep(req.user.id)
+      return successResponse(res, result, 'Document step completed')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
    * POST /api/onboarding/employer/profile - Step 1
    */
   async completeProfile(req, res, next) {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
 import InviteMemberModal from '../components/features/InviteMemberModal'
+import DraftQuotesList from '../components/features/quotes/DraftQuotesList'
 import { StatusBadge, STATUS_FILTER_OPTIONS, formatStartDate } from '../utils/statusUtils'
 
 const ROLE_OPTIONS = [
@@ -225,6 +226,11 @@ export default function People() {
         </div>
       )}
 
+      {/* Draft Quotes */}
+      {profile?.role === 'employer' && (
+        <DraftQuotesList onAccepted={() => { fetchMembers(); fetchStats() }} />
+      )}
+
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow mb-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -348,13 +354,17 @@ export default function People() {
                           />
                         ) : (
                           <span className="text-gray-500 font-medium">
-                            {member.profile?.first_name?.[0] || member.profile?.email?.[0]?.toUpperCase() || '?'}
+                            {member.profile?.first_name?.[0] || member.first_name?.[0] || member.profile?.email?.[0]?.toUpperCase() || member.invitation_email?.[0]?.toUpperCase() || '?'}
                           </span>
                         )}
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">
-                          {member.profile?.full_name || member.profile?.email}
+                          {member.profile?.full_name
+                            || `${member.first_name || ''} ${member.last_name || ''}`.trim()
+                            || member.profile?.email
+                            || member.invitation_email
+                            || 'Pending'}
                         </div>
                         <div className="text-sm text-gray-500">
                           {member.job_title || 'No title'}
@@ -536,7 +546,7 @@ function EditMemberModal({ member, onClose, onSuccess, departments }) {
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
         <div className="px-6 py-4 border-b">
           <h2 className="text-lg font-semibold">Edit Member</h2>
-          <p className="text-sm text-gray-500">{member.profile?.full_name || member.profile?.email}</p>
+          <p className="text-sm text-gray-500">{member.profile?.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.profile?.email || member.invitation_email}</p>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (

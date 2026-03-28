@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [teamMembers, setTeamMembers] = useState([])
   const [checklist, setChecklist] = useState(null)
+  const [nepalHolidays, setNepalHolidays] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -157,16 +158,18 @@ export default function Dashboard() {
         setLoading(true)
         setError(null)
 
-        // Fetch stats, team data, and checklist in parallel
-        const [statsData, teamData, checklistData] = await Promise.allSettled([
+        // Fetch stats, team data, checklist, and Nepal holidays in parallel
+        const [statsData, teamData, checklistData, holidaysData] = await Promise.allSettled([
           dashboardService.getEmployerStats(),
           dashboardService.getTeamOverview(5),
-          onboardingService.getChecklist()
+          onboardingService.getChecklist(),
+          dashboardService.getNepalPublicHolidays(8)
         ])
 
         if (statsData.status === 'fulfilled') setStats(statsData.value)
         if (teamData.status === 'fulfilled') setTeamMembers(teamData.value)
         if (checklistData.status === 'fulfilled') setChecklist(checklistData.value)
+        if (holidaysData.status === 'fulfilled') setNepalHolidays(holidaysData.value || [])
       } catch (err) {
         console.error('Dashboard fetch error:', err)
         setError(err.message || 'Failed to load dashboard data')
@@ -553,6 +556,51 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Nepal Public Holidays */}
+          <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Holidays in Nepal</h2>
+              <span className="material-icons-outlined text-subtext-light dark:text-subtext-dark">event</span>
+            </div>
+            {nepalHolidays.length > 0 ? (
+              <div className="space-y-3">
+                {nepalHolidays.map((holiday) => {
+                  const hDate = new Date(holiday.rawDate)
+                  const isThisWeek = (hDate - new Date()) < 7 * 86400000 && (hDate - new Date()) >= 0
+                  return (
+                    <div key={holiday.id} className={`flex items-center gap-3 p-2.5 rounded-lg ${isThisWeek ? 'bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800' : ''}`}>
+                      <div className="flex-shrink-0 w-11 h-11 bg-red-50 dark:bg-red-900/20 rounded-lg flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-semibold text-red-600 dark:text-red-400 uppercase leading-none">
+                          {hDate.toLocaleDateString('en-US', { month: 'short' })}
+                        </span>
+                        <span className="text-sm font-bold text-red-700 dark:text-red-300 leading-tight">
+                          {hDate.getDate()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-light dark:text-text-dark truncate">{holiday.name}</p>
+                        {holiday.nameNe && (
+                          <p className="text-xs text-subtext-light dark:text-subtext-dark truncate">{holiday.nameNe}</p>
+                        )}
+                      </div>
+                      <span className="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                        Paid
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-subtext-light dark:text-subtext-dark text-center py-4">No upcoming holidays</p>
+            )}
+            <Link
+              to="/holidays"
+              className="w-full mt-4 py-2 border border-border-light dark:border-border-dark text-subtext-light dark:text-subtext-dark rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition block text-center"
+            >
+              View All Holidays
+            </Link>
           </div>
         </div>
       </div>

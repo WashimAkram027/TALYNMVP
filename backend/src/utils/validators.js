@@ -79,6 +79,8 @@ export const updateProfileSchema = z.object({
 // Member schemas
 export const inviteMemberSchema = z.object({
   email: z.string().email('Invalid email address'),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
   jobTitle: z.string().optional(),
   department: z.string().optional(),
   memberRole: z.enum(['admin', 'manager', 'employee', 'contractor']).optional().default('employee'),
@@ -421,6 +423,35 @@ export const employeeBankDetailsSchema = z.object({
   currency: z.string().optional().default('NPR')
 })
 
+// Employee onboarding step-specific schemas
+export const employeePersonalInfoSchema = z.object({
+  dateOfBirth: z.string().min(1, 'Date of birth is required'),
+  phone: z.string().min(1, 'Phone number is required'),
+  nationality: z.string().min(1, 'Nationality is required'),
+  street: z.string().min(1, 'Street address is required'),
+  city: z.string().min(1, 'City is required'),
+  state: z.string().optional(),
+  country: z.string().optional().default('Nepal')
+})
+
+export const employeeEmergencyContactSchema = z.object({
+  contactName: z.string().min(1, 'Contact name is required'),
+  contactPhone: z.string().min(1, 'Contact phone is required'),
+  relationship: z.string().min(1, 'Relationship is required')
+})
+
+export const employeeTaxInfoSchema = z.object({
+  panNumber: z.string().min(1, 'PAN number is required'),
+  ssfNumber: z.string().optional()
+})
+
+export const employeeDocumentUploadSchema = z.object({
+  docType: z.enum(['national_id', 'passport', 'citizenship']),
+  fileBase64: z.string().min(1, 'File data is required'),
+  fileName: z.string().min(1, 'File name is required'),
+  fileType: z.string().min(1, 'File type is required')
+})
+
 // Payment schemas
 export const createSetupIntentSchema = z.object({
   billingEmail: z.string().email().optional()
@@ -429,8 +460,8 @@ export const createSetupIntentSchema = z.object({
 // EOR Quote schemas
 export const generateQuoteSchema = z.object({
   email: z.string().email('Invalid email address'),
-  firstName: z.string().nullable().optional(),
-  lastName: z.string().nullable().optional(),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
   jobTitle: z.string().optional(),
   department: z.string().optional(),
   employmentType: z.enum(['full_time', 'part_time', 'contract', 'freelance']).optional().default('full_time'),

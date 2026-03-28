@@ -37,7 +37,7 @@ export default function EmployeeLogin() {
     const result = await login(email, password, 'candidate')
 
     if (result.success) {
-      navigate('/dashboard-employee', { replace: true })
+      navigate('/employee/overview', { replace: true })
     } else {
       if (result.error === 'EMAIL_NOT_VERIFIED') {
         setUnverifiedEmail(email)

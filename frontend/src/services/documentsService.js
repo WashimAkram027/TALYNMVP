@@ -33,6 +33,14 @@ export const documentsService = {
   },
 
   /**
+   * Get documents uploaded by the current user (works without org membership)
+   */
+  async getMyDocuments() {
+    const response = await api.get('/documents/my')
+    return response.data
+  },
+
+  /**
    * Get a single document by ID
    * @param {string} documentId - Document UUID
    */

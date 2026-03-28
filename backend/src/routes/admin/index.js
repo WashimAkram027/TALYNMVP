@@ -11,6 +11,7 @@ import adminMembersRoutes from './members.routes.js'
 import adminEorConfigRoutes from './eorConfig.routes.js'
 import adminAuditLogRoutes from './auditLog.routes.js'
 import adminInvoicesRoutes from './invoices.routes.js'
+import adminPublicHolidaysRoutes from './publicHolidays.routes.js'
 
 const router = Router()
 
@@ -27,5 +28,6 @@ router.use('/members', adminMembersRoutes)
 router.use('/eor-config', adminEorConfigRoutes)
 router.use('/audit-log', adminAuditLogRoutes)
 router.use('/invoices', adminInvoicesRoutes)
+router.use('/public-holidays', adminPublicHolidaysRoutes)
 
 export default router

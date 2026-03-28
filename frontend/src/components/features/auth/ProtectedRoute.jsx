@@ -47,13 +47,13 @@ export default function ProtectedRoute({ children, allowedRoles = [], requireOnb
     }
 
     if (!requireOnboarding && onboardingComplete) {
-      return <Navigate to="/dashboard-employee" replace />
+      return <Navigate to="/employee/overview" replace />
     }
   }
 
   // Role-based access control
   if (allowedRoles.length > 0 && profile?.role && !allowedRoles.includes(profile.role)) {
-    const redirectPath = profile.role === 'employer' ? '/dashboard' : '/dashboard-employee'
+    const redirectPath = profile.role === 'employer' ? '/dashboard' : '/employee/overview'
     return <Navigate to={redirectPath} replace />
   }
 

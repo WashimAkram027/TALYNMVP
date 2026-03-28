@@ -30,6 +30,21 @@ export const paymentsController = {
   },
 
   /**
+   * POST /api/payments/confirm-setup
+   * Synchronously confirms a SetupIntent and activates the payment method
+   */
+  async confirmSetup(req, res, next) {
+    try {
+      const orgId = req.user.organizationId
+      const { setupIntentId } = req.body
+      const method = await paymentsService.confirmSetupIntent(orgId, setupIntentId)
+      return successResponse(res, method, 'Payment method activated')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
    * GET /api/payments/methods
    * Returns all payment methods for the org
    */

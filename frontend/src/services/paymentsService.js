@@ -20,6 +20,14 @@ export const paymentsService = {
   },
 
   /**
+   * POST /payments/confirm-setup - Confirm SetupIntent and activate payment method
+   */
+  async confirmSetup(setupIntentId) {
+    const response = await api.post('/payments/confirm-setup', { setupIntentId })
+    return response.data
+  },
+
+  /**
    * GET /payments/methods - List all payment methods
    */
   async getPaymentMethods() {

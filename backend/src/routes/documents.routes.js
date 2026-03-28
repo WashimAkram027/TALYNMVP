@@ -30,8 +30,16 @@ const upload = multer({
   }
 })
 
-// All document routes require authentication and organization membership
+// Authentication required for all routes
 router.use(authenticate)
+
+/**
+ * GET /api/documents/my
+ * Get documents uploaded by the current user (works without org membership)
+ */
+router.get('/my', documentsController.getMyDocuments)
+
+// Remaining routes require organization membership
 router.use(requireOrganization)
 
 /**

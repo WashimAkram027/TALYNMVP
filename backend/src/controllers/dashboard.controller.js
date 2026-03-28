@@ -86,6 +86,25 @@ export const dashboardController = {
   },
 
   /**
+   * GET /api/dashboard/nepal-holidays
+   * Get upcoming Nepal public holidays (MOHA gazette)
+   */
+  async getNepalPublicHolidays(req, res, next) {
+    try {
+      const organizationId = req.user.organizationId
+      const limit = parseInt(req.query.limit) || 10
+      const fiscalYear = req.query.fiscalYear || null
+
+      if (!organizationId) return successResponse(res, [])
+
+      const holidays = await dashboardService.getNepalPublicHolidays(organizationId, limit, fiscalYear)
+      return successResponse(res, holidays)
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
    * GET /api/dashboard/announcements
    * Get recent announcements
    */

@@ -8,7 +8,11 @@ import {
   orgProfileEnrichmentSchema,
   entityDocumentUploadSchema,
   employeeAdvanceStepSchema,
-  employeeBankDetailsSchema
+  employeeBankDetailsSchema,
+  employeePersonalInfoSchema,
+  employeeEmergencyContactSchema,
+  employeeTaxInfoSchema,
+  employeeDocumentUploadSchema
 } from '../utils/validators.js'
 
 const router = Router()
@@ -29,6 +33,11 @@ router.post('/employer/submit-entity', requireEmployer, onboardingController.sub
 // === Employee routes ===
 router.get('/employee/status', requireCandidate, onboardingController.getEmployeeOnboardingStatus)
 router.post('/employee/advance-step', requireCandidate, validate(employeeAdvanceStepSchema), onboardingController.advanceEmployeeStep)
+router.post('/employee/personal-info', requireCandidate, validate(employeePersonalInfoSchema), onboardingController.submitPersonalInfo)
+router.post('/employee/emergency-contact', requireCandidate, validate(employeeEmergencyContactSchema), onboardingController.submitEmergencyContact)
+router.post('/employee/tax-info', requireCandidate, validate(employeeTaxInfoSchema), onboardingController.submitTaxInfo)
+router.post('/employee/document', requireCandidate, validate(employeeDocumentUploadSchema), onboardingController.uploadEmployeeDocument)
+router.post('/employee/complete-documents', requireCandidate, onboardingController.completeDocumentStep)
 router.post('/employee/bank-details', requireCandidate, validate(employeeBankDetailsSchema), onboardingController.submitEmployeeBankDetails)
 
 export default router

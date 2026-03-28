@@ -344,9 +344,9 @@ export default function Payroll() {
                                 <tr>
                                   <th className="px-4 py-2">Employee</th>
                                   <th className="px-4 py-2">Base Salary</th>
-                                  <th className="px-4 py-2">Bonus</th>
+                                  <th className="px-4 py-2">Days</th>
+                                  <th className="px-4 py-2">Leave</th>
                                   <th className="px-4 py-2">Deductions</th>
-                                  <th className="px-4 py-2">Tax</th>
                                   <th className="px-4 py-2">Net Pay</th>
                                 </tr>
                               </thead>
@@ -354,12 +354,24 @@ export default function Payroll() {
                                 {expandedRunData.items.map(item => (
                                   <tr key={item.id}>
                                     <td className="px-4 py-2 text-text-light dark:text-text-dark">
-                                      {item.member?.profile?.full_name || item.member_name || item.member_id}
+                                      {item.member?.profile?.full_name || item.member?.first_name ? `${item.member.first_name || ''} ${item.member.last_name || ''}`.trim() : item.member_name || item.member_id}
                                     </td>
                                     <td className="px-4 py-2 text-text-light dark:text-text-dark">{formatCurrency(item.base_salary)}</td>
-                                    <td className="px-4 py-2 text-text-light dark:text-text-dark">{formatCurrency(item.bonus)}</td>
+                                    <td className="px-4 py-2 text-text-light dark:text-text-dark">
+                                      {item.payable_days != null ? (
+                                        <span>{item.payable_days}/{item.calendar_days || 30}</span>
+                                      ) : '—'}
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      {(item.paid_leave_days > 0 || item.unpaid_leave_days > 0) ? (
+                                        <div>
+                                          {item.paid_leave_days > 0 && <span className="text-green-600">{item.paid_leave_days}d paid</span>}
+                                          {item.paid_leave_days > 0 && item.unpaid_leave_days > 0 && <span className="text-subtext-light"> / </span>}
+                                          {item.unpaid_leave_days > 0 && <span className="text-red-500">{item.unpaid_leave_days}d unpaid</span>}
+                                        </div>
+                                      ) : <span className="text-subtext-light">—</span>}
+                                    </td>
                                     <td className="px-4 py-2 text-text-light dark:text-text-dark">{formatCurrency(item.deductions)}</td>
-                                    <td className="px-4 py-2 text-text-light dark:text-text-dark">{formatCurrency(item.tax)}</td>
                                     <td className="px-4 py-2 text-text-light dark:text-text-dark font-medium">{formatCurrency(item.net_pay)}</td>
                                   </tr>
                                 ))}

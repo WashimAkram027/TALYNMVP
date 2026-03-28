@@ -5,6 +5,34 @@ import { BadRequestError, NotFoundError } from '../utils/errors.js'
 
 export const quoteService = {
   /**
+   * Delete (cancel) a draft quote. Only draft quotes can be deleted.
+   */
+  async deleteQuote(quoteId, orgId) {
+    const { data: quote, error: findError } = await supabase
+      .from('eor_quotes')
+      .select('id, status')
+      .eq('id', quoteId)
+      .eq('organization_id', orgId)
+      .single()
+
+    if (findError || !quote) {
+      throw new NotFoundError('Quote not found')
+    }
+
+    if (quote.status !== 'draft') {
+      throw new BadRequestError(`Only draft quotes can be deleted (current status: ${quote.status})`)
+    }
+
+    const { error: deleteError } = await supabase
+      .from('eor_quotes')
+      .delete()
+      .eq('id', quoteId)
+
+    if (deleteError) throw deleteError
+    return { success: true }
+  },
+
+  /**
    * Get active cost config for a country
    */
   async getCostConfig(countryCode = 'NPL') {

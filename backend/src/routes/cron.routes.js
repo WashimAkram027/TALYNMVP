@@ -7,5 +7,7 @@ const router = Router()
 router.post('/generate-invoices', cronController.generateMonthlyInvoices)
 router.post('/collect-payments', cronController.collectApprovedPayments)
 router.post('/mark-overdue', cronController.markOverdueInvoices)
+router.post('/leave-accrual', cronController.runLeaveAccrual)
+router.post('/fiscal-year-rollover', cronController.runFiscalYearRollover)
 
 export default router

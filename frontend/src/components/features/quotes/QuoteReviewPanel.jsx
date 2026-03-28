@@ -12,7 +12,7 @@ function formatRate(rate) {
   return `${(parseFloat(rate) * 100).toFixed(0)}%`
 }
 
-export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPdf, loading }) {
+export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPdf, onSaveAndExit, loading }) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState(null)
 
@@ -144,14 +144,28 @@ export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPd
 
       {/* Actions */}
       <div className="flex items-center justify-between pt-2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
-        >
-          <span className="material-icons-outlined text-base">arrow_back</span>
-          Back to Edit
-        </button>
+        <div className="flex items-center gap-2">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+            >
+              <span className="material-icons-outlined text-base">arrow_back</span>
+              Edit
+            </button>
+          )}
+          {onSaveAndExit && (
+            <button
+              type="button"
+              onClick={onSaveAndExit}
+              className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+            >
+              <span className="material-icons-outlined text-base">save</span>
+              Save & Exit
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           {/* PDF Download */}

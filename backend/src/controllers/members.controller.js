@@ -97,6 +97,8 @@ export const membersController = {
     try {
       const {
         email,
+        firstName,
+        lastName,
         memberRole,
         jobTitle,
         department,
@@ -119,6 +121,8 @@ export const membersController = {
         req.user.id,
         {
           email,
+          firstName,
+          lastName,
           memberRole,
           jobTitle,
           department,

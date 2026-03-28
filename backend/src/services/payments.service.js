@@ -176,6 +176,49 @@ export const paymentsService = {
   },
 
   /**
+   * Synchronously confirm a SetupIntent after the frontend flow completes.
+   * Retrieves the SetupIntent from Stripe API to verify it succeeded,
+   * then activates the payment method in the DB immediately — avoiding
+   * the race condition where the webhook hasn't arrived yet.
+   */
+  async confirmSetupIntent(orgId, setupIntentId) {
+    if (!stripe) throw new BadRequestError('Stripe is not configured')
+    if (!setupIntentId) throw new BadRequestError('Setup intent ID is required')
+
+    // Retrieve the SetupIntent from Stripe to verify status
+    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
+
+    // Verify it belongs to this org by checking our DB
+    const { data: pmRow, error: findError } = await supabase
+      .from('payment_methods')
+      .select('id, organization_id')
+      .eq('stripe_setup_intent_id', setupIntentId)
+      .single()
+
+    if (findError || !pmRow) {
+      throw new BadRequestError('Setup intent not found for this organization')
+    }
+
+    if (pmRow.organization_id !== orgId) {
+      throw new BadRequestError('Setup intent does not belong to this organization')
+    }
+
+    if (setupIntent.status !== 'succeeded') {
+      throw new BadRequestError(`Setup intent has not succeeded (status: ${setupIntent.status})`)
+    }
+
+    // Extract payment method ID and activate via the same logic the webhook uses
+    const pmId = typeof setupIntent.payment_method === 'string'
+      ? setupIntent.payment_method
+      : setupIntent.payment_method?.id
+
+    await this.handleSetupIntentSucceeded(setupIntentId, pmId)
+
+    // Return the now-active payment method
+    return this.getActivePaymentMethod(orgId)
+  },
+
+  /**
    * Handle setup_intent.succeeded webhook.
    * Retrieves bank details from Stripe API (not from the webhook payload,
    * which may not contain them), then updates the payment_methods row.
