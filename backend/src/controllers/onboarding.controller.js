@@ -3,6 +3,31 @@ import { successResponse } from '../utils/response.js'
 
 export const onboardingController = {
   /**
+   * GET /api/onboarding/employee/quote-and-job
+   */
+  async getEmployeeQuoteAndJob(req, res, next) {
+    try {
+      const result = await onboardingService.getEmployeeQuoteAndJob(req.user.id)
+      return successResponse(res, result)
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * POST /api/onboarding/employee/verify-quote
+   */
+  async verifyEmployeeQuote(req, res, next) {
+    try {
+      const { verified, discrepancyNote } = req.body
+      const result = await onboardingService.verifyEmployeeQuote(req.user.id, verified, discrepancyNote)
+      return successResponse(res, result, verified ? 'Employment details verified' : 'Discrepancy flagged')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
    * GET /api/onboarding/employee/status
    */
   async getEmployeeOnboardingStatus(req, res, next) {
@@ -93,6 +118,19 @@ export const onboardingController = {
     try {
       const result = await onboardingService.completeEmployeeDocumentStep(req.user.id)
       return successResponse(res, result, 'Document step completed')
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  /**
+   * GET /api/onboarding/employee/tasks
+   * Get pending onboarding tasks (documents, banking) for dashboard checklist
+   */
+  async getEmployeeOnboardingTasks(req, res, next) {
+    try {
+      const result = await onboardingService.getEmployeeOnboardingTasks(req.user.id)
+      return successResponse(res, result)
     } catch (error) {
       next(error)
     }

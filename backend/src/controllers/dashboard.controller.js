@@ -17,10 +17,11 @@ export const dashboardController = {
       // Return empty stats for new organizations without errors
       if (!organizationId) {
         return successResponse(res, {
-          members: { total: 0, active: 0, invited: 0, offboarded: 0 },
+          members: { total: 0, active: 0, invited: 0, onboarding: 0 },
           payroll: { upcomingAmount: 0, currency: 'USD', dueInDays: 0 },
           pipeline: { total: 0, interview: 0, assessment: 0, offerSent: 0 },
           compliance: { score: 100, alerts: [] },
+          notifications: [],
           isNewOrganization: true
         })
       }

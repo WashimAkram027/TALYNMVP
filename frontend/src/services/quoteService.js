@@ -22,8 +22,10 @@ export const quoteService = {
     return response.data
   },
 
-  async acceptAndInvite(quoteId) {
-    const response = await api.post(`/quotes/${quoteId}/accept-and-invite`)
+  async acceptAndInvite(quoteId, { termsAcceptedAt } = {}) {
+    const response = await api.post(`/quotes/${quoteId}/accept-and-invite`, {
+      termsAcceptedAt: termsAcceptedAt || null
+    })
     return response.data
   },
 

@@ -194,6 +194,93 @@ export const adminUsersService = {
   },
 
   /**
+   * Fully delete a user and all associated records
+   * Only super_admin can perform this action
+   */
+  async deleteUser(userId, adminId, ip) {
+    // 1. Fetch the user profile
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('id, email, first_name, last_name, role, organization_id')
+      .eq('id', userId)
+      .single()
+
+    if (fetchError || !profile) throw new NotFoundError('User not found')
+
+    // 2. Check if user owns an organization (fk_organizations_owner is RESTRICT)
+    const { data: ownedOrgs } = await supabase
+      .from('organizations')
+      .select('id, name')
+      .eq('owner_id', userId)
+
+    if (ownedOrgs && ownedOrgs.length > 0) {
+      throw new BadRequestError(
+        `Cannot delete user: they own organization "${ownedOrgs[0].name}". Transfer organization ownership first.`
+      )
+    }
+
+    // 3. Delete organization_members linked by invitation_email (non-FK, would be orphaned)
+    const { data: emailMembers } = await supabase
+      .from('organization_members')
+      .select('id')
+      .eq('invitation_email', profile.email)
+      .is('profile_id', null)
+
+    let emailMembersDeleted = 0
+    if (emailMembers && emailMembers.length > 0) {
+      const { error: emailDeleteError } = await supabase
+        .from('organization_members')
+        .delete()
+        .eq('invitation_email', profile.email)
+        .is('profile_id', null)
+
+      if (emailDeleteError) throw emailDeleteError
+      emailMembersDeleted = emailMembers.length
+    }
+
+    // 4. Count FK-linked organization_members (these cascade via profile_id FK)
+    const { data: fkMembers } = await supabase
+      .from('organization_members')
+      .select('id')
+      .eq('profile_id', userId)
+
+    const fkMembersCount = fkMembers?.length || 0
+
+    // 5. Delete the profile row (cascades to auth.users via trigger, and to FK-linked records)
+    const { error: deleteError } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', userId)
+
+    if (deleteError) throw deleteError
+
+    // 6. Log the deletion to audit trail
+    const deletedSummary = {
+      email: profile.email,
+      name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+      role: profile.role,
+      fkMembershipsDeleted: fkMembersCount,
+      emailMembershipsDeleted: emailMembersDeleted
+    }
+
+    await auditLogService.log(adminId, 'user_deleted', 'profile', userId, deletedSummary, ip)
+
+    return {
+      deletedUser: {
+        id: userId,
+        email: profile.email,
+        name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
+      },
+      deletedRecords: {
+        profile: 1,
+        authUser: 1,
+        membershipsByProfileId: fkMembersCount,
+        membershipsByEmail: emailMembersDeleted
+      }
+    }
+  },
+
+  /**
    * Update a user's profile fields
    */
   async updateUser(userId, updates, adminId, ip) {

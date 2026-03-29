@@ -11,6 +11,8 @@ export const adminDashboardService = {
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
 
     // Run all queries in parallel
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
     const [
       orgCount,
       pendingVerifications,
@@ -19,7 +21,10 @@ export const adminDashboardService = {
       payrollVolumeMtd,
       failedWebhooks,
       totalUsers,
-      emailsSentToday
+      emailsSentToday,
+      pendingOnboardings,
+      invitedMembers,
+      staleInvitations
     ] = await Promise.all([
       // Total organizations
       supabase.from('organizations').select('id', { count: 'exact', head: true }),
@@ -36,7 +41,13 @@ export const adminDashboardService = {
       // Total users (profiles count)
       supabase.from('profiles').select('id', { count: 'exact', head: true }),
       // Emails sent today (table may not exist)
-      (async () => { try { return await supabase.from('email_logs').select('id', { count: 'exact', head: true }).gte('created_at', todayStart) } catch { return { count: 0 } } })()
+      (async () => { try { return await supabase.from('email_logs').select('id', { count: 'exact', head: true }).gte('created_at', todayStart) } catch { return { count: 0 } } })(),
+      // Pending onboardings (invited + onboarding)
+      supabase.from('organization_members').select('id', { count: 'exact', head: true }).in('status', ['invited', 'onboarding']),
+      // Invited members only
+      supabase.from('organization_members').select('id', { count: 'exact', head: true }).eq('status', 'invited'),
+      // Stale invitations (invited > 7 days ago)
+      supabase.from('organization_members').select('id', { count: 'exact', head: true }).eq('status', 'invited').lt('invited_at', sevenDaysAgo)
     ])
 
     const totalVolume = (payrollVolumeMtd.data || []).reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0)
@@ -49,7 +60,10 @@ export const adminDashboardService = {
       payrollVolumeMtd: totalVolume,
       failedWebhooks: failedWebhooks.count || 0,
       totalUsers: totalUsers.count || 0,
-      emailsSentToday: emailsSentToday.count || 0
+      emailsSentToday: emailsSentToday.count || 0,
+      pendingOnboardings: pendingOnboardings.count || 0,
+      invitedMembers: invitedMembers.count || 0,
+      staleInvitations: staleInvitations.count || 0
     }
   },
 
@@ -126,6 +140,32 @@ export const adminDashboardService = {
       // payment_methods table may not have expected columns
     }
 
+    // Stale invitations (invited > 7 days ago, not accepted)
+    const staleInviteThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: staleInvites } = await supabase
+      .from('organization_members')
+      .select('id, first_name, last_name, invitation_email, invited_at, organization_id, organizations!organization_members_organization_id_fkey(name)')
+      .eq('status', 'invited')
+      .lt('invited_at', staleInviteThreshold)
+      .order('invited_at', { ascending: true })
+      .limit(10)
+
+    if (staleInvites?.length) {
+      staleInvites.forEach(member => {
+        const memberName = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.invitation_email || 'Unknown'
+        const orgName = member.organizations?.name || 'Unknown org'
+        const daysAgo = Math.floor((Date.now() - new Date(member.invited_at).getTime()) / (1000 * 60 * 60 * 24))
+        alerts.push({
+          type: 'stale_invitation',
+          severity: 'warning',
+          title: `Stale invitation: ${memberName}`,
+          description: `Invited to ${orgName} ${daysAgo} days ago — no response`,
+          link: `/members/${member.id}`,
+          createdAt: member.invited_at
+        })
+      })
+    }
+
     // Expiring quotes (eor_quotes expiring within 7 days)
     try {
       const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -157,6 +197,42 @@ export const adminDashboardService = {
     return alerts.sort((a, b) => {
       const severityOrder = { danger: 0, warning: 1, info: 2 }
       return (severityOrder[a.severity] || 2) - (severityOrder[b.severity] || 2)
+    })
+  },
+
+  /**
+   * Get members with pending onboarding (invited or onboarding status)
+   */
+  async getPendingOnboardings() {
+    const { data, error } = await supabase
+      .from('organization_members')
+      .select('id, first_name, last_name, invitation_email, status, invited_at, profile_id, organization_id, organizations!organization_members_organization_id_fkey(name), profiles!organization_members_profile_id_fkey(email, first_name, last_name)')
+      .in('status', ['invited', 'onboarding'])
+      .order('invited_at', { ascending: true })
+      .limit(50)
+
+    if (error) throw error
+
+    return (data || []).map(member => {
+      const profileEmail = member.profiles?.email
+      const profileName = [member.profiles?.first_name, member.profiles?.last_name].filter(Boolean).join(' ')
+      const memberName = [member.first_name, member.last_name].filter(Boolean).join(' ') || profileName || null
+      const email = member.invitation_email || profileEmail || null
+      const orgName = member.organizations?.name || null
+      const daysSinceInvited = member.invited_at
+        ? Math.floor((Date.now() - new Date(member.invited_at).getTime()) / (1000 * 60 * 60 * 24))
+        : null
+
+      return {
+        id: member.id,
+        name: memberName,
+        email,
+        organizationName: orgName,
+        organizationId: member.organization_id,
+        status: member.status,
+        invitedAt: member.invited_at,
+        daysSinceInvited
+      }
     })
   }
 }

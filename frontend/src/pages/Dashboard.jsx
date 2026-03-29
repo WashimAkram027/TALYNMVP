@@ -26,6 +26,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { profile, organization } = useAuthStore()
   const [stats, setStats] = useState(null)
+  const [notifications, setNotifications] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [checklist, setChecklist] = useState(null)
   const [nepalHolidays, setNepalHolidays] = useState([])
@@ -77,6 +78,7 @@ export default function Dashboard() {
         dashboardService.getTeamOverview(5)
       ])
       setStats(statsData)
+      setNotifications(statsData?.notifications || [])
       setTeamMembers(teamData)
     } catch (err) {
       console.error('Refresh error:', err)
@@ -106,22 +108,6 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Failed to activate member:', err)
       alert(err.message || 'Failed to activate member')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const handleOffboardMember = async (member) => {
-    if (!window.confirm(`Offboard ${member.name}? This will remove their access to the organization.`)) return
-
-    try {
-      setActionLoading(true)
-      await membersService.offboardMember(member.id)
-      setActiveActionMenu(null)
-      await refreshDashboard()
-    } catch (err) {
-      console.error('Failed to offboard member:', err)
-      alert(err.message || 'Failed to offboard member')
     } finally {
       setActionLoading(false)
     }
@@ -166,7 +152,10 @@ export default function Dashboard() {
           dashboardService.getNepalPublicHolidays(8)
         ])
 
-        if (statsData.status === 'fulfilled') setStats(statsData.value)
+        if (statsData.status === 'fulfilled') {
+          setStats(statsData.value)
+          setNotifications(statsData.value?.notifications || [])
+        }
         if (teamData.status === 'fulfilled') setTeamMembers(teamData.value)
         if (checklistData.status === 'fulfilled') setChecklist(checklistData.value)
         if (holidaysData.status === 'fulfilled') setNepalHolidays(holidaysData.value || [])
@@ -326,6 +315,38 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Notifications / Action Items */}
+      {notifications.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 mb-8">
+          <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+            <span className="material-icons-outlined text-primary">notifications</span>
+            Action Items
+            <span className="bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">{notifications.length}</span>
+          </h3>
+          <div className="space-y-3">
+            {notifications.map((notif, i) => {
+              const iconColor = notif.type === 'offer_review'
+                ? 'text-amber-500'
+                : notif.type === 'time_off'
+                ? 'text-blue-500'
+                : notif.type === 'payroll'
+                ? 'text-green-500'
+                : 'text-gray-500'
+              return (
+                <div key={i} onClick={() => navigate(notif.action)} className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
+                  <span className={`material-icons-outlined ${iconColor}`}>{notif.icon}</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{notif.title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{notif.description}</p>
+                  </div>
+                  <span className="material-icons-outlined text-gray-400 text-sm">chevron_right</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Team Overview Table */}
@@ -415,32 +436,23 @@ export default function Dashboard() {
 
                             <div className="border-t border-border-light dark:border-border-dark my-1"></div>
 
-                            {(member.status?.toLowerCase() === 'invited' || member.status?.toLowerCase() === 'in_review') && (
-                              <>
-                                <button
-                                  onClick={() => handleActivateMember(member)}
-                                  className="w-full px-4 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
-                                >
-                                  <span className="material-icons-outlined text-base">check_circle</span>
-                                  Activate
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteMember(member)}
-                                  className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
-                                >
-                                  <span className="material-icons-outlined text-base">delete</span>
-                                  Delete Invitation
-                                </button>
-                              </>
+                            {(member.status?.toLowerCase() === 'invited' || member.status?.toLowerCase() === 'onboarding') && (
+                              <button
+                                onClick={() => handleActivateMember(member)}
+                                className="w-full px-4 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                              >
+                                <span className="material-icons-outlined text-base">check_circle</span>
+                                Activate
+                              </button>
                             )}
 
-                            {member.status?.toLowerCase() === 'active' && (
+                            {member.status?.toLowerCase() === 'invited' && (
                               <button
-                                onClick={() => handleOffboardMember(member)}
+                                onClick={() => handleDeleteMember(member)}
                                 className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
                               >
-                                <span className="material-icons-outlined text-base">person_remove</span>
-                                Offboard
+                                <span className="material-icons-outlined text-base">delete</span>
+                                Delete Invitation
                               </button>
                             )}
                           </div>

@@ -67,8 +67,8 @@ export default function EmployeePayroll() {
     <div className="p-6">
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Payroll</h1>
-        <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">View your compensation and payslip history</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Payslips</h1>
+        <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">View your compensation and pay history</p>
       </header>
 
       {/* Compensation Summary */}
@@ -100,7 +100,7 @@ export default function EmployeePayroll() {
 
       {/* Payslips Table */}
       <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl shadow-sm border border-border-light dark:border-border-dark">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Recent Payslips</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Pay History</h3>
         {payslips.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">

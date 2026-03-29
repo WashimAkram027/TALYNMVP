@@ -1,6 +1,7 @@
 import { env } from '../config/env.js'
 import { invoiceGenerationService } from '../services/invoiceGeneration.service.js'
 import { leaveAccrualService } from '../services/leaveAccrual.service.js'
+import { leaveReconciliationService } from '../services/leaveReconciliation.service.js'
 import { emailService } from '../services/email.service.js'
 import { supabase } from '../config/supabase.js'
 
@@ -225,6 +226,26 @@ export const cronController = {
     } catch (error) {
       console.error('[Cron] Fiscal year rollover failed:', error)
       res.status(500).json({ error: 'Fiscal year rollover failed', message: error.message })
+    }
+  },
+
+  /**
+   * POST /api/cron/reconcile-leave
+   * Run on the 1st of each month (after billing month closes).
+   * Checks previous month's invoices for post-billing unpaid leave discrepancies
+   * and creates adjustment records for next month's billing.
+   */
+  async reconcileLeave(req, res) {
+    if (!validateCronSecret(req, res)) return
+
+    try {
+      console.log('[Cron] Starting post-billing leave reconciliation...')
+      const result = await leaveReconciliationService.reconcilePreviousMonth()
+      console.log('[Cron] Leave reconciliation result:', result)
+      res.json({ success: true, ...result })
+    } catch (error) {
+      console.error('[Cron] Leave reconciliation failed:', error)
+      res.status(500).json({ error: 'Leave reconciliation failed', message: error.message })
     }
   }
 }

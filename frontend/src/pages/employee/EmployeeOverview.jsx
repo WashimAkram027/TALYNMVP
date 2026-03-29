@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { dashboardService } from '../../services/dashboardService'
 import { useAuthStore } from '../../store/authStore'
 import PendingInvitationsBanner from '../../components/employee/PendingInvitationsBanner'
+import OnboardingTodoList from '../../components/employee/OnboardingTodoList'
 import EmptyState from '../../components/employee/EmptyState'
 
 export default function EmployeeOverview() {
@@ -12,6 +13,7 @@ export default function EmployeeOverview() {
   const [holidays, setHolidays] = useState([])
   const [nepalHolidays, setNepalHolidays] = useState([])
   const [announcements, setAnnouncements] = useState([])
+  const [pendingTasks, setPendingTasks] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -25,30 +27,35 @@ export default function EmployeeOverview() {
 
   const firstName = profile?.first_name || profile?.full_name?.split(' ')[0] || 'there'
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const [statsData, holidaysData, nepalData, announcementsData] = await Promise.all([
-          dashboardService.getEmployeeStats(),
-          dashboardService.getHolidays(6),
-          dashboardService.getNepalPublicHolidays(6),
-          dashboardService.getAnnouncements(3)
-        ])
-        setStats(statsData)
-        setHolidays(holidaysData)
-        setNepalHolidays(nepalData || [])
-        setAnnouncements(announcementsData)
-      } catch (err) {
-        console.error('Employee dashboard fetch error:', err)
-        setError(err.message || 'Failed to load dashboard data')
-      } finally {
-        setLoading(false)
-      }
+  const fetchData = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) setLoading(true)
+      setError(null)
+      const [statsData, holidaysData, nepalData, announcementsData] = await Promise.all([
+        dashboardService.getEmployeeStats(),
+        dashboardService.getHolidays(6),
+        dashboardService.getNepalPublicHolidays(6),
+        dashboardService.getAnnouncements(3)
+      ])
+      setStats(statsData)
+      setPendingTasks(statsData?.pendingOnboardingTasks || null)
+      setHolidays(holidaysData)
+      setNepalHolidays(nepalData || [])
+      setAnnouncements(announcementsData)
+    } catch (err) {
+      console.error('Employee dashboard fetch error:', err)
+      setError(err.message || 'Failed to load dashboard data')
+    } finally {
+      setLoading(false)
     }
-    fetchData()
   }, [])
+
+  // Refresh data without showing loading spinner (for task completion callbacks)
+  const refreshData = useCallback(() => fetchData(false), [fetchData])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   if (loading) {
     return (
@@ -93,6 +100,9 @@ export default function EmployeeOverview() {
 
       {/* Pending Invitations */}
       <PendingInvitationsBanner />
+
+      {/* Onboarding Todo Checklist */}
+      <OnboardingTodoList tasks={pendingTasks} onTaskComplete={refreshData} />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

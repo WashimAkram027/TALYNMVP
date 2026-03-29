@@ -101,12 +101,7 @@ export const updateMemberSchema = z.object({
   employmentType: z.enum(['full_time', 'part_time', 'contract', 'freelance']).optional(),
   salaryAmount: z.number().positive().optional(),
   salaryCurrency: z.string().optional(),
-  status: z.enum([
-    'invited', 'onboarding', 'onboarding_at_risk', 'onboarding_overdue',
-    'ready_to_start', 'active', 'offboarding', 'inactive',
-    'in_review', 'quote_requires_changes', 'no_active_contracts',
-    'offboarded'
-  ]).optional()
+  status: z.enum(['invited', 'onboarding', 'active']).optional()
 })
 
 // Payroll schemas
@@ -443,6 +438,11 @@ export const employeeEmergencyContactSchema = z.object({
 export const employeeTaxInfoSchema = z.object({
   panNumber: z.string().min(1, 'PAN number is required'),
   ssfNumber: z.string().optional()
+})
+
+export const employeeVerifyQuoteSchema = z.object({
+  verified: z.boolean(),
+  discrepancyNote: z.string().max(1000).optional()
 })
 
 export const employeeDocumentUploadSchema = z.object({

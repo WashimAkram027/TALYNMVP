@@ -54,16 +54,16 @@ router.put('/:id', requireEmployer, membersController.update)
 router.post('/:id/activate', requireEmployer, membersController.activate)
 
 /**
+ * POST /api/members/:id/reissue-quote
+ * Reissue the EOR quote for a member (employer only)
+ */
+router.post('/:id/reissue-quote', requireEmployer, membersController.reissueQuote)
+
+/**
  * POST /api/members/:id/resend-invitation
  * Resend an invitation (employer only)
  */
 router.post('/:id/resend-invitation', requireEmployer, membersController.resendInvite)
-
-/**
- * POST /api/members/:id/offboard
- * Offboard a member (employer only)
- */
-router.post('/:id/offboard', requireEmployer, membersController.offboard)
 
 /**
  * DELETE /api/members/:id

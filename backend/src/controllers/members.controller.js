@@ -1,4 +1,6 @@
 import { membersService } from '../services/members.service.js'
+import { quoteService } from '../services/quote.service.js'
+import { emailService } from '../services/email.service.js'
 import {
   successResponse,
   createdResponse,
@@ -219,36 +221,6 @@ export const membersController = {
   },
 
   /**
-   * POST /api/members/:id/offboard
-   * Offboard a member
-   */
-  async offboard(req, res) {
-    try {
-      const { id } = req.params
-
-      // Prevent self-offboarding
-      const member = await membersService.getById(id, req.user.organizationId)
-      if (member && member.profile_id === req.user.id) {
-        return badRequestResponse(res, 'Cannot offboard yourself')
-      }
-
-      const updatedMember = await membersService.offboard(id, req.user.organizationId)
-
-      if (!updatedMember) {
-        return notFoundResponse(res, 'Member not found')
-      }
-
-      return successResponse(res, updatedMember, 'Member offboarded successfully')
-    } catch (error) {
-      console.error('Offboard member error:', error)
-      if (error.code === 'PGRST116') {
-        return notFoundResponse(res, 'Member not found')
-      }
-      return errorResponse(res, 'Failed to offboard member', 500, error)
-    }
-  },
-
-  /**
    * DELETE /api/members/:id
    * Delete a member (only invited status)
    */
@@ -264,10 +236,57 @@ export const membersController = {
       if (error.message === 'Member not found') {
         return notFoundResponse(res, error.message)
       }
-      if (error.message.includes('Only invited members')) {
+      if (error.message.includes('Only invited')) {
         return badRequestResponse(res, error.message)
       }
       return errorResponse(res, 'Failed to delete member', 500, error)
+    }
+  },
+
+  /**
+   * POST /api/members/:id/reissue-quote
+   * Reissue the EOR quote for a member (employer only)
+   */
+  async reissueQuote(req, res) {
+    try {
+      const { id } = req.params
+      const orgId = req.user.organizationId
+      const userId = req.user.id
+      const { quoteId } = req.body || {}
+
+      const newQuote = await quoteService.reissueQuote(id, orgId, userId, quoteId)
+
+      // Send offer-updated email to the employee
+      try {
+        const member = await membersService.getById(id, orgId)
+        const employeeEmail = member.invitation_email || member.profile?.email
+        if (employeeEmail) {
+          const employerName = req.user.profile?.first_name ||
+            req.user.profile?.full_name || 'Your employer'
+          const orgName = req.user.organization?.name || 'your organization'
+
+          await emailService.sendOfferUpdatedEmail(
+            employeeEmail,
+            member.first_name,
+            employerName,
+            orgName,
+            member.job_title,
+            member.salary_amount,
+            member.salary_currency
+          )
+        }
+      } catch (emailErr) {
+        console.error('Failed to send offer updated email:', emailErr)
+        // Don't throw - quote was reissued, email just failed
+      }
+
+      return successResponse(res, newQuote, 'Quote reissued successfully')
+    } catch (error) {
+      console.error('Reissue quote error:', error)
+      if (error.message === 'Member not found' || error.name === 'NotFoundError') {
+        return notFoundResponse(res, 'Member not found')
+      }
+      return errorResponse(res, 'Failed to reissue quote', 500, error)
     }
   }
 }

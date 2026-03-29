@@ -12,9 +12,10 @@ function formatRate(rate) {
   return `${(parseFloat(rate) * 100).toFixed(0)}%`
 }
 
-export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPdf, onSaveAndExit, loading }) {
+export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPdf, onSaveAndExit, loading, acceptLabel }) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState(null)
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   if (!quote) return null
 
@@ -142,87 +143,126 @@ export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPd
         Quote valid until {validUntil}
       </p>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-2">
-          {onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
-            >
-              <span className="material-icons-outlined text-base">arrow_back</span>
-              Edit
-            </button>
-          )}
-          {onSaveAndExit && (
-            <button
-              type="button"
-              onClick={onSaveAndExit}
-              className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
-            >
-              <span className="material-icons-outlined text-base">save</span>
-              Save & Exit
-            </button>
-          )}
+      {/* Terms & Policies Acceptance — hidden in read-only mode */}
+      {(onAccept || onBack || onSaveAndExit || onDownloadPdf) && (
+        <div className="border border-border-light dark:border-border-dark rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <span className="text-sm text-text-light dark:text-text-dark leading-snug">
+              I have reviewed and accept the{' '}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a
+                href="/policies"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                Employment Policies
+              </a>
+            </span>
+          </label>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          {/* PDF Download */}
-          <button
-            type="button"
-            disabled={pdfLoading}
-            onClick={async () => {
-              if (!onDownloadPdf) return
-              setPdfLoading(true)
-              setPdfError(null)
-              try {
-                await onDownloadPdf()
-              } catch (err) {
-                setPdfError('Failed to generate PDF')
-                console.error('PDF download error:', err)
-              } finally {
-                setPdfLoading(false)
-              }
-            }}
-            className="px-3 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition flex items-center gap-1"
-          >
-            {pdfLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                Generating...
-              </>
-            ) : (
-              <>
-                <span className="material-icons-outlined text-base">picture_as_pdf</span>
-                PDF
-              </>
+      {/* Actions — hidden in read-only mode */}
+      {(onAccept || onBack || onSaveAndExit || onDownloadPdf) && (
+        <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+              >
+                <span className="material-icons-outlined text-base">arrow_back</span>
+                Edit
+              </button>
             )}
-          </button>
-          {pdfError && (
-            <span className="text-xs text-red-500">{pdfError}</span>
-          )}
+            {onSaveAndExit && (
+              <button
+                type="button"
+                onClick={onSaveAndExit}
+                className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+              >
+                <span className="material-icons-outlined text-base">save</span>
+                Save & Exit
+              </button>
+            )}
+          </div>
 
-          <button
-            type="button"
-            onClick={onAccept}
-            disabled={loading}
-            className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 transition flex items-center gap-1.5"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                Sending...
-              </>
-            ) : (
-              <>
-                Accept & Send Invite
-                <span className="material-icons-outlined text-base">arrow_forward</span>
-              </>
+          <div className="flex items-center gap-2">
+            {/* PDF Download */}
+            {onDownloadPdf && (
+              <button
+                type="button"
+                disabled={pdfLoading}
+                onClick={async () => {
+                  setPdfLoading(true)
+                  setPdfError(null)
+                  try {
+                    await onDownloadPdf()
+                  } catch (err) {
+                    setPdfError('Failed to generate PDF')
+                    console.error('PDF download error:', err)
+                  } finally {
+                    setPdfLoading(false)
+                  }
+                }}
+                className="px-3 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition flex items-center gap-1"
+              >
+                {pdfLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-icons-outlined text-base">picture_as_pdf</span>
+                    PDF
+                  </>
+                )}
+              </button>
             )}
-          </button>
+            {pdfError && (
+              <span className="text-xs text-red-500">{pdfError}</span>
+            )}
+
+            {onAccept && (
+              <button
+                type="button"
+                onClick={() => onAccept({ termsAcceptedAt: new Date().toISOString() })}
+                disabled={loading || !termsAccepted}
+                className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1.5"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    {acceptLabel || 'Accept & Send Invite'}
+                    <span className="material-icons-outlined text-base">arrow_forward</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

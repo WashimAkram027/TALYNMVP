@@ -117,26 +117,6 @@ export default function People() {
     }
   }
 
-  const handleOffboard = (memberId) => {
-    setConfirmModal({
-      title: 'Offboard Member',
-      message: 'Are you sure you want to offboard this member? They will lose access to the organization.',
-      onConfirm: async () => {
-        setConfirmModal(null)
-        try {
-          setActionLoading(true)
-          await membersService.offboardMember(memberId)
-          await fetchMembers()
-          await fetchStats()
-        } catch (err) {
-          alert(err.message || 'Failed to offboard member')
-        } finally {
-          setActionLoading(false)
-        }
-      }
-    })
-  }
-
   const handleDelete = (memberId) => {
     setConfirmModal({
       title: 'Remove Invitation',
@@ -216,12 +196,12 @@ export default function People() {
             <p className="text-2xl font-bold text-green-600">{stats.byStatus?.active || 0}</p>
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
-            <p className="text-sm text-gray-500">Invited</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.byStatus?.invited || 0}</p>
+            <p className="text-sm text-gray-500">Onboarding</p>
+            <p className="text-2xl font-bold text-blue-600">{stats.byStatus?.onboarding || 0}</p>
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
-            <p className="text-sm text-gray-500">Inactive</p>
-            <p className="text-2xl font-bold text-red-600">{(stats.byStatus?.inactive || 0) + (stats.byStatus?.offboarded || 0)}</p>
+            <p className="text-sm text-gray-500">Invited</p>
+            <p className="text-2xl font-bold text-yellow-600">{stats.byStatus?.invited || 0}</p>
           </div>
         </div>
       )}
@@ -342,7 +322,11 @@ export default function People() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {members.map((member) => (
-                <tr key={member.id} className="hover:bg-gray-50">
+                <tr
+                  key={member.id}
+                  onClick={() => navigate('/people-info?id=' + member.id)}
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
@@ -359,12 +343,21 @@ export default function People() {
                         )}
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
                           {member.profile?.full_name
                             || `${member.first_name || ''} ${member.last_name || ''}`.trim()
                             || member.profile?.email
                             || member.invitation_email
                             || 'Pending'}
+                          {member.quote_dispute_note && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); navigate('/people-info?id=' + member.id + '&action=review-changes') }}
+                              className="material-icons-outlined text-amber-500 text-base cursor-pointer hover:text-amber-600 transition-colors"
+                              title="Click to review change request"
+                            >
+                              flag
+                            </button>
+                          )}
                         </div>
                         <div className="text-sm text-gray-500">
                           {member.job_title || 'No title'}
@@ -386,32 +379,19 @@ export default function People() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex space-x-2">
-                      <button
-                        onClick={() => navigate(`/people-info?id=${member.id}`)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        View
-                      </button>
                       {profile?.role === 'employer' && (
                         <>
-                          {(member.status === 'invited' || member.status === 'in_review') && (
+                          {member.status === 'invited' && (
                             <>
                               <button
-                                onClick={() => handleResendInvite(member.id)}
+                                onClick={(e) => { e.stopPropagation(); handleResendInvite(member.id) }}
                                 disabled={actionLoading}
                                 className="text-blue-600 hover:text-blue-800"
                               >
                                 Resend Invite
                               </button>
                               <button
-                                onClick={() => handleActivate(member.id)}
-                                disabled={actionLoading}
-                                className="text-green-600 hover:text-green-800"
-                              >
-                                Activate
-                              </button>
-                              <button
-                                onClick={() => handleDelete(member.id)}
+                                onClick={(e) => { e.stopPropagation(); handleDelete(member.id) }}
                                 disabled={actionLoading}
                                 className="text-red-600 hover:text-red-800"
                               >
@@ -419,26 +399,25 @@ export default function People() {
                               </button>
                             </>
                           )}
-                          {member.status === 'active' && member.member_role !== 'owner' && (
+                          {(member.status === 'invited' || member.status === 'onboarding') && (
                             <button
-                              onClick={() => handleOffboard(member.id)}
+                              onClick={(e) => { e.stopPropagation(); handleActivate(member.id) }}
                               disabled={actionLoading}
-                              className="text-red-600 hover:text-red-800"
+                              className="text-green-600 hover:text-green-800"
                             >
-                              Offboard
+                              Activate
                             </button>
                           )}
-                          {member.status !== 'offboarded' && member.status !== 'inactive' && (
-                            <button
-                              onClick={() => {
-                                setSelectedMember(member)
-                                setShowEditModal(true)
-                              }}
-                              className="text-gray-600 hover:text-gray-800"
-                            >
-                              Edit
-                            </button>
-                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedMember(member)
+                              setShowEditModal(true)
+                            }}
+                            className="text-gray-600 hover:text-gray-800"
+                          >
+                            Edit
+                          </button>
                         </>
                       )}
                     </div>

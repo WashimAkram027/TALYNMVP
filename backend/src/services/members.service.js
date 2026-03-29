@@ -44,6 +44,23 @@ export const membersService = {
 
     if (error) throw error
 
+    // Auto-activate: if status is 'onboarding' and start_date <= today, update to 'active'
+    const today = new Date().toISOString().split('T')[0]
+    const toActivate = (data || []).filter(
+      m => m.status === 'onboarding' && m.start_date && m.start_date <= today
+    )
+
+    if (toActivate.length > 0) {
+      const ids = toActivate.map(m => m.id)
+      await supabase
+        .from('organization_members')
+        .update({ status: 'active' })
+        .in('id', ids)
+
+      // Update the returned data in place
+      toActivate.forEach(m => { m.status = 'active' })
+    }
+
     return data
   },
 
@@ -225,6 +242,26 @@ export const membersService = {
       }
     }
 
+    // When employer updates offer-related fields, clear the employee's change request
+    // so the employee can re-review the updated offer
+    const offerFields = ['salary_amount', 'job_title', 'job_description']
+    const isOfferUpdate = offerFields.some(f => filteredUpdates[f] !== undefined)
+
+    // Fetch existing member BEFORE update to check if this is a response to a change request
+    let existingMember = null
+    if (isOfferUpdate) {
+      filteredUpdates.quote_dispute_note = null
+      filteredUpdates.quote_verified = false
+
+      const { data: existing } = await supabase
+        .from('organization_members')
+        .select('invitation_email, first_name, quote_dispute_note, job_title, salary_amount, salary_currency')
+        .eq('id', memberId)
+        .eq('organization_id', orgId)
+        .single()
+      existingMember = existing
+    }
+
     const { data, error } = await supabase
       .from('organization_members')
       .update(filteredUpdates)
@@ -237,11 +274,42 @@ export const membersService = {
       .single()
 
     if (error) throw error
+
+    // If this update is a response to a change request, notify the employee
+    if (isOfferUpdate && existingMember?.quote_dispute_note) {
+      try {
+        const employeeEmail = existingMember.invitation_email || data.profile?.email
+        if (employeeEmail) {
+          // Get employer/org info
+          const [{ data: org }, { data: employer }] = await Promise.all([
+            supabase.from('organizations').select('name').eq('id', orgId).single(),
+            supabase.from('profiles').select('first_name, full_name').eq('organization_id', orgId).eq('role', 'employer').limit(1).single()
+          ])
+
+          const employerName = employer?.first_name || employer?.full_name || 'Your employer'
+          const orgName = org?.name || 'your organization'
+
+          await emailService.sendOfferUpdatedEmail(
+            employeeEmail,
+            existingMember.first_name || data.first_name,
+            employerName,
+            orgName,
+            data.job_title,
+            data.salary_amount,
+            data.salary_currency
+          )
+        }
+      } catch (emailErr) {
+        console.error('[MembersService] Failed to send offer updated email:', emailErr)
+        // Don't throw - member was updated, email just failed
+      }
+    }
+
     return data
   },
 
   /**
-   * Activate an invited member
+   * Activate a member (from invited or onboarding status)
    */
   async activate(memberId, orgId) {
     const { data, error } = await supabase
@@ -252,29 +320,7 @@ export const membersService = {
       })
       .eq('id', memberId)
       .eq('organization_id', orgId)
-      .in('status', ['invited', 'onboarding', 'ready_to_start', 'in_review'])
-      .select(`
-        *,
-        profile:profiles!organization_members_profile_id_fkey(id, full_name, email)
-      `)
-      .single()
-
-    if (error) throw error
-    return data
-  },
-
-  /**
-   * Offboard a member
-   */
-  async offboard(memberId, orgId) {
-    const { data, error } = await supabase
-      .from('organization_members')
-      .update({
-        status: 'offboarded',
-        offboarded_at: new Date().toISOString()
-      })
-      .eq('id', memberId)
-      .eq('organization_id', orgId)
+      .in('status', ['invited', 'onboarding'])
       .select(`
         *,
         profile:profiles!organization_members_profile_id_fkey(id, full_name, email)
@@ -301,8 +347,8 @@ export const membersService = {
       throw new Error('Member not found')
     }
 
-    if (member.status !== 'invited' && member.status !== 'in_review') {
-      throw new Error('Only invited or in-review members can be deleted. Use offboard for active members.')
+    if (member.status !== 'invited') {
+      throw new Error('Only invited members can be deleted.')
     }
 
     const { error } = await supabase
@@ -347,8 +393,7 @@ export const membersService = {
       byStatus: {
         active: data.filter(m => m.status === 'active').length,
         invited: data.filter(m => m.status === 'invited').length,
-        inactive: data.filter(m => m.status === 'inactive').length,
-        offboarded: data.filter(m => m.status === 'offboarded').length
+        onboarding: data.filter(m => m.status === 'onboarding').length
       },
       byRole: {},
       byDepartment: {},
@@ -451,12 +496,12 @@ export const membersService = {
       throw new Error('This invitation was sent to a different email address')
     }
 
-    // Update the membership: link profile and activate
+    // Update the membership: link profile and set to onboarding
     const { data: updatedMember, error: updateError } = await supabase
       .from('organization_members')
       .update({
         profile_id: profileId,
-        status: 'active',
+        status: 'onboarding',
         joined_at: new Date().toISOString()
       })
       .eq('id', memberId)

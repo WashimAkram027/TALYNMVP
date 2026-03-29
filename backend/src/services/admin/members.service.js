@@ -2,7 +2,7 @@ import { supabase } from '../../config/supabase.js'
 import { NotFoundError, BadRequestError } from '../../utils/errors.js'
 import { auditLogService } from './auditLog.service.js'
 
-const VALID_STATUSES = ['invited', 'active', 'onboarding', 'offboarded', 'suspended']
+const VALID_STATUSES = ['invited', 'onboarding', 'active']
 
 export const adminMembersService = {
   /**

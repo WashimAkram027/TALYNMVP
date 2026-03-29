@@ -9,6 +9,11 @@ const dashboardService = {
   async getAlerts() {
     const { data } = await api.get('/admin/dashboard/alerts')
     return data.data
+  },
+
+  async getPendingOnboardings() {
+    const { data } = await api.get('/admin/dashboard/pending-onboardings')
+    return data.data
   }
 }
 

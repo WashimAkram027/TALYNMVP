@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { quoteService } from '../../services/quoteService'
+import { membersService } from '../../services/membersService'
 import QuoteReviewPanel from './quotes/QuoteReviewPanel'
 
 const ROLE_OPTIONS = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'manager', label: 'Manager' },
   { value: 'employee', label: 'Employee' },
   { value: 'contractor', label: 'Contractor' }
 ]
@@ -16,22 +15,23 @@ const EMPLOYMENT_TYPE_OPTIONS = [
   { value: 'freelance', label: 'Freelance' }
 ]
 
-export default function InviteMemberModal({ onClose, onSuccess, departments = [] }) {
+export default function InviteMemberModal({ onClose, onSuccess, departments = [], editMember }) {
+  const isReissue = !!editMember
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    memberRole: 'employee',
-    jobTitle: '',
-    department: '',
-    employmentType: 'full_time',
-    jobDescription: '',
-    location: '',
-    startDate: '',
-    salaryAmount: '',
-    salaryCurrency: 'NPR',
-    payFrequency: 'monthly',
-    probationPeriod: ''
+    firstName: editMember?.first_name || '',
+    lastName: editMember?.last_name || '',
+    email: editMember?.invitation_email || editMember?.profile?.email || '',
+    memberRole: editMember?.member_role || 'employee',
+    jobTitle: editMember?.job_title || '',
+    department: editMember?.department || '',
+    employmentType: editMember?.employment_type || 'full_time',
+    jobDescription: editMember?.job_description || '',
+    location: editMember?.location || '',
+    startDate: editMember?.start_date || '',
+    salaryAmount: editMember?.salary_amount || '',
+    salaryCurrency: editMember?.salary_currency || 'NPR',
+    payFrequency: editMember?.pay_frequency || 'monthly',
+    probationPeriod: editMember?.probation_period || ''
   })
   const [phase, setPhase] = useState('form') // 'form' | 'quote'
   const [quote, setQuote] = useState(null)
@@ -83,15 +83,21 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
     }
   }
 
-  const handleAcceptAndInvite = async () => {
+  const handleAcceptAndInvite = async ({ termsAcceptedAt } = {}) => {
     try {
       setLoading(true)
       setError(null)
 
-      await quoteService.acceptAndInvite(quote.id)
+      if (isReissue) {
+        // Reissue mode: link new quote to existing member
+        await membersService.reissueQuote(editMember.id, quote.id)
+      } else {
+        // Normal mode: accept quote and create new member
+        await quoteService.acceptAndInvite(quote.id, { termsAcceptedAt })
+      }
       onSuccess()
     } catch (err) {
-      setError(err.message || 'Failed to send invitation')
+      setError(err.message || 'Failed to process')
     } finally {
       setLoading(false)
     }
@@ -123,11 +129,13 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
         <div className="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">
-              {phase === 'form' ? 'Invite Team Member' : 'Review Cost Quote'}
+              {phase === 'form'
+                ? (isReissue ? 'Update Offer' : 'Invite Team Member')
+                : 'Review Cost Quote'}
             </h2>
             <p className="text-sm text-subtext-light dark:text-subtext-dark">
               {phase === 'form'
-                ? 'Fill in details to generate an EOR cost quote'
+                ? (isReissue ? 'Update the offer details and generate a new quote' : 'Fill in details to generate an EOR cost quote')
                 : 'Review the employer cost breakdown before sending'}
             </p>
           </div>
@@ -151,9 +159,25 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
               onDownloadPdf={handleDownloadPdf}
               onSaveAndExit={handleSaveAndExit}
               loading={loading}
+              acceptLabel={isReissue ? 'Accept & Update Offer' : undefined}
             />
           ) : (
             <form onSubmit={handleGenerateQuote} className="space-y-4">
+              {/* Change Request Note Banner */}
+              {isReissue && editMember.quote_dispute_note && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <span className="material-icons-outlined text-amber-600 dark:text-amber-400 text-lg mt-0.5">warning</span>
+                    <div>
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Employee Change Request</p>
+                      <p className="text-sm text-amber-700 dark:text-amber-400 mt-1 italic">
+                        &ldquo;{editMember.quote_dispute_note}&rdquo;
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* First Name + Last Name */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -187,12 +211,14 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                  className={`w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary ${isReissue ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed' : 'bg-surface-light dark:bg-gray-800'}`}
                   placeholder="team@company.com"
                   required
+                  readOnly={isReissue}
+                  disabled={isReissue}
                 />
                 <p className="text-xs text-subtext-light dark:text-subtext-dark mt-1">
-                  An invitation will be sent to this email address
+                  {isReissue ? 'Email cannot be changed for an existing offer' : 'An invitation will be sent to this email address'}
                 </p>
               </div>
 
@@ -370,7 +396,7 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
                     </>
                   ) : (
                     <>
-                      Generate Quote
+                      {isReissue ? 'Generate Updated Quote' : 'Generate Quote'}
                       <span className="material-icons-outlined text-lg">arrow_forward</span>
                     </>
                   )}

@@ -8,5 +8,6 @@ router.use(authenticateAdmin)
 
 router.get('/metrics', adminDashboardController.getMetrics)
 router.get('/alerts', adminDashboardController.getAlerts)
+router.get('/pending-onboardings', adminDashboardController.getPendingOnboardings)
 
 export default router

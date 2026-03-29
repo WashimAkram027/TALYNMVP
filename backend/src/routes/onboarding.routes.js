@@ -12,7 +12,8 @@ import {
   employeePersonalInfoSchema,
   employeeEmergencyContactSchema,
   employeeTaxInfoSchema,
-  employeeDocumentUploadSchema
+  employeeDocumentUploadSchema,
+  employeeVerifyQuoteSchema
 } from '../utils/validators.js'
 
 const router = Router()
@@ -32,6 +33,9 @@ router.post('/employer/submit-entity', requireEmployer, onboardingController.sub
 
 // === Employee routes ===
 router.get('/employee/status', requireCandidate, onboardingController.getEmployeeOnboardingStatus)
+router.get('/employee/tasks', requireCandidate, onboardingController.getEmployeeOnboardingTasks)
+router.get('/employee/quote-and-job', requireCandidate, onboardingController.getEmployeeQuoteAndJob)
+router.post('/employee/verify-quote', requireCandidate, validate(employeeVerifyQuoteSchema), onboardingController.verifyEmployeeQuote)
 router.post('/employee/advance-step', requireCandidate, validate(employeeAdvanceStepSchema), onboardingController.advanceEmployeeStep)
 router.post('/employee/personal-info', requireCandidate, validate(employeePersonalInfoSchema), onboardingController.submitPersonalInfo)
 router.post('/employee/emergency-contact', requireCandidate, validate(employeeEmergencyContactSchema), onboardingController.submitEmergencyContact)

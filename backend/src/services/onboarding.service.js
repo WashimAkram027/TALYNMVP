@@ -315,6 +315,194 @@ export const onboardingService = {
   },
 
   /**
+   * Get employee's job details and linked EOR quote for offer review.
+   * Looks up by profile_id (if already accepted) or invitation_email (if still invited).
+   */
+  async getEmployeeQuoteAndJob(userId) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, organization_id, first_name, last_name, full_name')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) {
+      throw new BadRequestError('User not found')
+    }
+
+    const memberColumns = 'id, job_title, job_description, salary_amount, salary_currency, employment_type, start_date, quote_id, quote_verified, quote_verified_at, quote_dispute_note, organization_id'
+    let member = null
+
+    // Strategy 1: If employee has an org, look up by profile_id (already accepted)
+    if (profile.organization_id) {
+      const { data } = await supabase
+        .from('organization_members')
+        .select(memberColumns)
+        .eq('profile_id', userId)
+        .eq('organization_id', profile.organization_id)
+        .in('status', ['onboarding', 'active'])
+        .single()
+      member = data
+    }
+
+    // Strategy 2: If no member found yet, look up by invitation_email (pending invitation)
+    if (!member && profile.email) {
+      const { data } = await supabase
+        .from('organization_members')
+        .select(memberColumns)
+        .eq('invitation_email', profile.email.toLowerCase())
+        .eq('status', 'invited')
+        .order('invited_at', { ascending: false })
+        .limit(1)
+        .single()
+      member = data
+    }
+
+    if (!member) {
+      throw new BadRequestError('No invitation or membership found')
+    }
+
+    // Build result
+    const result = {
+      memberId: member.id,
+      jobTitle: member.job_title,
+      jobDescription: member.job_description,
+      salaryAmount: member.salary_amount,
+      salaryCurrency: member.salary_currency,
+      employmentType: member.employment_type,
+      startDate: member.start_date,
+      quoteVerified: member.quote_verified,
+      quoteVerifiedAt: member.quote_verified_at,
+      quoteDisputeNote: member.quote_dispute_note,
+      quote: null
+    }
+
+    // If there's a linked quote, fetch it
+    if (member.quote_id) {
+      const { data: quote } = await supabase
+        .from('eor_quotes')
+        .select('*')
+        .eq('id', member.quote_id)
+        .single()
+
+      if (quote) {
+        result.quote = quote
+      }
+    }
+
+    return result
+  },
+
+  /**
+   * Verify or flag a discrepancy on the employee's quote/job details.
+   * Works before or after invitation acceptance (looks up by email if no org yet).
+   * If verified: sets quote_verified = true
+   * If flagged: saves dispute note, notifies employer via email
+   */
+  async verifyEmployeeQuote(userId, verified, discrepancyNote) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, role, organization_id, first_name, last_name, full_name')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) throw new BadRequestError('User not found')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can verify quotes')
+
+    // Find member by profile_id+org (accepted) or invitation_email (invited)
+    let member = null
+    if (profile.organization_id) {
+      const { data } = await supabase
+        .from('organization_members')
+        .select('id, organization_id, invited_by')
+        .eq('profile_id', userId)
+        .eq('organization_id', profile.organization_id)
+        .single()
+      member = data
+    }
+    if (!member && profile.email) {
+      const { data } = await supabase
+        .from('organization_members')
+        .select('id, organization_id, invited_by')
+        .eq('invitation_email', profile.email.toLowerCase())
+        .eq('status', 'invited')
+        .order('invited_at', { ascending: false })
+        .limit(1)
+        .single()
+      member = data
+    }
+
+    if (!member) {
+      throw new BadRequestError('No invitation or membership found')
+    }
+
+    if (verified) {
+      // Mark as verified (no step advancement — quote review is not an onboarding step)
+      const { error: memberUpdateError } = await supabase
+        .from('organization_members')
+        .update({
+          quote_verified: true,
+          quote_verified_at: new Date().toISOString(),
+          quote_dispute_note: null
+        })
+        .eq('id', member.id)
+
+      if (memberUpdateError) throw new BadRequestError('Failed to verify employment details')
+
+      return { verified: true }
+    } else {
+      // Flag discrepancy
+      if (!discrepancyNote || discrepancyNote.trim().length === 0) {
+        throw new BadRequestError('Please describe the discrepancy')
+      }
+
+      const { error: memberUpdateError } = await supabase
+        .from('organization_members')
+        .update({
+          quote_verified: false,
+          quote_dispute_note: discrepancyNote.trim()
+        })
+        .eq('id', member.id)
+
+      if (memberUpdateError) throw new BadRequestError('Failed to save discrepancy note')
+
+      // Send notification email to employer (fire-and-forget)
+      try {
+        if (member.invited_by) {
+          const { data: inviterProfile } = await supabase
+            .from('profiles')
+            .select('email, first_name')
+            .eq('id', member.invited_by)
+            .single()
+
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('name')
+            .eq('id', member.organization_id)
+            .single()
+
+          const employeeName = profile.full_name ||
+            `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
+            'An employee'
+
+          if (inviterProfile?.email) {
+            await emailService.sendQuoteDiscrepancyEmail(
+              inviterProfile.email,
+              inviterProfile.first_name,
+              employeeName,
+              org?.name || 'your organization',
+              discrepancyNote.trim()
+            )
+          }
+        }
+      } catch (emailErr) {
+        console.error('[OnboardingService] Failed to send discrepancy email:', emailErr)
+      }
+
+      return { currentStep: 1, isComplete: false, verified: false, flagged: true }
+    }
+  },
+
+  /**
    * Helper: get the employee's organization_members row
    */
   async _getEmployeeMember(userId) {
@@ -331,7 +519,7 @@ export const onboardingService = {
       .select('id, organization_id')
       .eq('profile_id', userId)
       .eq('organization_id', profile.organization_id)
-      .not('status', 'in', '("offboarded","inactive")')
+      .in('status', ['invited', 'onboarding', 'active'])
       .single()
 
     return member
@@ -359,6 +547,7 @@ export const onboardingService = {
       personalInfo: null,
       emergencyContact: null,
       taxInfo: null,
+      quoteVerified: false,
       documents: []
     }
 
@@ -368,7 +557,7 @@ export const onboardingService = {
     if (member) {
       const { data: memberData } = await supabase
         .from('organization_members')
-        .select('id, pan_number, ssf_number, emergency_contact')
+        .select('id, pan_number, ssf_number, emergency_contact, quote_verified')
         .eq('id', member.id)
         .single()
 
@@ -378,6 +567,7 @@ export const onboardingService = {
           panNumber: memberData.pan_number || null,
           ssfNumber: memberData.ssf_number || null
         }
+        result.quoteVerified = memberData.quote_verified || false
       }
 
       // Fetch uploaded identity documents by member_id
@@ -416,7 +606,7 @@ export const onboardingService = {
   },
 
   /**
-   * Advance employee onboarding step (steps 1-4)
+   * Advance employee onboarding step (steps 1-3)
    */
   async advanceEmployeeStep(userId, currentStep) {
     const { data: profile, error: profileError } = await supabase
@@ -441,7 +631,7 @@ export const onboardingService = {
       throw new BadRequestError(`Expected step ${profile.onboarding_step}, got ${currentStep}`)
     }
 
-    if (currentStep < 1 || currentStep > 4) {
+    if (currentStep < 1 || currentStep > 3) {
       throw new BadRequestError('Invalid step number')
     }
 
@@ -550,7 +740,9 @@ export const onboardingService = {
   },
 
   /**
-   * Step 3: Save tax information
+   * Step 3: Save tax information and complete onboarding
+   * After step 3, onboarding is marked complete. Document upload and banking
+   * details are deferred to dashboard todo items.
    */
   async completeEmployeeTaxInfo(userId, data) {
     const { data: profile, error: profileError } = await supabase
@@ -584,22 +776,23 @@ export const onboardingService = {
       if (memberError) throw new BadRequestError('Failed to save tax information')
     }
 
-    // Always save to profiles as pending data (works even without org)
+    // Mark onboarding as complete after step 3
     const { error: stepError } = await supabase
       .from('profiles')
       .update({
-        onboarding_step: 4,
+        onboarding_completed: true,
+        onboarding_step: null,
         pending_tax_info: taxInfo
       })
       .eq('id', userId)
 
     if (stepError) throw new BadRequestError('Failed to save tax information')
 
-    return { currentStep: 4, isComplete: false }
+    return { currentStep: null, isComplete: true, redirectTo: '/employee/overview' }
   },
 
   /**
-   * Step 4: Upload an identity document
+   * Upload an identity document (available during onboarding or post-onboarding from dashboard)
    */
   async uploadEmployeeDocument(userId, data) {
     const { data: profile, error: profileError } = await supabase
@@ -609,9 +802,7 @@ export const onboardingService = {
       .single()
 
     if (profileError || !profile) throw new BadRequestError('User not found')
-    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this onboarding')
-    if (profile.onboarding_completed) throw new BadRequestError('Onboarding already completed')
-    if (profile.onboarding_step !== 4) throw new BadRequestError('Please complete the steps in order')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can upload documents')
 
     // Server-side file validation
     const allowedMimes = ['application/pdf', 'image/png', 'image/jpeg']
@@ -690,19 +881,18 @@ export const onboardingService = {
   },
 
   /**
-   * Step 4: Complete document step (advance to step 5)
+   * Complete document step (post-onboarding, from dashboard todo)
+   * No longer advances steps since onboarding completes at step 3.
    */
   async completeEmployeeDocumentStep(userId) {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, role, onboarding_step, onboarding_completed')
+      .select('id, role, onboarding_completed')
       .eq('id', userId)
       .single()
 
     if (profileError || !profile) throw new BadRequestError('User not found')
-    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this onboarding')
-    if (profile.onboarding_completed) throw new BadRequestError('Onboarding already completed')
-    if (profile.onboarding_step !== 4) throw new BadRequestError('Please complete the steps in order')
+    if (profile.role !== 'candidate') throw new BadRequestError('Only employees can complete this step')
 
     // Check for identity docs by uploaded_by (works with or without org)
     const member = await this._getEmployeeMember(userId)
@@ -723,23 +913,16 @@ export const onboardingService = {
       throw new BadRequestError('Please upload at least one identity document')
     }
 
-    const { error: stepError } = await supabase
-      .from('profiles')
-      .update({ onboarding_step: 5 })
-      .eq('id', userId)
-
-    if (stepError) throw new BadRequestError('Failed to advance step')
-
-    return { currentStep: 5, isComplete: false }
+    return { success: true, documentsUploaded: true }
   },
 
   /**
-   * Complete employee bank details (step 5) and finish onboarding
+   * Save employee bank details (post-onboarding from dashboard todo or Settings)
    */
   async completeEmployeeBankDetails(userId, bankDetails) {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, role, onboarding_step, onboarding_completed, organization_id')
+      .select('id, role, onboarding_completed')
       .eq('id', userId)
       .single()
 
@@ -751,20 +934,9 @@ export const onboardingService = {
       throw new BadRequestError('Only employees can update bank details')
     }
 
-    // Allow during onboarding step 5 OR post-onboarding (for updates from Settings)
-    if (!profile.onboarding_completed && profile.onboarding_step !== 5) {
-      throw new BadRequestError('Please complete previous steps first')
-    }
-
-    const updatePayload = { pending_bank_details: bankDetails }
-    if (!profile.onboarding_completed) {
-      updatePayload.onboarding_completed = true
-      updatePayload.onboarding_step = null
-    }
-
     const { data: updatedProfile, error: updateError } = await supabase
       .from('profiles')
-      .update(updatePayload)
+      .update({ pending_bank_details: bankDetails })
       .eq('id', userId)
       .select('id, onboarding_step, onboarding_completed')
       .single()
@@ -776,7 +948,45 @@ export const onboardingService = {
     return {
       currentStep: null,
       isComplete: true,
-      redirectTo: '/dashboard-employee'
+      bankDetailsAdded: true
+    }
+  },
+
+  /**
+   * Get pending onboarding tasks for an employee (post-onboarding dashboard checklist)
+   * Returns status of document upload and banking details.
+   */
+  async getEmployeeOnboardingTasks(userId) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role, pending_bank_details, onboarding_completed')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) throw new BadRequestError('User not found')
+
+    // Check for identity documents
+    const member = await this._getEmployeeMember(userId)
+    let docQuery = supabase
+      .from('documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('category', 'identity')
+
+    if (member) {
+      docQuery = docQuery.eq('member_id', member.id)
+    } else {
+      docQuery = docQuery.eq('uploaded_by', userId)
+    }
+
+    const { count: docCount } = await docQuery
+
+    const documentsUploaded = (docCount || 0) > 0
+    const bankingDetailsAdded = !!profile.pending_bank_details
+
+    return {
+      documents: { completed: documentsUploaded },
+      banking: { completed: bankingDetailsAdded },
+      allComplete: documentsUploaded && bankingDetailsAdded
     }
   },
 

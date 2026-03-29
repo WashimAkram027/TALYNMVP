@@ -168,6 +168,7 @@ export const onboardingAPI = {
   getStatus: () => api.get('/onboarding/employer/status'),
   // Employee methods
   getEmployeeStatus: () => api.get('/onboarding/employee/status'),
+  getEmployeeOnboardingTasks: () => api.get('/onboarding/employee/tasks'),
   advanceEmployeeStep: (currentStep) => api.post('/onboarding/employee/advance-step', { currentStep }),
   submitPersonalInfo: (data) => api.post('/onboarding/employee/personal-info', data),
   submitEmergencyContact: (data) => api.post('/onboarding/employee/emergency-contact', data),
@@ -175,6 +176,8 @@ export const onboardingAPI = {
   uploadEmployeeDocument: (data) => api.post('/onboarding/employee/document', data),
   completeDocumentStep: () => api.post('/onboarding/employee/complete-documents'),
   submitEmployeeBankDetails: (data) => api.post('/onboarding/employee/bank-details', data),
+  getEmployeeQuoteAndJob: () => api.get('/onboarding/employee/quote-and-job'),
+  verifyEmployeeQuote: (data) => api.post('/onboarding/employee/verify-quote', data),
 }
 
 export default api

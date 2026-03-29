@@ -186,7 +186,7 @@ If you didn't create an account with Talyn, you can safely ignore this email.
    * @param {string} jobTitle - Job title being offered
    */
   async sendInvitationEmail(email, inviterName, orgName, jobTitle = null) {
-    const signupUrl = `${env.frontendUrl}/signup/employee?email=${encodeURIComponent(email)}&invite=true`
+    const signupUrl = `${env.frontendUrl}/login/employee?email=${encodeURIComponent(email)}&invite=true`
     const subject = `You've been invited to join ${orgName} on Talyn`
 
     if (!resend) {
@@ -228,7 +228,7 @@ If you didn't create an account with Talyn, you can safely ignore this email.
               </p>
               ${jobInfo}
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
-                Click the button below to create your account and accept the invitation:
+                Click the button below to log in to review the invitation:
               </p>
 
               <!-- Button -->
@@ -236,14 +236,14 @@ If you didn't create an account with Talyn, you can safely ignore this email.
                 <tr>
                   <td align="center" style="padding: 20px 0;">
                     <a href="${signupUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #3B82F6; text-decoration: none; border-radius: 6px;">
-                      Accept Invitation
+                      Review Invitation
                     </a>
                   </td>
                 </tr>
               </table>
 
               <p style="margin: 20px 0; font-size: 14px; line-height: 1.6; color: #6a6a6a;">
-                Already have a Talyn account? Just log in and you'll see the invitation waiting for you.
+                Don't have an account yet? Sign up first, then log in to review.
               </p>
 
               <!-- Fallback URL -->
@@ -277,11 +277,11 @@ You've Been Invited!
 
 ${inviterName} has invited you to join ${orgName} on Talyn.
 
-${jobInfoText}Click the link below to create your account and accept the invitation:
+${jobInfoText}Click the link below to log in to review the invitation:
 
 ${signupUrl}
 
-Already have a Talyn account? Just log in and you'll see the invitation waiting for you.
+Don't have an account yet? Sign up first, then log in to review.
 
 - The Talyn Team
     `.trim()
@@ -802,6 +802,137 @@ View your team: ${teamUrl}
     } catch (error) {
       console.error('[EmailService] Failed to send notification email:', error)
       await this.logEmail(employerEmail, 'invitation_declined', subject, null, 'failed', { employerName, candidateEmail, orgName }, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send notification to employer when employee flags a quote discrepancy
+   * @param {string} employerEmail - Employer's email
+   * @param {string} employerName - Employer's first name
+   * @param {string} employeeName - Employee's full name
+   * @param {string} orgName - Organization name
+   * @param {string} discrepancyNote - Description of the discrepancy
+   */
+  async sendQuoteDiscrepancyEmail(employerEmail, employerName, employeeName, orgName, discrepancyNote) {
+    const teamUrl = `${env.frontendUrl}/people`
+    const displayName = employerName || 'there'
+    const safeEmployeeName = escapeHtml(employeeName)
+    const safeOrgName = escapeHtml(orgName)
+    const safeNote = escapeHtml(discrepancyNote)
+    const subject = `Employment details flagged by ${employeeName} - ${orgName}`
+
+    if (!resend) {
+      console.warn('[EmailService] Resend not configured, skipping email send')
+      await this.logEmail(employerEmail, 'quote_discrepancy', subject, null, 'mock', { employerName, employeeName, orgName, discrepancyNote })
+      return { success: true, mock: true }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employment Details Flagged</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #eee;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #3B82F6;">Talyn</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; font-size: 20px; font-weight: 600; color: #1a1a1a;">Employment Details Flagged</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Hi ${escapeHtml(displayName)},
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                <strong>${safeEmployeeName}</strong> has flagged a discrepancy in their employment details at <strong>${safeOrgName}</strong>. Their onboarding is paused until this is resolved.
+              </p>
+              <div style="margin: 0 0 20px; padding: 16px; background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 6px;">
+                <p style="margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #92400E;">Employee's Note:</p>
+                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #78350F;">${safeNote}</p>
+              </div>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Please review and update the member's details in your team management page to allow them to continue onboarding.
+              </p>
+
+              <!-- Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${teamUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #3B82F6; text-decoration: none; border-radius: 6px;">
+                      View Team
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} Talyn. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim()
+
+    const text = `
+Employment Details Flagged
+
+Hi ${displayName},
+
+${employeeName} has flagged a discrepancy in their employment details at ${orgName}. Their onboarding is paused until this is resolved.
+
+Employee's Note:
+${discrepancyNote}
+
+Please review and update the member's details in your team management page.
+
+View your team: ${teamUrl}
+
+- The Talyn Team
+    `.trim()
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [employerEmail],
+        subject,
+        html,
+        text
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        await this.logEmail(employerEmail, 'quote_discrepancy', subject, null, 'failed', { employerName, employeeName, orgName }, error.message)
+        return { success: false }
+      }
+
+      console.log('[EmailService] Quote discrepancy email sent:', data?.id)
+      await this.logEmail(employerEmail, 'quote_discrepancy', subject, data?.id, 'sent', { employerName, employeeName, orgName })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send quote discrepancy email:', error)
+      await this.logEmail(employerEmail, 'quote_discrepancy', subject, null, 'failed', { employerName, employeeName, orgName }, error.message)
       return { success: false }
     }
   },
@@ -1828,6 +1959,368 @@ Review Entity: ${adminUrl}
     } catch (error) {
       console.error('[EmailService] Failed to send payment receipt email:', error)
       await this.logEmail(email, 'payment_receipt', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  // ─── Invoice Refund / Dispute Emails ────────────────────────
+
+  /**
+   * Send invoice refund notification to employer
+   */
+  async sendInvoiceRefundedEmail(email, name, invoiceNumber, amount, period) {
+    const subject = `Invoice ${invoiceNumber} refunded`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: invoice refunded email to ${email}`)
+      await this.logEmail(email, 'invoice_refunded', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Invoice Refunded', `Hi ${displayName},`, `A refund of <strong>${amount}</strong> has been issued for invoice <strong>${invoiceNumber}</strong> (period: <strong>${period}</strong>).`, 'The refunded amount will be returned to your bank account. This typically takes 5-10 business days.'),
+        text: `Hi ${displayName},\n\nA refund of ${amount} has been issued for invoice ${invoiceNumber} (period: ${period}).\n\nThe refunded amount will be returned to your bank account. This typically takes 5-10 business days.\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'invoice_refunded', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send invoice refunded email:', error)
+      await this.logEmail(email, 'invoice_refunded', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send admin notification when an invoice payment is refunded
+   */
+  async sendAdminInvoiceRefundedEmail(adminEmail, orgName, invoiceNumber, amount) {
+    const subject = `Invoice refunded - ${orgName} - ${invoiceNumber} - ${amount}`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: admin invoice refunded email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'admin_invoice_refunded', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html: this._paymentEmailHtml(
+          'Invoice Payment Refunded',
+          'Hello Admin,',
+          `A refund of <strong>${amount}</strong> has been issued for invoice <strong>${invoiceNumber}</strong> from <strong>${orgName}</strong>.`,
+          'Please review in the Stripe Dashboard.'
+        ),
+        text: `A refund of ${amount} has been issued for invoice ${invoiceNumber} from ${orgName}. Please review in the Stripe Dashboard.`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(adminEmail, 'admin_invoice_refunded', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send admin invoice refunded email:', error)
+      await this.logEmail(adminEmail, 'admin_invoice_refunded', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send invoice dispute notification to employer
+   */
+  async sendInvoiceDisputedEmail(email, name, invoiceNumber, amount, reason) {
+    const subject = `Invoice ${invoiceNumber} disputed - action required`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: invoice disputed email to ${email}`)
+      await this.logEmail(email, 'invoice_disputed', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Invoice Payment Disputed', `Hi ${displayName},`, `The payment of <strong>${amount}</strong> for invoice <strong>${invoiceNumber}</strong> has been disputed.`, `<strong>Reason:</strong> ${reason || 'Unknown'}<br><br>This means the funds have been reversed. Please contact your bank or reach out to our support team for next steps.`),
+        text: `Hi ${displayName},\n\nThe payment of ${amount} for invoice ${invoiceNumber} has been disputed.\n\nReason: ${reason || 'Unknown'}\n\nThis means the funds have been reversed. Please contact your bank or reach out to our support team for next steps.\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'invoice_disputed', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send invoice disputed email:', error)
+      await this.logEmail(email, 'invoice_disputed', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send admin notification when an invoice payment is disputed
+   */
+  async sendAdminInvoiceDisputedEmail(adminEmail, orgName, invoiceNumber, amount, reason, disputeId) {
+    const subject = `[URGENT] Invoice disputed - ${orgName} - ${invoiceNumber} - ${amount}`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: admin invoice disputed email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'admin_invoice_disputed', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html: this._paymentEmailHtml(
+          'Invoice Payment Disputed',
+          'Hello Admin,',
+          `Payment of <strong>${amount}</strong> for invoice <strong>${invoiceNumber}</strong> from <strong>${orgName}</strong> has been disputed.`,
+          `<strong>Dispute ID:</strong> ${disputeId || 'N/A'}<br><strong>Reason:</strong> ${reason || 'Unknown'}<br><br>Funds have been reversed. Please review in the Stripe Dashboard and take appropriate action.`
+        ),
+        text: `Payment of ${amount} for invoice ${invoiceNumber} from ${orgName} has been disputed. Dispute ID: ${disputeId || 'N/A'}. Reason: ${reason || 'Unknown'}. Funds have been reversed. Please review in the Stripe Dashboard.`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(adminEmail, 'admin_invoice_disputed', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send admin invoice disputed email:', error)
+      await this.logEmail(adminEmail, 'admin_invoice_disputed', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  // ─── Dispute Resolution Emails ────────────────────────────────
+
+  /**
+   * Send dispute resolution notification to employer
+   */
+  async sendDisputeResolvedEmail(email, name, outcome, amount) {
+    const isWon = outcome === 'won' || outcome === 'closed (inquiry)'
+    const subject = `Payment dispute ${isWon ? 'resolved in your favor' : 'resolved - funds lost'}`
+    const displayName = name || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: dispute resolved email to ${email}`)
+      await this.logEmail(email, 'dispute_resolved', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    const bodyText = isWon
+      ? `The dispute for <strong>${amount}</strong> has been resolved in your favor. The funds have been restored to your account.`
+      : `The dispute for <strong>${amount}</strong> has been resolved against your favor. The disputed funds will not be returned.`
+
+    const footerText = isWon
+      ? 'No further action is needed on your part.'
+      : 'If you believe this outcome is incorrect, please contact our support team.'
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml(`Dispute ${isWon ? 'Won' : 'Lost'}`, `Hi ${displayName},`, bodyText, footerText),
+        text: `Hi ${displayName},\n\n${isWon ? `The dispute for ${amount} has been resolved in your favor. The funds have been restored.` : `The dispute for ${amount} has been resolved against your favor. The disputed funds will not be returned.`}\n\n${isWon ? 'No further action is needed.' : 'If you believe this outcome is incorrect, please contact our support team.'}\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'dispute_resolved', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send dispute resolved email:', error)
+      await this.logEmail(email, 'dispute_resolved', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send admin notification when a dispute is resolved
+   */
+  async sendAdminDisputeResolvedEmail(adminEmail, orgName, outcome, amount, disputeId) {
+    const isWon = outcome === 'won' || outcome === 'closed (inquiry)'
+    const subject = `Dispute ${isWon ? 'won' : 'lost'} - ${orgName} - ${amount}`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: admin dispute resolved email to ${adminEmail}`)
+      await this.logEmail(adminEmail, 'admin_dispute_resolved', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [adminEmail],
+        subject,
+        html: this._paymentEmailHtml(
+          `Dispute ${isWon ? 'Won' : 'Lost'}`,
+          'Hello Admin,',
+          `Dispute for <strong>${amount}</strong> from <strong>${orgName}</strong> has been resolved: <strong>${outcome}</strong>.`,
+          `<strong>Dispute ID:</strong> ${disputeId || 'N/A'}<br><br>${isWon ? 'Funds have been restored.' : 'Funds were not restored.'} Please review in the Stripe Dashboard.`
+        ),
+        text: `Dispute for ${amount} from ${orgName} has been resolved: ${outcome}. Dispute ID: ${disputeId || 'N/A'}. ${isWon ? 'Funds have been restored.' : 'Funds were not restored.'} Please review in the Stripe Dashboard.`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(adminEmail, 'admin_dispute_resolved', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send admin dispute resolved email:', error)
+      await this.logEmail(adminEmail, 'admin_dispute_resolved', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send offer updated email to employee when employer updates their offer
+   * @param {string} employeeEmail - Recipient email
+   * @param {string} employeeName - Employee's first name
+   * @param {string} employerName - Employer's first name
+   * @param {string} orgName - Organization name
+   * @param {string} jobTitle - Job title
+   * @param {number} salary - Salary amount
+   * @param {string} currency - Salary currency
+   */
+  async sendOfferUpdatedEmail(employeeEmail, employeeName, employerName, orgName, jobTitle, salary, currency) {
+    const loginUrl = `${env.frontendUrl}/login/employee`
+    const displayName = employeeName || 'there'
+    const safeEmployerName = escapeHtml(employerName || 'Your employer')
+    const safeOrgName = escapeHtml(orgName)
+    const safeJobTitle = escapeHtml(jobTitle)
+    const subject = `Your offer has been updated - ${orgName}`
+
+    if (!resend) {
+      console.warn('[EmailService] Resend not configured, skipping email send')
+      await this.logEmail(employeeEmail, 'offer_updated', subject, null, 'mock', { employeeName, employerName, orgName, jobTitle, salary, currency })
+      return { success: true, mock: true }
+    }
+
+    const salaryInfo = salary && currency
+      ? `<p style="margin: 0 0 10px; font-size: 16px; line-height: 1.6; color: #4a4a4a;"><strong>Salary:</strong> ${escapeHtml(currency)} ${escapeHtml(String(salary))}</p>`
+      : ''
+    const jobTitleInfo = jobTitle
+      ? `<p style="margin: 0 0 10px; font-size: 16px; line-height: 1.6; color: #4a4a4a;"><strong>Position:</strong> ${safeJobTitle}</p>`
+      : ''
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offer Updated</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #eee;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #3B82F6;">Talyn</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; font-size: 20px; font-weight: 600; color: #1a1a1a;">Your Offer Has Been Updated</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Hi ${escapeHtml(displayName)},
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                ${safeEmployerName} at <strong>${safeOrgName}</strong> has reviewed your feedback and updated your offer. Please log in to review the updated details.
+              </p>
+              <div style="margin: 0 0 20px; padding: 16px; background-color: #EFF6FF; border: 1px solid #3B82F6; border-radius: 6px;">
+                ${jobTitleInfo}
+                ${salaryInfo}
+              </div>
+
+              <!-- Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${loginUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #3B82F6; text-decoration: none; border-radius: 6px;">
+                      Review Updated Offer
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Fallback URL -->
+              <p style="margin: 20px 0 0; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #888;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin: 8px 0 0; font-size: 12px; color: #3B82F6; word-break: break-all;">
+                ${loginUrl}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} Talyn. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim()
+
+    const salaryText = salary && currency ? `Salary: ${currency} ${salary}\n` : ''
+    const jobTitleText = jobTitle ? `Position: ${jobTitle}\n` : ''
+
+    const text = `
+Your Offer Has Been Updated
+
+Hi ${displayName},
+
+${employerName || 'Your employer'} at ${orgName} has reviewed your feedback and updated your offer. Please log in to review the updated details.
+
+${jobTitleText}${salaryText}
+Review your updated offer: ${loginUrl}
+
+- The Talyn Team
+    `.trim()
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [employeeEmail],
+        subject,
+        html,
+        text
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        await this.logEmail(employeeEmail, 'offer_updated', subject, null, 'failed', { employeeName, employerName, orgName, jobTitle }, error.message)
+        return { success: false }
+      }
+
+      console.log('[EmailService] Offer updated email sent:', data?.id)
+      await this.logEmail(employeeEmail, 'offer_updated', subject, data?.id, 'sent', { employeeName, employerName, orgName, jobTitle })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send offer updated email:', error)
+      await this.logEmail(employeeEmail, 'offer_updated', subject, null, 'failed', { employeeName, employerName, orgName, jobTitle }, error.message)
       return { success: false }
     }
   },

@@ -1,162 +1,104 @@
 import { useState, useEffect } from 'react'
-import { invoicesService } from '../services/invoicesService'
-import { useAuthStore } from '../store/authStore'
+import { payrollService } from '../services/payrollService'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
   { value: 'draft', label: 'Draft' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'overdue', label: 'Overdue' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' }
 ]
 
-const STATUS_STYLES = {
-  paid: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  overdue: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+const RUN_STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-  cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+  processing: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
 }
 
 export default function Invoices() {
-  const { profile } = useAuthStore()
-  const isEmployer = profile?.role === 'employer'
-
-  const [invoices, setInvoices] = useState([])
-  const [stats, setStats] = useState(null)
+  const [runs, setRuns] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [editingInvoice, setEditingInvoice] = useState(null)
-  const [actionLoading, setActionLoading] = useState(false)
+  const [expandedRunId, setExpandedRunId] = useState(null)
+  const [expandedRunData, setExpandedRunData] = useState(null)
+  const [expandLoading, setExpandLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
-  const fetchInvoices = async () => {
+  const fetchRuns = async () => {
     try {
       setLoading(true)
       setError(null)
       const filters = {}
-      if (search) filters.search = search
       if (statusFilter) filters.status = statusFilter
-      const data = await invoicesService.getInvoices(null, filters)
-      setInvoices(data || [])
+      const data = await payrollService.getPayrollRuns(null, filters)
+      setRuns(data || [])
     } catch (err) {
-      console.error('Failed to fetch invoices:', err)
-      setError(err.message || 'Failed to load invoices')
+      console.error('Failed to fetch payroll runs:', err)
+      setError(err.message || 'Failed to load payslips')
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchStats = async () => {
-    try {
-      const data = await invoicesService.getInvoiceStats()
-      setStats(data)
-    } catch (err) {
-      console.error('Failed to fetch invoice stats:', err)
-    }
-  }
-
   useEffect(() => {
-    fetchInvoices()
-    fetchStats()
-  }, [])
+    fetchRuns()
+  }, [statusFilter])
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchInvoices()
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [search, statusFilter])
-
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this invoice?')) return
+  const handleExpandRun = async (runId) => {
+    if (expandedRunId === runId) {
+      setExpandedRunId(null)
+      setExpandedRunData(null)
+      return
+    }
     try {
-      setActionLoading(true)
-      await invoicesService.deleteInvoice(id)
-      await fetchInvoices()
-      await fetchStats()
+      setExpandLoading(true)
+      setExpandedRunId(runId)
+      const data = await payrollService.getPayrollRun(runId)
+      setExpandedRunData(data)
     } catch (err) {
-      alert(err.message || 'Failed to delete invoice')
+      console.error('Failed to fetch run details:', err)
     } finally {
-      setActionLoading(false)
+      setExpandLoading(false)
     }
   }
 
-  const handleMarkPaid = async (id) => {
-    try {
-      setActionLoading(true)
-      await invoicesService.updateInvoice(id, { status: 'paid' })
-      await fetchInvoices()
-      await fetchStats()
-    } catch (err) {
-      alert(err.message || 'Failed to update invoice')
-    } finally {
-      setActionLoading(false)
-    }
+  const formatCurrency = (amount) => {
+    if (!amount && amount !== 0) return '-'
+    return `NPR ${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
   }
 
-  const handleApprove = async (id) => {
-    if (!confirm('Approve this invoice? For automatic payment, ACH will be initiated immediately.')) return
-    try {
-      setActionLoading(true)
-      await invoicesService.approveBillingInvoice(id)
-      await fetchInvoices()
-      await fetchStats()
-    } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Failed to approve invoice')
-    } finally {
-      setActionLoading(false)
-    }
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
-  const handleDownload = async (invoice) => {
-    try {
-      let blob
-      if (invoice.type === 'billing') {
-        blob = await invoicesService.downloadInvoicePdf(invoice.id)
-      } else if (invoice.pdf_url) {
-        const response = await fetch(invoice.pdf_url)
-        blob = await response.blob()
-      } else {
-        alert('No PDF available for this invoice')
-        return
-      }
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${invoice.invoice_number}.pdf`
-      a.click()
-      window.URL.revokeObjectURL(url)
-    } catch (err) {
-      alert('Failed to download: ' + (err.message || 'Unknown error'))
-    }
+  const formatPeriod = (start, end) => {
+    if (!start) return '-'
+    const s = new Date(start)
+    const e = end ? new Date(end) : null
+    const startStr = s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const endStr = e ? e.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+    return e ? `${startStr} - ${endStr}` : startStr
   }
 
-  const handleView = (invoice) => {
-    if (invoice.pdf_url) {
-      window.open(invoice.pdf_url, '_blank')
-    } else if (invoice.type === 'billing') {
-      handleDownload(invoice)
-    } else {
-      alert('No PDF available to view')
-    }
-  }
+  // Stats derived from runs
+  const totalPayslips = runs.reduce((sum, r) => sum + (r.employee_count || 0), 0)
+  const completedRuns = runs.filter(r => r.status === 'completed').length
+  const totalPaid = runs.filter(r => r.status === 'completed').reduce((sum, r) => sum + Number(r.total_amount || 0), 0)
+  const pendingRuns = runs.filter(r => r.status === 'draft' || r.status === 'processing').length
 
-  const openEditModal = (invoice) => {
-    setEditingInvoice(invoice)
-    setShowModal(true)
-  }
-
-  const openCreateModal = () => {
-    setEditingInvoice(null)
-    setShowModal(true)
-  }
-
-  const formatCurrency = (amount, currency = 'USD') => {
-    return `$${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  // Filter items in expanded view by search
+  const getFilteredItems = (items) => {
+    if (!searchTerm || !items) return items
+    const term = searchTerm.toLowerCase()
+    return items.filter(item => {
+      const name = item.member?.profile?.full_name
+        || `${item.member?.first_name || ''} ${item.member?.last_name || ''}`.trim()
+        || item.member_name || ''
+      return name.toLowerCase().includes(term)
+    })
   }
 
   if (loading) {
@@ -164,7 +106,7 @@ export default function Invoices() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-subtext-light dark:text-subtext-dark">Loading invoices...</p>
+          <p className="text-subtext-light dark:text-subtext-dark">Loading payslips...</p>
         </div>
       </div>
     )
@@ -188,35 +130,29 @@ export default function Invoices() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text-light dark:text-text-dark">Payslips</h1>
-          <p className="text-subtext-light dark:text-subtext-dark">Employee payslips and payment records</p>
+          <p className="text-subtext-light dark:text-subtext-dark">Employee pay records by payroll period</p>
         </div>
       </div>
 
       {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Total Payslips</p>
-            <p className="text-2xl font-bold text-text-light dark:text-text-dark mt-1">{stats.total_count || 0}</p>
-          </div>
-          <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Total Amount</p>
-            <p className="text-2xl font-bold text-text-light dark:text-text-dark mt-1">{formatCurrency(stats.total_amount)}</p>
-          </div>
-          <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Paid</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">{stats.paid_count || 0}</p>
-          </div>
-          <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600 mt-1">{stats.pending_count || 0}</p>
-          </div>
-          <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Overdue</p>
-            <p className="text-2xl font-bold text-red-600 mt-1">{stats.overdue_count || 0}</p>
-          </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
+          <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Payroll Periods</p>
+          <p className="text-2xl font-bold text-text-light dark:text-text-dark mt-1">{runs.length}</p>
         </div>
-      )}
+        <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
+          <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Completed</p>
+          <p className="text-2xl font-bold text-green-600 mt-1">{completedRuns}</p>
+        </div>
+        <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
+          <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Total Paid</p>
+          <p className="text-2xl font-bold text-text-light dark:text-text-dark mt-1">{formatCurrency(totalPaid)}</p>
+        </div>
+        <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl">
+          <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold">Pending</p>
+          <p className="text-2xl font-bold text-yellow-600 mt-1">{pendingRuns}</p>
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark p-4 rounded-xl mb-6">
@@ -225,9 +161,9 @@ export default function Invoices() {
             <span className="material-icons-outlined absolute left-3 top-1/2 -translate-y-1/2 text-subtext-light dark:text-subtext-dark text-lg">search</span>
             <input
               type="text"
-              placeholder="Search by employee name or payslip number..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by employee name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg pl-10 pr-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -243,8 +179,8 @@ export default function Invoices() {
         </div>
       </div>
 
-      {/* Table */}
-      {invoices.length === 0 ? (
+      {/* Payroll Runs with Employee Payslips */}
+      {runs.length === 0 ? (
         <div className="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl p-8 text-center">
           <span className="material-icons-outlined text-4xl text-subtext-light dark:text-subtext-dark mb-2">receipt_long</span>
           <p className="text-subtext-light dark:text-subtext-dark">No payslips found</p>
@@ -254,251 +190,113 @@ export default function Invoices() {
           <table className="min-w-full divide-y divide-border-light dark:divide-border-dark">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Payslip #</th>
-                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Employee</th>
-                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Amount</th>
-                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Due Date</th>
+                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Pay Period</th>
+                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Pay Date</th>
+                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Total Amount</th>
                 <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Status</th>
-                {isEmployer && (
-                  <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Actions</th>
-                )}
+                <th className="px-6 py-3 text-left text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark">Details</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-light dark:divide-border-dark">
-              {invoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-light dark:text-text-dark">
-                    {invoice.invoice_number}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-text-light dark:text-text-dark">{invoice.client_name}</div>
-                    {invoice.client_email && (
-                      <div className="text-xs text-subtext-light dark:text-subtext-dark">{invoice.client_email}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-light dark:text-text-dark">
-                    {formatCurrency(invoice.amount, invoice.currency)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-subtext-light dark:text-subtext-dark">
-                    {invoice.due_date ? new Date(invoice.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[invoice.status] || STATUS_STYLES.draft}`}>
-                      {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1)}
-                    </span>
-                  </td>
-                  {isEmployer && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => handleView(invoice)}
-                          className="text-primary hover:text-primary-hover flex items-center gap-1 text-xs font-medium"
-                        >
-                          <span className="material-icons-outlined text-lg">visibility</span>
-                          View
-                        </button>
-                        <button
-                          onClick={() => handleDownload(invoice)}
-                          className="text-green-600 hover:text-green-800 flex items-center gap-1 text-xs font-medium"
-                        >
-                          <span className="material-icons-outlined text-lg">download</span>
-                          Download
-                        </button>
-                        {invoice.status === 'pending' && invoice.type === 'billing' && (
-                          <button
-                            onClick={() => handleApprove(invoice.id)}
-                            disabled={actionLoading}
-                            className="text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded flex items-center gap-1 text-xs font-medium disabled:opacity-50"
-                          >
-                            <span className="material-icons-outlined text-lg">check_circle</span>
-                            Approve
-                          </button>
-                        )}
-                      </div>
+              {runs.map((run) => (
+                <>
+                  <tr key={run.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition cursor-pointer" onClick={() => handleExpandRun(run.id)}>
+                    <td className="px-6 py-4 text-sm font-medium text-text-light dark:text-text-dark">
+                      {formatPeriod(run.pay_period_start, run.pay_period_end)}
                     </td>
+                    <td className="px-6 py-4 text-sm text-subtext-light dark:text-subtext-dark">
+                      {formatDate(run.pay_date)}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-text-light dark:text-text-dark">
+                      {formatCurrency(run.total_amount)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${RUN_STATUS_STYLES[run.status] || RUN_STATUS_STYLES.draft}`}>
+                        {run.status?.charAt(0).toUpperCase() + run.status?.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleExpandRun(run.id) }}
+                        className="text-primary hover:text-primary-hover flex items-center gap-1 text-xs font-medium"
+                      >
+                        <span className="material-icons-outlined text-lg">
+                          {expandedRunId === run.id ? 'expand_less' : 'expand_more'}
+                        </span>
+                        {expandedRunId === run.id ? 'Hide' : 'View'} Payslips
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedRunId === run.id && (
+                    <tr key={`${run.id}-detail`}>
+                      <td colSpan={5} className="px-6 py-4 bg-gray-50 dark:bg-gray-800/30">
+                        {expandLoading ? (
+                          <div className="text-center py-4">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                          </div>
+                        ) : expandedRunData?.items?.length > 0 ? (
+                          <>
+                            <div className="text-xs font-medium text-subtext-light dark:text-subtext-dark uppercase mb-3">
+                              Employee Payslips for {formatPeriod(run.pay_period_start, run.pay_period_end)}
+                            </div>
+                            <table className="w-full text-left">
+                              <thead className="text-xs uppercase font-semibold text-subtext-light dark:text-subtext-dark bg-gray-100 dark:bg-gray-700/50">
+                                <tr>
+                                  <th className="px-4 py-2">Employee</th>
+                                  <th className="px-4 py-2">Base Salary</th>
+                                  <th className="px-4 py-2">Days</th>
+                                  <th className="px-4 py-2">Leave</th>
+                                  <th className="px-4 py-2">Deductions</th>
+                                  <th className="px-4 py-2">Net Pay</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border-light dark:divide-border-dark text-sm">
+                                {getFilteredItems(expandedRunData.items).map(item => (
+                                  <tr key={item.id}>
+                                    <td className="px-4 py-3 text-text-light dark:text-text-dark font-medium">
+                                      {item.member?.profile?.full_name || `${item.member?.first_name || ''} ${item.member?.last_name || ''}`.trim() || item.member_name || item.member_id}
+                                    </td>
+                                    <td className="px-4 py-3 text-text-light dark:text-text-dark">{formatCurrency(item.base_salary)}</td>
+                                    <td className="px-4 py-3 text-text-light dark:text-text-dark">
+                                      {item.payable_days != null ? (
+                                        <span>{item.payable_days}/{item.calendar_days || 30}</span>
+                                      ) : <span className="text-subtext-light dark:text-subtext-dark">-</span>}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {(item.paid_leave_days > 0 || item.unpaid_leave_days > 0) ? (
+                                        <div>
+                                          {item.paid_leave_days > 0 && <span className="text-green-600 dark:text-green-400">{item.paid_leave_days}d paid</span>}
+                                          {item.paid_leave_days > 0 && item.unpaid_leave_days > 0 && <span className="text-subtext-light dark:text-subtext-dark"> / </span>}
+                                          {item.unpaid_leave_days > 0 && <span className="text-red-500 dark:text-red-400">{item.unpaid_leave_days}d unpaid</span>}
+                                        </div>
+                                      ) : <span className="text-subtext-light dark:text-subtext-dark">-</span>}
+                                    </td>
+                                    <td className="px-4 py-3 text-text-light dark:text-text-dark">{formatCurrency(item.deductions)}</td>
+                                    <td className="px-4 py-3 text-text-light dark:text-text-dark font-semibold">{formatCurrency(item.net_pay)}</td>
+                                  </tr>
+                                ))}
+                                {getFilteredItems(expandedRunData.items).length === 0 && (
+                                  <tr>
+                                    <td colSpan={6} className="px-4 py-3 text-center text-subtext-light dark:text-subtext-dark">
+                                      No employees match your search
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </>
+                        ) : (
+                          <p className="text-center text-subtext-light dark:text-subtext-dark py-2">No payslips in this period</p>
+                        )}
+                      </td>
+                    </tr>
                   )}
-                </tr>
+                </>
               ))}
             </tbody>
           </table>
         </div>
       )}
-
-      {/* Create/Edit Modal */}
-      {showModal && (
-        <InvoiceModal
-          invoice={editingInvoice}
-          onClose={() => { setShowModal(false); setEditingInvoice(null) }}
-          onSuccess={() => { setShowModal(false); setEditingInvoice(null); fetchInvoices(); fetchStats() }}
-        />
-      )}
-    </div>
-  )
-}
-
-function InvoiceModal({ invoice, onClose, onSuccess }) {
-  const isEdit = !!invoice
-  const [formData, setFormData] = useState({
-    invoice_number: invoice?.invoice_number || '',
-    client_name: invoice?.client_name || '',
-    client_email: invoice?.client_email || '',
-    amount: invoice?.amount || '',
-    currency: invoice?.currency || 'NPR',
-    due_date: invoice?.due_date || '',
-    status: invoice?.status || 'draft',
-    notes: invoice?.notes || '',
-    items: invoice?.items || []
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    if (!isEdit && !formData.invoice_number) {
-      invoicesService.generateInvoiceNumber().then(num => {
-        setFormData(prev => ({ ...prev, invoice_number: num }))
-      }).catch(() => {})
-    }
-  }, [])
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!formData.client_name || !formData.amount || !formData.due_date) {
-      setError('Client name, amount, and due date are required')
-      return
-    }
-    try {
-      setLoading(true)
-      setError(null)
-      if (isEdit) {
-        await invoicesService.updateInvoice(invoice.id, formData)
-      } else {
-        await invoicesService.createInvoice(formData)
-      }
-      onSuccess()
-    } catch (err) {
-      setError(err.message || `Failed to ${isEdit ? 'update' : 'create'} invoice`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-border-light dark:border-border-dark flex justify-between items-center sticky top-0 bg-surface-light dark:bg-surface-dark">
-          <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">{isEdit ? 'Edit Invoice' : 'Create Invoice'}</h2>
-          <button onClick={onClose} className="text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark">
-            <span className="material-icons-outlined">close</span>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded text-sm">
-              {error}
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Invoice Number</label>
-            <input
-              type="text"
-              value={formData.invoice_number}
-              onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="INV-001"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Client Name *</label>
-            <input
-              type="text"
-              value={formData.client_name}
-              onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Client name"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Client Email</label>
-            <input
-              type="email"
-              value={formData.client_email}
-              onChange={(e) => setFormData({ ...formData, client_email: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="client@example.com"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Amount *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="0.00"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Currency</label>
-              <select
-                value={formData.currency}
-                onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="NPR">NPR</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Due Date *</label>
-              <input
-                type="date"
-                value={formData.due_date}
-                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Status</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="draft">Draft</option>
-                <option value="pending">Pending</option>
-                <option value="paid">Paid</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Notes</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary min-h-[80px] resize-y"
-              placeholder="Optional notes..."
-            />
-          </div>
-          <div className="flex justify-end space-x-3 pt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-border-light dark:border-border-dark rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 text-text-light dark:text-text-dark transition">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 transition">
-              {loading ? 'Saving...' : (isEdit ? 'Save Changes' : 'Create Invoice')}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   )
 }

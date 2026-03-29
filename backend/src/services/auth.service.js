@@ -147,11 +147,11 @@ export const authService = {
 
       const jwtToken = this.generateToken(verifyRecord.user_id)
       const role = profile?.role || 'candidate'
-      let redirectTo = '/dashboard-employee'
+      let redirectTo = '/employee/overview'
       if (role === 'employer') {
         redirectTo = profile?.onboarding_completed ? '/dashboard' : '/onboarding/employer'
       } else if (role === 'candidate') {
-        redirectTo = profile?.onboarding_completed ? '/dashboard-employee' : '/onboarding/employee'
+        redirectTo = profile?.onboarding_completed ? '/employee/overview' : '/onboarding/employee'
       }
 
       return { role, token: jwtToken, redirectTo }
@@ -223,11 +223,11 @@ export const authService = {
 
     // Generate JWT for auto-login after verification
     const jwtToken = this.generateToken(verifyRecord.user_id)
-    let redirectTo = '/dashboard-employee'
+    let redirectTo = '/employee/overview'
     if (profile.role === 'employer') {
       redirectTo = profile.onboarding_completed ? '/dashboard' : '/onboarding/employer'
     } else if (profile.role === 'candidate') {
-      redirectTo = profile.onboarding_completed ? '/dashboard-employee' : '/onboarding/employee'
+      redirectTo = profile.onboarding_completed ? '/employee/overview' : '/onboarding/employee'
     }
 
     return { role: profile.role, token: jwtToken, redirectTo }

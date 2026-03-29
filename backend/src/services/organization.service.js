@@ -81,8 +81,7 @@ export const organizationService = {
       total_members: members.length,
       active: members.filter(m => m.status === 'active').length,
       invited: members.filter(m => m.status === 'invited').length,
-      inactive: members.filter(m => m.status === 'inactive').length,
-      offboarded: members.filter(m => m.status === 'offboarded').length
+      onboarding: members.filter(m => m.status === 'onboarding').length
     }
 
     return stats

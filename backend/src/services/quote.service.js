@@ -163,9 +163,13 @@ export const quoteService = {
   },
 
   /**
-   * Accept a quote — validates it's draft and not expired
+   * Accept a quote — validates it's draft and not expired.
+   * @param {string} quoteId
+   * @param {string} userId
+   * @param {Object} [options]
+   * @param {string} [options.termsAcceptedAt] - ISO timestamp of terms acceptance
    */
-  async acceptQuote(quoteId, userId) {
+  async acceptQuote(quoteId, userId, options = {}) {
     const { data: quote, error: fetchError } = await supabase
       .from('eor_quotes')
       .select('*')
@@ -190,20 +194,148 @@ export const quoteService = {
       throw new BadRequestError('Quote has expired. Please generate a new quote.')
     }
 
+    const updateData = {
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+      accepted_by: userId,
+      updated_at: new Date().toISOString()
+    }
+
+    if (options.termsAcceptedAt) {
+      updateData.terms_accepted_at = options.termsAcceptedAt
+    }
+
     const { data, error } = await supabase
       .from('eor_quotes')
-      .update({
-        status: 'accepted',
-        accepted_at: new Date().toISOString(),
-        accepted_by: userId,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', quoteId)
       .select()
       .single()
 
     if (error) throw error
     return data
+  },
+
+  /**
+   * Reissue a quote for a member.
+   *
+   * If `newQuoteId` is provided the caller has already generated a quote via
+   * the normal generateQuote flow (e.g. from the InviteMemberModal form).
+   * In that case we accept the supplied quote, update the member record with
+   * the new quote's data, and delete the old quote.
+   *
+   * If `newQuoteId` is NOT provided the legacy behaviour is used: a new quote
+   * is generated from the member's current data, auto-accepted, and linked.
+   *
+   * @param {string} memberId
+   * @param {string} orgId
+   * @param {string} userId
+   * @param {string} [newQuoteId] - Optional pre-generated quote ID
+   */
+  async reissueQuote(memberId, orgId, userId, newQuoteId = null) {
+    // 1. Fetch the member record
+    const { data: member, error: memberErr } = await supabase
+      .from('organization_members')
+      .select('*')
+      .eq('id', memberId)
+      .eq('organization_id', orgId)
+      .single()
+
+    if (memberErr || !member) {
+      throw new NotFoundError('Member not found')
+    }
+
+    const oldQuoteId = member.quote_id
+
+    let acceptedQuote
+
+    if (newQuoteId) {
+      // --- Path A: caller supplied a pre-generated quote ---
+
+      // Accept the new quote
+      acceptedQuote = await this.acceptQuote(newQuoteId, userId)
+
+      // Build member update from the new quote data
+      // annual_salary is stored in minor units (paisa); member.salary_amount is
+      // in major units, so convert back.
+      const memberUpdate = {
+        quote_id: newQuoteId,
+        quote_dispute_note: null,
+        quote_verified: false
+      }
+
+      if (acceptedQuote.annual_salary != null) {
+        memberUpdate.salary_amount = acceptedQuote.annual_salary / 100
+      }
+      if (acceptedQuote.salary_currency) {
+        memberUpdate.salary_currency = acceptedQuote.salary_currency
+      }
+      if (acceptedQuote.job_title !== undefined) {
+        memberUpdate.job_title = acceptedQuote.job_title
+      }
+      if (acceptedQuote.department !== undefined) {
+        memberUpdate.department = acceptedQuote.department
+      }
+      if (acceptedQuote.employment_type !== undefined) {
+        memberUpdate.employment_type = acceptedQuote.employment_type
+      }
+      if (acceptedQuote.start_date !== undefined) {
+        memberUpdate.start_date = acceptedQuote.start_date
+      }
+
+      const { error: updateErr } = await supabase
+        .from('organization_members')
+        .update(memberUpdate)
+        .eq('id', memberId)
+        .eq('organization_id', orgId)
+
+      if (updateErr) throw updateErr
+    } else {
+      // --- Path B: legacy — generate a new quote from member data ---
+
+      const newQuote = await this.generateQuote(userId, orgId, {
+        salaryAmount: member.salary_amount,
+        salaryCurrency: member.salary_currency || 'NPR',
+        jobTitle: member.job_title,
+        department: member.department,
+        employmentType: member.employment_type,
+        startDate: member.start_date,
+        firstName: member.first_name,
+        lastName: member.last_name,
+        email: member.invitation_email,
+        countryCode: 'NPL'
+      })
+
+      acceptedQuote = await this.acceptQuote(newQuote.id, userId)
+
+      const { error: updateErr } = await supabase
+        .from('organization_members')
+        .update({
+          quote_id: newQuote.id,
+          quote_dispute_note: null,
+          quote_verified: false
+        })
+        .eq('id', memberId)
+        .eq('organization_id', orgId)
+
+      if (updateErr) throw updateErr
+    }
+
+    // Delete the old quote if one existed
+    if (oldQuoteId && oldQuoteId !== (newQuoteId || acceptedQuote.id)) {
+      const { error: deleteErr } = await supabase
+        .from('eor_quotes')
+        .delete()
+        .eq('id', oldQuoteId)
+
+      if (deleteErr) {
+        console.error('[QuoteService] Failed to delete old quote:', deleteErr)
+        // Non-fatal — the new quote was already created
+      }
+    }
+
+    // Return the newly accepted quote
+    return await this.getQuoteById(acceptedQuote.id, orgId)
   },
 
   /**

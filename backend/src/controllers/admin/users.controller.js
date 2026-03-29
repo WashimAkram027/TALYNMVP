@@ -77,5 +77,16 @@ export const adminUsersController = {
       const status = error.name === 'NotFoundError' ? 404 : error.name === 'BadRequestError' ? 400 : 500
       return errorResponse(res, error.message, status)
     }
+  },
+
+  async deleteUser(req, res) {
+    try {
+      const ip = req.ip || req.headers['x-forwarded-for']
+      const result = await adminUsersService.deleteUser(req.params.id, req.admin.id, ip)
+      return successResponse(res, result, 'User deleted successfully')
+    } catch (error) {
+      const status = error.statusCode || (error.name === 'NotFoundError' ? 404 : error.name === 'BadRequestError' ? 400 : 500)
+      return errorResponse(res, error.message, status)
+    }
   }
 }

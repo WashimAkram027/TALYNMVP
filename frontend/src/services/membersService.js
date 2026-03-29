@@ -104,15 +104,6 @@ export const membersService = {
   },
 
   /**
-   * Offboard a member
-   * @param {string} memberId - Member UUID
-   */
-  async offboardMember(memberId) {
-    const response = await api.post(`/members/${memberId}/offboard`)
-    return response.data
-  },
-
-  /**
    * Delete a member (only for invited status)
    * @param {string} memberId - Member UUID
    */
@@ -143,6 +134,16 @@ export const membersService = {
    */
   async getAvailableCandidates() {
     const response = await api.get('/members/available-candidates')
+    return response.data
+  },
+
+  /**
+   * Reissue quote for a member after offer update
+   * @param {string} memberId - Member UUID
+   * @param {string} quoteId - New quote UUID to link
+   */
+  async reissueQuote(memberId, quoteId) {
+    const response = await api.post(`/members/${memberId}/reissue-quote`, { quoteId })
     return response.data
   }
 }

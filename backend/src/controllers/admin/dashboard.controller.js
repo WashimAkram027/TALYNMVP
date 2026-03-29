@@ -18,5 +18,14 @@ export const adminDashboardController = {
     } catch (error) {
       return errorResponse(res, error.message, 500)
     }
+  },
+
+  async getPendingOnboardings(req, res) {
+    try {
+      const pendingOnboardings = await adminDashboardService.getPendingOnboardings()
+      return successResponse(res, pendingOnboardings)
+    } catch (error) {
+      return errorResponse(res, error.message, 500)
+    }
   }
 }

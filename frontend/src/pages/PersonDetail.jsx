@@ -2,20 +2,8 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { membersService } from '../services/membersService'
 import { StatusBadge, formatStartDate } from '../utils/statusUtils'
+import InviteMemberModal from '../components/features/InviteMemberModal'
 
-const ROLE_OPTIONS = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'employee', label: 'Employee' },
-  { value: 'contractor', label: 'Contractor' }
-]
-
-const EMPLOYMENT_TYPE_OPTIONS = [
-  { value: 'full_time', label: 'Full Time' },
-  { value: 'part_time', label: 'Part Time' },
-  { value: 'contract', label: 'Contract' },
-  { value: 'freelance', label: 'Freelance' }
-]
 
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A'
@@ -59,13 +47,15 @@ export default function PersonDetail() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const memberId = searchParams.get('id')
+  const action = searchParams.get('action')
 
   const [member, setMember] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
+  const [showInviteModal, setShowInviteModal] = useState(false)
   const [confirmModal, setConfirmModal] = useState(null)
+  const [feedback, setFeedback] = useState(null)
 
   // Fetch member data
   const fetchMember = async () => {
@@ -92,6 +82,13 @@ export default function PersonDetail() {
     fetchMember()
   }, [memberId])
 
+  // Auto-open InviteMemberModal when action=review-changes
+  useEffect(() => {
+    if (action === 'review-changes' && member) {
+      setShowInviteModal(true)
+    }
+  }, [action, member])
+
   // Action handlers
   const handleActivate = () => {
     setConfirmModal({
@@ -106,26 +103,6 @@ export default function PersonDetail() {
         } catch (err) {
           console.error('Failed to activate:', err)
           alert(err.message || 'Failed to activate member')
-        } finally {
-          setActionLoading(false)
-        }
-      }
-    })
-  }
-
-  const handleOffboard = () => {
-    setConfirmModal({
-      title: 'Offboard Member',
-      message: `Offboard ${member.profile?.full_name || 'this member'}? This will remove their access to the organization.`,
-      onConfirm: async () => {
-        setConfirmModal(null)
-        try {
-          setActionLoading(true)
-          await membersService.offboardMember(memberId)
-          await fetchMember()
-        } catch (err) {
-          console.error('Failed to offboard:', err)
-          alert(err.message || 'Failed to offboard member')
         } finally {
           setActionLoading(false)
         }
@@ -217,6 +194,38 @@ export default function PersonDetail() {
         </ol>
       </nav>
 
+      {/* Feedback Message */}
+      {feedback && (
+        <div className={`px-4 py-3 rounded-lg mb-6 ${feedback.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' : 'bg-red-50 border border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'}`}>
+          {feedback.message}
+        </div>
+      )}
+
+      {/* Change Request Banner */}
+      {member.quote_dispute_note && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 dark:border-amber-600 rounded-xl p-5 mb-6">
+          <div className="flex items-start gap-3">
+            <span className="material-icons-outlined text-amber-600 dark:text-amber-400 text-2xl mt-0.5">warning</span>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-amber-800 dark:text-amber-300">Change Request from Employee</h3>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mt-1 italic">
+                &ldquo;{member.quote_dispute_note}&rdquo;
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mt-2">
+                Update the offer details below. The employee will be automatically notified of changes.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="px-3 py-1.5 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 transition flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <span className="material-icons-outlined text-base">edit</span>
+              Update Offer Details
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Profile Header */}
       <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm mb-6">
         <div className="p-6 md:p-8">
@@ -254,7 +263,7 @@ export default function PersonDetail() {
                 {/* Action Buttons */}
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={() => setShowEditModal(true)}
+                    onClick={() => setShowInviteModal(true)}
                     disabled={actionLoading}
                     className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition flex items-center gap-2 disabled:opacity-50"
                   >
@@ -262,35 +271,25 @@ export default function PersonDetail() {
                     Edit
                   </button>
 
-                  {(status === 'invited' || status === 'in_review') && (
-                    <>
-                      <button
-                        onClick={handleActivate}
-                        disabled={actionLoading}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <span className="material-icons-outlined text-lg">check_circle</span>
-                        Activate
-                      </button>
-                      <button
-                        onClick={handleDelete}
-                        disabled={actionLoading}
-                        className="px-4 py-2 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <span className="material-icons-outlined text-lg">delete</span>
-                        Delete
-                      </button>
-                    </>
+                  {(status === 'invited' || status === 'onboarding') && (
+                    <button
+                      onClick={handleActivate}
+                      disabled={actionLoading}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <span className="material-icons-outlined text-lg">check_circle</span>
+                      Activate
+                    </button>
                   )}
 
-                  {status === 'active' && (
+                  {status === 'invited' && (
                     <button
-                      onClick={handleOffboard}
+                      onClick={handleDelete}
                       disabled={actionLoading}
                       className="px-4 py-2 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 disabled:opacity-50"
                     >
-                      <span className="material-icons-outlined text-lg">person_remove</span>
-                      Offboard
+                      <span className="material-icons-outlined text-lg">delete</span>
+                      Delete
                     </button>
                   )}
                 </div>
@@ -411,12 +410,6 @@ export default function PersonDetail() {
                 <p className="text-text-light dark:text-text-dark mt-1">{formatDate(member.joined_at)}</p>
               </div>
             )}
-            {member.offboarded_at && (
-              <div>
-                <label className="text-xs font-medium text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Offboarded On</label>
-                <p className="text-text-light dark:text-text-dark mt-1">{formatDate(member.offboarded_at)}</p>
-              </div>
-            )}
             {member.invited_by_profile && (
               <div>
                 <label className="text-xs font-medium text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Invited By</label>
@@ -440,15 +433,18 @@ export default function PersonDetail() {
         </Link>
       </div>
 
-      {/* Edit Modal */}
-      {showEditModal && (
-        <EditMemberModal
-          member={member}
-          onClose={() => setShowEditModal(false)}
+      {/* Invite/Edit/Reissue Modal */}
+      {showInviteModal && (
+        <InviteMemberModal
+          editMember={member}
+          onClose={() => setShowInviteModal(false)}
           onSuccess={() => {
-            setShowEditModal(false)
+            setShowInviteModal(false)
             fetchMember()
+            setFeedback({ type: 'success', message: 'Offer updated and employee notified' })
+            setTimeout(() => setFeedback(null), 5000)
           }}
+          departments={[]}
         />
       )}
 
@@ -483,148 +479,3 @@ export default function PersonDetail() {
   )
 }
 
-// Edit Member Modal Component
-function EditMemberModal({ member, onClose, onSuccess }) {
-  const [formData, setFormData] = useState({
-    memberRole: member.member_role || 'employee',
-    jobTitle: member.job_title || '',
-    department: member.department || '',
-    employmentType: member.employment_type || 'full_time',
-    salaryAmount: member.salary_amount || '',
-    salaryCurrency: member.salary_currency || 'NPR',
-    payFrequency: member.pay_frequency || 'monthly'
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    try {
-      setLoading(true)
-      setError(null)
-      await membersService.updateMember(member.id, formData)
-      onSuccess()
-    } catch (err) {
-      setError(err.message || 'Failed to update member')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md mx-4">
-        <div className="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Edit Team Member</h2>
-            <p className="text-sm text-subtext-light dark:text-subtext-dark">
-              {member.profile?.full_name || member.profile?.email}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-subtext-light dark:text-subtext-dark hover:text-text-light dark:hover:text-text-dark">
-            <span className="material-icons-outlined">close</span>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded text-sm">
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Role</label>
-              <select
-                value={formData.memberRole}
-                onChange={(e) => setFormData({ ...formData, memberRole: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                {ROLE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Employment Type</label>
-              <select
-                value={formData.employmentType}
-                onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                {EMPLOYMENT_TYPE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Job Title</label>
-            <input
-              type="text"
-              value={formData.jobTitle}
-              onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Software Engineer"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Department</label>
-            <input
-              type="text"
-              value={formData.department}
-              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-              className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Engineering"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Salary Amount</label>
-              <input
-                type="number"
-                value={formData.salaryAmount}
-                onChange={(e) => setFormData({ ...formData, salaryAmount: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="50000"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Pay Frequency</label>
-              <select
-                value={formData.payFrequency}
-                onChange={(e) => setFormData({ ...formData, payFrequency: e.target.value })}
-                className="w-full border border-border-light dark:border-border-dark bg-surface-light dark:bg-gray-800 rounded-lg px-3 py-2 text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="monthly">Monthly</option>
-                <option value="bi-weekly">Bi-Weekly</option>
-                <option value="weekly">Weekly</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50"
-            >
-              {loading ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}

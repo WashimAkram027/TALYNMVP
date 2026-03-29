@@ -74,9 +74,12 @@ export const quoteController = {
   async acceptQuoteAndInvite(req, res) {
     try {
       const { quoteId } = req.params
+      const { termsAcceptedAt } = req.body || {}
 
-      // 1. Accept the quote
-      const quote = await quoteService.acceptQuote(quoteId, req.user.id)
+      // 1. Accept the quote (with optional terms acceptance timestamp)
+      const quote = await quoteService.acceptQuote(quoteId, req.user.id, {
+        termsAcceptedAt: termsAcceptedAt || null
+      })
 
       // 2. Invite the member using existing members service
       const member = await membersService.invite(

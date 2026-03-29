@@ -143,7 +143,7 @@ export default function Sidebar({ onClose }) {
 
             <NavLink to="/employee/payroll" onClick={handleNavClick} className={navLinkClass}>
               <span className="material-icons-outlined">payments</span>
-              My Payroll
+              My Payslips
             </NavLink>
 
             <NavLink to="/employee/time-off" onClick={handleNavClick} className={navLinkClass}>

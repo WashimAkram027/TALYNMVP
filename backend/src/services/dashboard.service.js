@@ -22,7 +22,7 @@ export const dashboardService = {
       total: members.length,
       active: members.filter(m => m.status === 'active').length,
       invited: members.filter(m => m.status === 'invited').length,
-      offboarded: members.filter(m => m.status === 'offboarded').length
+      onboarding: members.filter(m => m.status === 'onboarding').length
     }
 
     // Calculate total monthly payroll for active members
@@ -93,6 +93,9 @@ export const dashboardService = {
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     const daysUntilPayroll = Math.ceil((lastDayOfMonth - now) / (1000 * 60 * 60 * 24))
 
+    // Get employer notifications
+    const notifications = await this.getEmployerNotifications(organizationId)
+
     return {
       members: memberStats,
       payroll: {
@@ -105,8 +108,89 @@ export const dashboardService = {
       compliance: {
         score: complianceScore,
         alerts: complianceAlerts
-      }
+      },
+      notifications
     }
+  },
+
+  /**
+   * Get employer notifications — actionable items for the employer dashboard.
+   * Returns an array of notification objects with type, icon, title,
+   * description, action URL, and optional metadata.
+   */
+  async getEmployerNotifications(orgId) {
+    const notifications = []
+
+    // 1. Members with change requests (quote_dispute_note set)
+    try {
+      const { data: disputeMembers } = await supabase
+        .from('organization_members')
+        .select('id, first_name, last_name, invitation_email, quote_dispute_note')
+        .eq('organization_id', orgId)
+        .not('quote_dispute_note', 'is', null)
+
+      if (disputeMembers?.length) {
+        for (const m of disputeMembers) {
+          const name = `${m.first_name || ''}`.trim() || m.invitation_email
+          notifications.push({
+            type: 'offer_review',
+            icon: 'flag',
+            title: 'Offer change requested',
+            description: `${name} requested changes to their offer`,
+            action: `/people-info?id=${m.id}&action=review-changes`,
+            memberId: m.id
+          })
+        }
+      }
+    } catch (e) {
+      console.error('[DashboardService] Error fetching dispute members:', e)
+    }
+
+    // 2. Pending time-off requests
+    try {
+      const { count: pendingTimeOff } = await supabase
+        .from('time_off_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('status', 'pending')
+
+      if (pendingTimeOff > 0) {
+        notifications.push({
+          type: 'time_off',
+          icon: 'event_busy',
+          title: 'Pending time-off requests',
+          description: `${pendingTimeOff} time-off request${pendingTimeOff > 1 ? 's' : ''} awaiting approval`,
+          action: '/time-off',
+          count: pendingTimeOff
+        })
+      }
+    } catch (e) {
+      console.error('[DashboardService] Error fetching pending time-off:', e)
+    }
+
+    // 3. Draft / pending-approval payroll runs
+    try {
+      const { count: draftPayroll } = await supabase
+        .from('payroll_runs')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .in('status', ['draft', 'pending_approval'])
+
+      if (draftPayroll > 0) {
+        notifications.push({
+          type: 'payroll',
+          icon: 'payments',
+          title: 'Payroll action needed',
+          description: `${draftPayroll} payroll run${draftPayroll > 1 ? 's' : ''} pending`,
+          action: '/payroll',
+          count: draftPayroll
+        })
+      }
+    } catch (e) {
+      console.error('[DashboardService] Error fetching draft payroll:', e)
+    }
+
+    return notifications
   },
 
   /**
@@ -131,7 +215,7 @@ export const dashboardService = {
         profile:profiles!organization_members_profile_id_fkey(id, full_name, first_name, last_name, email, avatar_url)
       `)
       .eq('organization_id', organizationId)
-      .in('status', ['active', 'invited', 'onboarding', 'ready_to_start', 'in_review', 'offboarding'])
+      .in('status', ['active', 'invited', 'onboarding'])
       .neq('member_role', 'owner') // Exclude owner from team list
       .order('joined_at', { ascending: false, nullsFirst: false })
       .limit(limit)
@@ -160,10 +244,19 @@ export const dashboardService = {
 
   /**
    * Get employee dashboard statistics
+   * Includes pendingOnboardingTasks for the dashboard todo checklist.
    */
   async getEmployeeStats(profileId, organizationId = null) {
+    // Get profile data for onboarding task checks
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id, pending_bank_details, onboarding_completed')
+      .eq('id', profileId)
+      .single()
+
     // Get membership info if in an organization
     let membership = null
+    let memberId = null
     if (organizationId) {
       const { data: memberData } = await supabase
         .from('organization_members')
@@ -173,6 +266,7 @@ export const dashboardService = {
         .single()
 
       membership = memberData
+      memberId = memberData?.id || null
     }
 
     // Get time off balance - if table exists
@@ -248,6 +342,35 @@ export const dashboardService = {
     const now = new Date()
     const nextPayday = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
+    // Check pending onboarding tasks (document upload + banking details)
+    let pendingOnboardingTasks = null
+    if (profileData?.onboarding_completed) {
+      let docQuery = supabase
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('category', 'identity')
+
+      if (memberId) {
+        docQuery = docQuery.eq('member_id', memberId)
+      } else {
+        docQuery = docQuery.eq('uploaded_by', profileId)
+      }
+
+      const { count: docCount } = await docQuery
+
+      const documentsUploaded = (docCount || 0) > 0
+      const bankingDetailsAdded = !!profileData.pending_bank_details
+
+      // Only include if there are incomplete tasks
+      if (!documentsUploaded || !bankingDetailsAdded) {
+        pendingOnboardingTasks = {
+          documents: { completed: documentsUploaded },
+          banking: { completed: bankingDetailsAdded },
+          allComplete: false
+        }
+      }
+    }
+
     return {
       timeOff: timeOffBalance,
       upcomingTimeOff,
@@ -256,7 +379,8 @@ export const dashboardService = {
         formatted: nextPayday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       },
       benefits: benefitsCoverage,
-      membership
+      membership,
+      pendingOnboardingTasks
     }
   },
 

@@ -34,6 +34,11 @@ const usersService = {
   async update(id, updates) {
     const { data } = await api.put(`/admin/users/${id}`, updates)
     return data.data
+  },
+
+  async deleteUser(id) {
+    const { data } = await api.delete(`/admin/users/${id}`)
+    return data
   }
 }
 

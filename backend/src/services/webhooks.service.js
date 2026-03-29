@@ -285,6 +285,7 @@ export const webhooksService = {
           const paymentIntentId = dispute.payment_intent
 
           if (paymentIntentId) {
+            // Try payroll_runs first
             const { data: run } = await supabase
               .from('payroll_runs')
               .select('id, organization_id, pay_period_start, pay_period_end, total_pull_amount_cents')
@@ -309,7 +310,6 @@ export const webhooksService = {
                 const reason = dispute.reason || 'unknown'
 
                 if (org) {
-                  // Employer notification
                   const { data: owner } = await supabase
                     .from('profiles')
                     .select('email, first_name')
@@ -320,7 +320,6 @@ export const webhooksService = {
                     await emailService.sendPayrollDisputedEmail(owner.email, owner.first_name, amount, period, reason)
                   }
 
-                  // Admin notification
                   try {
                     const { env } = await import('../config/env.js')
                     await emailService.sendAdminPayrollDisputedEmail(
@@ -332,10 +331,130 @@ export const webhooksService = {
                 }
               } catch (emailErr) {
                 console.error('Failed to send dispute email:', emailErr)
-                // Email failures should not cause the webhook to fail
               }
             } else {
-              console.warn(`Dispute ${dispute.id}: no payroll run found for PI ${paymentIntentId}`)
+              // Fallback: check invoices table
+              const { data: invoice } = await supabase
+                .from('invoices')
+                .select('id, organization_id, invoice_number, total_amount_cents, payroll_run_id, billing_period_start, billing_period_end')
+                .eq('stripe_payment_intent_id', paymentIntentId)
+                .single()
+
+              if (invoice) {
+                await paymentsService.handleInvoiceChargeDisputeCreated(dispute, invoice)
+                console.log(`Dispute ${dispute.id} processed for invoice ${invoice.id}`)
+
+                // Send invoice dispute notification emails (non-fatal)
+                try {
+                  const { emailService } = await import('./email.service.js')
+                  const { data: org } = await supabase
+                    .from('organizations')
+                    .select('owner_id, name')
+                    .eq('id', invoice.organization_id)
+                    .single()
+
+                  const amount = `$${((invoice.total_amount_cents || 0) / 100).toFixed(2)}`
+                  const reason = dispute.reason || 'unknown'
+
+                  if (org) {
+                    const { data: owner } = await supabase
+                      .from('profiles')
+                      .select('email, first_name')
+                      .eq('id', org.owner_id)
+                      .single()
+
+                    if (owner) {
+                      await emailService.sendInvoiceDisputedEmail(
+                        owner.email, owner.first_name, invoice.invoice_number, amount, reason
+                      )
+                    }
+
+                    try {
+                      const { env } = await import('../config/env.js')
+                      await emailService.sendAdminInvoiceDisputedEmail(
+                        env.adminEmail, org.name || 'Unknown', invoice.invoice_number, amount, reason, dispute.id
+                      )
+                    } catch (adminErr) {
+                      console.error('Failed to send admin invoice dispute notification:', adminErr)
+                    }
+                  }
+                } catch (emailErr) {
+                  console.error('Failed to send invoice dispute email:', emailErr)
+                }
+              } else {
+                console.error(`Dispute ${dispute.id}: no payroll run or invoice found for PI ${paymentIntentId}`)
+              }
+            }
+          }
+          break
+        }
+
+        case 'charge.dispute.closed': {
+          const dispute = event.data.object
+          const paymentIntentId = dispute.payment_intent
+
+          if (paymentIntentId) {
+            // Look up payroll_runs first
+            const { data: run } = await supabase
+              .from('payroll_runs')
+              .select('id, organization_id, pay_period_start, pay_period_end, total_pull_amount_cents')
+              .eq('stripe_payment_intent_id', paymentIntentId)
+              .single()
+
+            // Look up invoices
+            const { data: invoice } = await supabase
+              .from('invoices')
+              .select('id, organization_id, invoice_number, total_amount_cents, payroll_run_id')
+              .eq('stripe_payment_intent_id', paymentIntentId)
+              .single()
+
+            const runId = run?.id || null
+            const orgId = run?.organization_id || invoice?.organization_id || null
+            const invoiceId = invoice?.id || null
+
+            if (runId || invoiceId) {
+              await paymentsService.handleDisputeClosed(dispute, runId, orgId, invoiceId)
+              console.log(`Dispute ${dispute.id} closed (status: ${dispute.status}) for run=${runId}, invoice=${invoiceId}`)
+
+              // Send resolution notification emails (non-fatal)
+              try {
+                const { emailService } = await import('./email.service.js')
+                if (orgId) {
+                  const { data: org } = await supabase
+                    .from('organizations')
+                    .select('owner_id, name')
+                    .eq('id', orgId)
+                    .single()
+
+                  if (org) {
+                    const { data: owner } = await supabase
+                      .from('profiles')
+                      .select('email, first_name')
+                      .eq('id', org.owner_id)
+                      .single()
+
+                    const disputeAmount = `$${((dispute.amount || 0) / 100).toFixed(2)}`
+                    const outcome = dispute.status === 'won' ? 'won' : dispute.status === 'warning_closed' ? 'closed (inquiry)' : 'lost'
+
+                    if (owner) {
+                      await emailService.sendDisputeResolvedEmail(owner.email, owner.first_name, outcome, disputeAmount)
+                    }
+
+                    try {
+                      const { env } = await import('../config/env.js')
+                      await emailService.sendAdminDisputeResolvedEmail(
+                        env.adminEmail, org.name || 'Unknown', outcome, disputeAmount, dispute.id
+                      )
+                    } catch (adminErr) {
+                      console.error('Failed to send admin dispute resolved notification:', adminErr)
+                    }
+                  }
+                }
+              } catch (emailErr) {
+                console.error('Failed to send dispute resolved email:', emailErr)
+              }
+            } else {
+              console.error(`Dispute closed ${dispute.id}: no payroll run or invoice found for PI ${paymentIntentId}`)
             }
           }
           break
@@ -347,6 +466,7 @@ export const webhooksService = {
           const paymentIntentId = charge.payment_intent
 
           if (paymentIntentId) {
+            // Try payroll_runs first
             const { data: run } = await supabase
               .from('payroll_runs')
               .select('id, organization_id, pay_period_start, pay_period_end, total_pull_amount_cents')
@@ -393,7 +513,59 @@ export const webhooksService = {
                 console.error('Failed to send refund email:', emailErr)
               }
             } else {
-              console.warn(`Refund on charge ${charge.id}: no payroll run found for PI ${paymentIntentId}`)
+              // Fallback: check invoices table
+              const { data: invoice } = await supabase
+                .from('invoices')
+                .select('id, organization_id, invoice_number, total_amount_cents, payroll_run_id, billing_period_start, billing_period_end')
+                .eq('stripe_payment_intent_id', paymentIntentId)
+                .single()
+
+              if (invoice) {
+                await paymentsService.handleInvoiceChargeRefunded(charge, invoice)
+                console.log(`Refund on charge ${charge.id} processed for invoice ${invoice.id}`)
+
+                // Send invoice refund notification emails (non-fatal)
+                try {
+                  const { emailService } = await import('./email.service.js')
+                  const { data: org } = await supabase
+                    .from('organizations')
+                    .select('owner_id, name')
+                    .eq('id', invoice.organization_id)
+                    .single()
+
+                  const refundedAmount = `$${((charge.amount_refunded || 0) / 100).toFixed(2)}`
+                  const period = invoice.billing_period_start && invoice.billing_period_end
+                    ? `${invoice.billing_period_start} to ${invoice.billing_period_end}`
+                    : 'N/A'
+
+                  if (org) {
+                    const { data: owner } = await supabase
+                      .from('profiles')
+                      .select('email, first_name')
+                      .eq('id', org.owner_id)
+                      .single()
+
+                    if (owner) {
+                      await emailService.sendInvoiceRefundedEmail(
+                        owner.email, owner.first_name, invoice.invoice_number, refundedAmount, period
+                      )
+                    }
+
+                    try {
+                      const { env } = await import('../config/env.js')
+                      await emailService.sendAdminInvoiceRefundedEmail(
+                        env.adminEmail, org.name || 'Unknown', invoice.invoice_number, refundedAmount
+                      )
+                    } catch (adminErr) {
+                      console.error('Failed to send admin invoice refund notification:', adminErr)
+                    }
+                  }
+                } catch (emailErr) {
+                  console.error('Failed to send invoice refund email:', emailErr)
+                }
+              } else {
+                console.error(`Refund on charge ${charge.id}: no payroll run or invoice found for PI ${paymentIntentId}`)
+              }
             }
           }
           break

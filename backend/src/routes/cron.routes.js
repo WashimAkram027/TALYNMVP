@@ -9,5 +9,6 @@ router.post('/collect-payments', cronController.collectApprovedPayments)
 router.post('/mark-overdue', cronController.markOverdueInvoices)
 router.post('/leave-accrual', cronController.runLeaveAccrual)
 router.post('/fiscal-year-rollover', cronController.runFiscalYearRollover)
+router.post('/reconcile-leave', cronController.reconcileLeave)
 
 export default router

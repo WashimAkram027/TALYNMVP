@@ -1,13 +1,31 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { authAPI } from '../../services/api'
 
 export default function EmployeeLogin() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useAuthStore()
 
-  const [email, setEmail] = useState('')
+  const inviteEmail = searchParams.get('email')
+  const isInvite = searchParams.get('invite') === 'true'
+
+  const [email, setEmail] = useState(inviteEmail || '')
+
+  // If coming from an invitation link, check if account exists.
+  // If not, redirect to signup so they can create one first.
+  useEffect(() => {
+    if (isInvite && inviteEmail) {
+      authAPI.checkEmail(inviteEmail).then(response => {
+        if (response.data && !response.data.exists) {
+          navigate(`/signup/employee?email=${encodeURIComponent(inviteEmail)}&invite=true`, { replace: true })
+        }
+      }).catch(() => {
+        // If check fails, stay on login page — user can still navigate manually
+      })
+    }
+  }, [isInvite, inviteEmail, navigate])
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -56,6 +74,13 @@ export default function EmployeeLogin() {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Employee Login</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">Access your work dashboard</p>
         </div>
+
+        {isInvite && (
+          <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 px-4 py-3 rounded-lg flex items-start gap-3">
+            <span className="material-icons text-[20px] mt-0.5">info</span>
+            <p className="text-sm">You have a pending invitation. Log in to review the offer.</p>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg">
@@ -137,7 +162,7 @@ export default function EmployeeLogin() {
           <div className="mt-6 text-center space-y-2">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Don't have an account?{' '}
-              <Link className="font-semibold text-primary hover:text-primary-hover" to="/signup/employee">
+              <Link className="font-semibold text-primary hover:text-primary-hover" to={isInvite && inviteEmail ? `/signup/employee?email=${encodeURIComponent(inviteEmail)}&invite=true` : '/signup/employee'}>
                 Sign Up
               </Link>
             </p>

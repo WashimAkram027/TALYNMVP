@@ -1,30 +1,19 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { onboardingAPI } from '../../services/api'
-import BankDetailsForm from '../../components/employee/BankDetailsForm'
 
 const STEP_TITLES = [
   'Personal Information',
   'Emergency Contact',
-  'Tax Information',
-  'Document Upload',
-  'Banking Details'
+  'Tax Information'
 ]
 
 const RELATIONSHIPS = ['Parent', 'Spouse', 'Sibling', 'Friend', 'Other']
-const DOC_TYPES = [
-  { value: 'citizenship', label: 'Citizenship Certificate' },
-  { value: 'national_id', label: 'National ID' },
-  { value: 'passport', label: 'Passport' }
-]
-const ACCEPTED_FILE_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 export default function EmployeeOnboarding() {
   const navigate = useNavigate()
   const { profile, checkAuth } = useAuthStore()
-  const fileInputRef = useRef(null)
 
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -49,11 +38,6 @@ export default function EmployeeOnboarding() {
   const [panNumber, setPanNumber] = useState('')
   const [ssfNumber, setSsfNumber] = useState('')
 
-  // Step 4: Documents
-  const [uploadedDocs, setUploadedDocs] = useState([])
-  const [uploading, setUploading] = useState(false)
-  const [selectedDocType, setSelectedDocType] = useState('citizenship')
-
   // Clear errors when step changes
   useEffect(() => { setError('') }, [step])
 
@@ -62,13 +46,14 @@ export default function EmployeeOnboarding() {
       try {
         const response = await onboardingAPI.getEmployeeStatus()
         if (response.success && response.data) {
-          const { currentStep, isComplete, personalInfo, emergencyContact, taxInfo, documents } = response.data
+          const { currentStep, isComplete, personalInfo, emergencyContact, taxInfo } = response.data
           if (isComplete) {
             navigate('/employee/overview', { replace: true })
             return
           }
           if (currentStep) {
-            setStep(currentStep)
+            // Cap step at 3
+            setStep(Math.min(currentStep, 3))
           }
           // Pre-fill saved data
           if (personalInfo) {
@@ -88,9 +73,6 @@ export default function EmployeeOnboarding() {
           if (taxInfo) {
             setPanNumber(taxInfo.panNumber || '')
             setSsfNumber(taxInfo.ssfNumber || '')
-          }
-          if (documents && documents.length > 0) {
-            setUploadedDocs(documents)
           }
         }
       } catch {
@@ -141,7 +123,7 @@ export default function EmployeeOnboarding() {
     setSubmitting(false)
   }
 
-  // Step 3: Tax Info submit
+  // Step 3: Tax Info submit - completes onboarding and redirects to dashboard
   const handleTaxInfoSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
@@ -151,7 +133,8 @@ export default function EmployeeOnboarding() {
         panNumber, ssfNumber: ssfNumber || undefined
       })
       if (response.success) {
-        setStep(4)
+        await checkAuth()
+        navigate('/employee/overview', { replace: true })
       } else {
         setError(response.error || 'Failed to save tax information')
       }
@@ -159,76 +142,6 @@ export default function EmployeeOnboarding() {
       setError(err.message || 'Failed to save tax information')
     }
     setSubmitting(false)
-  }
-
-  // Step 4: Document upload
-  const handleFileSelect = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
-      setError('Please upload a PDF, PNG, or JPEG file')
-      return
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      setError('File must be under 10MB')
-      return
-    }
-
-    setUploading(true)
-    setError('')
-
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const base64 = reader.result.split(',')[1]
-      try {
-        const response = await onboardingAPI.uploadEmployeeDocument({
-          docType: selectedDocType,
-          fileBase64: base64,
-          fileName: file.name,
-          fileType: file.type
-        })
-        if (response.success && response.data) {
-          setUploadedDocs(prev => [...prev, response.data])
-        } else {
-          setError(response.error || 'Failed to upload document')
-        }
-      } catch (err) {
-        setError(err.message || 'Failed to upload document')
-      }
-      setUploading(false)
-    }
-    reader.readAsDataURL(file)
-
-    // Reset file input
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const handleDocumentStepComplete = async () => {
-    setSubmitting(true)
-    setError('')
-    try {
-      const response = await onboardingAPI.completeDocumentStep()
-      if (response.success) {
-        setStep(5)
-      } else {
-        setError(response.error || 'Failed to complete document step')
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to complete document step')
-    }
-    setSubmitting(false)
-  }
-
-  // Step 5: Bank Details submit (via shared BankDetailsForm)
-  const handleBankDetailsSubmit = async (bankData) => {
-    const response = await onboardingAPI.submitEmployeeBankDetails(bankData)
-    if (response.success) {
-      await checkAuth()
-      navigate('/employee/overview', { replace: true })
-    } else {
-      throw new Error(response.error || 'Failed to save bank details')
-    }
   }
 
   if (loading) {
@@ -274,7 +187,7 @@ export default function EmployeeOnboarding() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Step {step} of 5
+              Step {step} of 3
             </span>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {STEP_TITLES[step - 1]}
@@ -283,7 +196,7 @@ export default function EmployeeOnboarding() {
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
             <div
               className="bg-primary rounded-full h-2 transition-all duration-300"
-              style={{ width: `${(step / 5) * 100}%` }}
+              style={{ width: `${(step / 3) * 100}%` }}
             />
           </div>
         </div>
@@ -497,115 +410,13 @@ export default function EmployeeOnboarding() {
 
               <div className="pt-4">
                 <button type="submit" disabled={submitting} className={btnClass}>
-                  {submitting ? 'Saving...' : 'Continue'}
+                  {submitting ? 'Completing setup...' : 'Complete Setup'}
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* Step 4: Document Upload */}
-        {step === 4 && (
-          <div className={cardClass}>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Identity Documents
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Upload a copy of your citizenship certificate, national ID, or passport
-            </p>
-
-            {/* Doc type selector + upload */}
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className={labelClass}>Document Type</label>
-                <select
-                  className={inputClass}
-                  value={selectedDocType}
-                  onChange={(e) => setSelectedDocType(e.target.value)}
-                >
-                  {DOC_TYPES.map((dt) => (
-                    <option key={dt.value} value={dt.value}>{dt.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary dark:hover:border-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {uploading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-icons-outlined text-3xl text-gray-400 mb-2">cloud_upload</span>
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Click to upload</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">PDF, PNG, or JPEG (max 10MB)</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Uploaded docs list */}
-            {uploadedDocs.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Uploaded Documents</h4>
-                <div className="space-y-2">
-                  {uploadedDocs.map((doc, index) => (
-                    <div key={doc.id || index} className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg">
-                      <span className="material-icons-outlined text-green-600 text-lg">check_circle</span>
-                      <span className="text-sm text-gray-900 dark:text-white flex-1 truncate">{doc.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="pt-4">
-              <button
-                onClick={handleDocumentStepComplete}
-                disabled={submitting || uploadedDocs.length === 0}
-                className={btnClass}
-              >
-                {submitting ? 'Saving...' : 'Continue'}
-              </button>
-              {uploadedDocs.length === 0 && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
-                  Please upload at least one document to continue
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 5: Banking Details */}
-        {step === 5 && (
-          <div className={cardClass}>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Banking Details
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Enter your bank account details for receiving payments
-            </p>
-            <BankDetailsForm
-              onSubmit={handleBankDetailsSubmit}
-              submitLabel="Complete Setup"
-            />
-          </div>
-        )}
       </div>
     </div>
   )

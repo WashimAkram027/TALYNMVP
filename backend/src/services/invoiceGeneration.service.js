@@ -2,6 +2,7 @@ import { supabase } from '../config/supabase.js'
 import { anvilClient } from '../config/anvil.js'
 import { quoteService } from './quote.service.js'
 import { invoicesService } from './invoices.service.js'
+import { leaveReconciliationService } from './leaveReconciliation.service.js'
 import { buildInvoiceHtml, buildReceiptHtml } from './pdfTemplate.service.js'
 import { BadRequestError, NotFoundError } from '../utils/errors.js'
 
@@ -230,6 +231,28 @@ export const invoiceGenerationService = {
 
     if (invoiceError) throw invoiceError
 
+    // Apply pending leave reconciliation credits from previous month
+    try {
+      const credits = await leaveReconciliationService.applyPendingCredits(orgId, invoice.id)
+      if (credits.totalCreditCents > 0) {
+        // Reduce the invoice total by the credit amount
+        const adjustedTotal = Math.max(totalAmountCents - credits.totalCreditCents, 0)
+        await supabase
+          .from('invoices')
+          .update({
+            total_amount_cents: adjustedTotal,
+            amount: adjustedTotal / 100,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', invoice.id)
+
+        console.log(`[InvoiceGeneration] Applied ${credits.adjustmentItems.length} leave adjustment credit(s) totaling $${(credits.totalCreditCents / 100).toFixed(2)} to invoice ${invoice.id}`)
+      }
+    } catch (creditErr) {
+      // Credit application failure should not block invoice generation
+      console.error(`[InvoiceGeneration] Leave credit application error for org ${orgId}:`, creditErr.message)
+    }
+
     // Create corresponding payroll run (service-role, no auth.uid() needed)
     const { data: payrollRun, error: runError } = await supabase
       .from('payroll_runs')
@@ -251,12 +274,23 @@ export const invoiceGenerationService = {
       // Invoice still valid even if run creation fails
     }
 
-    // Create payroll items for each member
+    // Create payroll items for each member with prorated data from line items
     if (payrollRun) {
-      const payrollItems = members.map(member => ({
+      const payrollItems = lineItems.map(item => ({
         payroll_run_id: payrollRun.id,
-        member_id: member.id,
-        base_salary: member.salary_amount ? Math.round((member.salary_amount / periodsPerYear) * 100) / 100 : 0
+        member_id: item.member_id,
+        base_salary: item.monthly_gross_local / 100,
+        gross_salary: item.full_monthly_gross_local / 100,
+        employer_ssf: item.employer_ssf_local / 100,
+        employee_ssf: item.employee_ssf_local / 100,
+        leave_deduction: (item.full_monthly_gross_local - item.monthly_gross_local) / 100,
+        deductions: item.employee_ssf_local / 100,
+        net_amount: (item.monthly_gross_local - item.employee_ssf_local) / 100,
+        payable_days: item.payable_days,
+        calendar_days: item.calendar_days,
+        deduction_days: item.deduction_days,
+        paid_leave_days: item.paid_leave_days,
+        unpaid_leave_days: item.unpaid_leave_days
       }))
 
       const { error: itemsError } = await supabase

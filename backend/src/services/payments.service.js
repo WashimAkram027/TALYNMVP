@@ -599,10 +599,17 @@ export const paymentsService = {
   async handleChargeRefunded(charge, runId, organizationId) {
     const paymentIntentId = charge.payment_intent
 
-    // 1. Update payroll_runs.payment_status to 'refunded'
+    // Detect partial vs full refund by comparing amounts
+    const isFullRefund = charge.amount_refunded >= charge.amount
+    const refundStatus = isFullRefund ? 'refunded' : 'partially_refunded'
+    const refundLabel = isFullRefund
+      ? `Full refund: ${charge.amount_refunded} cents`
+      : `Partial refund: ${charge.amount_refunded} of ${charge.amount} cents`
+
+    // 1. Update payroll_runs.payment_status
     const { error: runUpdateError } = await supabase
       .from('payroll_runs')
-      .update({ payment_status: 'refunded' })
+      .update({ payment_status: refundStatus })
       .eq('id', runId)
 
     if (runUpdateError) {
@@ -610,12 +617,12 @@ export const paymentsService = {
       throw runUpdateError
     }
 
-    // 2. Update the original payment_transactions record status to 'refunded'
+    // 2. Update the original payment_transactions record status
     await supabase
       .from('payment_transactions')
       .update({
-        status: 'refunded',
-        error_message: `Refunded: ${charge.amount_refunded || 0} cents`,
+        status: refundStatus,
+        error_message: refundLabel,
         completed_at: new Date().toISOString()
       })
       .eq('stripe_payment_intent_id', paymentIntentId)
@@ -636,8 +643,8 @@ export const paymentsService = {
         type: 'refund',
         amount_cents: charge.amount_refunded || 0,
         currency: charge.currency || 'usd',
-        status: 'refunded',
-        error_message: charge.refunded ? 'Full refund' : 'Partial refund'
+        status: refundStatus,
+        error_message: refundLabel
       })
       .then(({ error }) => {
         if (error) console.error('Failed to insert refund transaction record:', error)
@@ -822,5 +829,191 @@ export const paymentsService = {
         error_message: errorMsg || 'Payment failed'
       })
       .eq('stripe_payment_intent_id', paymentIntentId)
+  },
+
+  // ─── Invoice Refund / Dispute Handlers ────────────────────────
+
+  /**
+   * Handle charge.refunded webhook for an invoice payment.
+   * Updates the invoice status, linked payroll run (if any),
+   * payment transaction record, and inserts a refund audit record.
+   */
+  async handleInvoiceChargeRefunded(charge, invoice) {
+    const paymentIntentId = charge.payment_intent
+
+    // Detect partial vs full refund
+    const isFullRefund = charge.amount_refunded >= charge.amount
+    const refundStatus = isFullRefund ? 'refunded' : 'partially_refunded'
+    const refundLabel = isFullRefund
+      ? `Full refund: ${charge.amount_refunded} cents`
+      : `Partial refund: ${charge.amount_refunded} of ${charge.amount} cents`
+
+    // 1. Update invoice status
+    const invoiceDbStatus = isFullRefund ? 'refunded' : 'paid'
+    await supabase
+      .from('invoices')
+      .update({
+        status: invoiceDbStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invoice.id)
+
+    // 2. If invoice is linked to a payroll run, update that too
+    if (invoice.payroll_run_id) {
+      await supabase
+        .from('payroll_runs')
+        .update({ payment_status: refundStatus })
+        .eq('id', invoice.payroll_run_id)
+    }
+
+    // 3. Update the original payment_transactions record
+    await supabase
+      .from('payment_transactions')
+      .update({
+        status: refundStatus,
+        error_message: refundLabel,
+        completed_at: new Date().toISOString()
+      })
+      .eq('stripe_payment_intent_id', paymentIntentId)
+
+    // 4. Insert a refund audit record
+    if (charge.id) {
+      await supabase
+        .from('payment_transactions')
+        .insert({
+          organization_id: invoice.organization_id,
+          invoice_id: invoice.id,
+          payroll_run_id: invoice.payroll_run_id || null,
+          stripe_payment_intent_id: charge.id,
+          type: 'refund',
+          amount_cents: charge.amount_refunded || 0,
+          currency: charge.currency || 'usd',
+          status: refundStatus,
+          error_message: refundLabel
+        })
+        .then(({ error }) => {
+          if (error) console.error('Failed to insert invoice refund transaction record:', error)
+        })
+    }
+  },
+
+  /**
+   * Handle charge.dispute.created webhook for an invoice payment.
+   * Updates the invoice status, linked payroll run (if any),
+   * payment transaction record, and inserts a dispute audit record.
+   */
+  async handleInvoiceChargeDisputeCreated(dispute, invoice) {
+    const paymentIntentId = dispute.payment_intent
+
+    // 1. Update invoice status to disputed
+    await supabase
+      .from('invoices')
+      .update({
+        status: 'disputed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invoice.id)
+
+    // 2. If invoice is linked to a payroll run, update that too
+    if (invoice.payroll_run_id) {
+      await supabase
+        .from('payroll_runs')
+        .update({ payment_status: 'disputed' })
+        .eq('id', invoice.payroll_run_id)
+    }
+
+    // 3. Update the original payment_transactions record
+    await supabase
+      .from('payment_transactions')
+      .update({
+        status: 'disputed',
+        error_message: `Dispute: ${dispute.reason || 'unknown'}`,
+        completed_at: new Date().toISOString()
+      })
+      .eq('stripe_payment_intent_id', paymentIntentId)
+
+    // 4. Insert a dispute audit record
+    if (dispute.id) {
+      await supabase
+        .from('payment_transactions')
+        .insert({
+          organization_id: invoice.organization_id,
+          invoice_id: invoice.id,
+          payroll_run_id: invoice.payroll_run_id || null,
+          stripe_payment_intent_id: dispute.id,
+          type: 'dispute',
+          amount_cents: dispute.amount || 0,
+          currency: dispute.currency || 'usd',
+          status: 'disputed',
+          error_message: `Reason: ${dispute.reason || 'unknown'}. Stripe status: ${dispute.status || 'unknown'}`
+        })
+        .then(({ error }) => {
+          if (error) console.error('Failed to insert invoice dispute transaction record:', error)
+        })
+    }
+  },
+
+  // ─── Dispute Closed Handler (payroll + invoice) ───────────────
+
+  /**
+   * Handle charge.dispute.closed webhook.
+   * Resolves dispute status based on outcome: won, lost, or warning_closed.
+   * Works for both payroll runs and invoices.
+   *
+   * Stripe dispute.status values on closed:
+   *   'won'            - dispute resolved in merchant's favor, funds restored
+   *   'lost'           - dispute resolved against merchant, funds lost
+   *   'warning_closed' - inquiry closed without escalating to formal dispute
+   */
+  async handleDisputeClosed(dispute, runId, orgId, invoiceId) {
+    const paymentIntentId = dispute.payment_intent
+    const disputeStatus = dispute.status // 'won', 'lost', or 'warning_closed'
+    const isWon = disputeStatus === 'won' || disputeStatus === 'warning_closed'
+
+    // 1. Update payroll run if linked
+    if (runId) {
+      const newPaymentStatus = isWon ? 'succeeded' : 'disputed'
+      await supabase
+        .from('payroll_runs')
+        .update({ payment_status: newPaymentStatus })
+        .eq('id', runId)
+    }
+
+    // 2. Update invoice if linked
+    if (invoiceId) {
+      const newInvoiceStatus = isWon ? 'paid' : 'disputed'
+      await supabase
+        .from('invoices')
+        .update({
+          status: newInvoiceStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', invoiceId)
+    }
+
+    // 3. Update original payment_transactions record
+    if (paymentIntentId) {
+      const newTxStatus = isWon ? 'succeeded' : 'disputed'
+      await supabase
+        .from('payment_transactions')
+        .update({
+          status: newTxStatus,
+          error_message: `Dispute closed: ${disputeStatus}`,
+          completed_at: new Date().toISOString()
+        })
+        .eq('stripe_payment_intent_id', paymentIntentId)
+    }
+
+    // 4. Update the dispute audit record (inserted when dispute was created)
+    if (dispute.id) {
+      await supabase
+        .from('payment_transactions')
+        .update({
+          status: isWon ? 'resolved_won' : 'resolved_lost',
+          error_message: `Dispute closed: ${disputeStatus}. Outcome: ${isWon ? 'Funds restored' : 'Funds lost'}`
+        })
+        .eq('stripe_payment_intent_id', dispute.id)
+        .eq('type', 'dispute')
+    }
   }
 }

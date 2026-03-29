@@ -12,6 +12,8 @@ export default function Users() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [editUser, setEditUser] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
   const [toast, setToast] = useState(null)
 
@@ -81,6 +83,21 @@ export default function Users() {
       fetchUsers()
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to update user', 'error')
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    try {
+      await usersService.deleteUser(deleteTarget.id)
+      showToast('User deleted successfully')
+      setDeleteTarget(null)
+      fetchUsers()
+    } catch (err) {
+      showToast(err.response?.data?.error || err.response?.data?.message || 'Failed to delete user', 'error')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -230,6 +247,14 @@ export default function Users() {
                           <span className="material-icons text-[18px] text-blue-600">mark_email_read</span>
                         </button>
                       )}
+                      {/* Delete */}
+                      <button
+                        onClick={() => setDeleteTarget(user)}
+                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete user"
+                      >
+                        <span className="material-icons text-[18px] text-red-600">delete_forever</span>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -262,6 +287,65 @@ export default function Users() {
 
       {/* ============== EDIT USER MODAL ============== */}
       {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSave={handleSaveUser} />}
+
+      {/* ============== DELETE CONFIRMATION MODAL ============== */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => !deleteLoading && setDeleteTarget(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 border-b border-border-main">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <span className="material-icons text-red-600">warning</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-text-primary">Delete User</h3>
+                  <p className="text-sm text-text-secondary">This action cannot be undone</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <p className="text-sm text-text-primary mb-4">
+                You are about to permanently delete the following user:
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="font-medium text-text-primary">
+                  {deleteTarget.full_name || `${deleteTarget.first_name || ''} ${deleteTarget.last_name || ''}`.trim() || 'Unnamed User'}
+                </p>
+                <p className="text-sm text-text-secondary">{deleteTarget.email}</p>
+                <p className="text-xs text-text-secondary mt-1 capitalize">Role: {deleteTarget.role}</p>
+              </div>
+              <p className="text-sm text-text-secondary mb-2 font-medium">The following will be deleted:</p>
+              <ul className="text-sm text-text-secondary space-y-1 list-disc list-inside">
+                <li>User profile and authentication account</li>
+                <li>All organization memberships (by profile link)</li>
+                <li>Pending invitations sent to this email</li>
+                <li>Associated documents, applications, and tokens</li>
+              </ul>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-border-main flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={deleteLoading}
+                className="px-6 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

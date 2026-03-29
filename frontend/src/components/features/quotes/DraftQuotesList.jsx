@@ -42,12 +42,12 @@ export default function DraftQuotesList({ onAccepted }) {
     }
   }
 
-  const handleAccept = async () => {
+  const handleAccept = async ({ termsAcceptedAt } = {}) => {
     if (!resumeQuote) return
     try {
       setActionLoading(true)
       setError(null)
-      await quoteService.acceptAndInvite(resumeQuote.id)
+      await quoteService.acceptAndInvite(resumeQuote.id, { termsAcceptedAt })
       setResumeQuote(null)
       fetchDraftQuotes()
       if (onAccepted) onAccepted()

@@ -39,8 +39,28 @@ export default function VerifyEmail() {
         setStatus('success')
         setMessage('Your email has been verified successfully!')
 
-        // Redirect immediately after auth state is hydrated
-        const redirectTo = data?.redirectTo || (data?.role === 'candidate' ? '/login/employee' : '/login/employer')
+        // Determine redirect based on the hydrated auth store profile first,
+        // then fall back to the backend's redirectTo, then role-based fallback.
+        // This ensures the redirect is correct even if the backend response
+        // is missing or has stale redirect paths.
+        const storeProfile = useAuthStore.getState().profile
+        let redirectTo = data?.redirectTo
+
+        if (storeProfile) {
+          // Use the hydrated profile from the auth store for the most accurate redirect
+          if (storeProfile.role === 'employer') {
+            redirectTo = storeProfile.onboarding_completed ? '/dashboard' : '/onboarding/employer'
+          } else if (storeProfile.role === 'candidate') {
+            redirectTo = storeProfile.onboarding_completed ? '/employee/overview' : '/onboarding/employee'
+          }
+        }
+
+        // Final fallback: if no redirectTo was determined, use role from backend response
+        if (!redirectTo) {
+          const role = data?.role || 'candidate'
+          redirectTo = role === 'candidate' ? '/login/employee' : '/login/employer'
+        }
+
         navigate(redirectTo, { replace: true })
       } catch (error) {
         setStatus('error')
