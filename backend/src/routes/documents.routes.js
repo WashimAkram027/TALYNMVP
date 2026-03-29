@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import { documentsController } from '../controllers/documents.controller.js'
-import { authenticate, requireOrganization } from '../middleware/auth.js'
+import { authenticate, requireOrganization, requireEmployer } from '../middleware/auth.js'
 import { validateBody } from '../middleware/validate.js'
 import { updateDocumentSchema } from '../utils/validators.js'
 
@@ -53,7 +53,14 @@ router.use(requireOrganization)
  *   - memberId: Optional member to associate with
  *   - isSensitive: Whether the document is sensitive
  */
-router.post('/upload', upload.single('file'), documentsController.upload)
+const VALID_CATEGORIES = ['contract', 'policy', 'tax', 'identity', 'payslip', 'other']
+
+router.post('/upload', requireEmployer, upload.single('file'), (req, res, next) => {
+  if (req.body.category && !VALID_CATEGORIES.includes(req.body.category)) {
+    return res.status(400).json({ success: false, error: 'Invalid document category' })
+  }
+  next()
+}, documentsController.upload)
 
 /**
  * GET /api/documents
@@ -69,6 +76,12 @@ router.get('/', documentsController.getAll)
 router.get('/member/:memberId', documentsController.getByMember)
 
 /**
+ * GET /api/documents/:id/download
+ * Get a fresh download URL for a document
+ */
+router.get('/:id/download', documentsController.download)
+
+/**
  * GET /api/documents/:id
  * Get a single document by ID
  */
@@ -78,13 +91,13 @@ router.get('/:id', documentsController.getById)
  * PUT /api/documents/:id
  * Update document metadata
  */
-router.put('/:id', validateBody(updateDocumentSchema), documentsController.update)
+router.put('/:id', requireEmployer, validateBody(updateDocumentSchema), documentsController.update)
 
 /**
  * DELETE /api/documents/:id
  * Delete a document
  */
-router.delete('/:id', documentsController.delete)
+router.delete('/:id', requireEmployer, documentsController.delete)
 
 // Error handling for multer
 router.use((error, req, res, next) => {

@@ -270,20 +270,44 @@ export default function Dashboard() {
           <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">Active Remote Employees</p>
         </div>
 
-        {/* Upcoming Payroll */}
+        {/* Payroll Card - Dynamic */}
         <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl border border-border-light dark:border-border-dark shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="h-10 w-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center text-purple-600 dark:text-purple-400">
               <span className="material-icons-outlined">attach_money</span>
             </div>
-            <span className="text-xs font-medium text-subtext-light dark:text-subtext-dark bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
-              Due in {stats?.payroll?.dueInDays || 0} days
-            </span>
+            {stats?.payroll?.state === 'last_payroll' ? (
+              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                stats.payroll.lastRun?.status === 'completed'
+                  ? 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400'
+                  : stats.payroll.lastRun?.status === 'processing'
+                    ? 'text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400'
+                    : stats.payroll.lastRun?.status === 'failed'
+                      ? 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400'
+                      : 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400'
+              }`}>
+                {stats.payroll.lastRun?.status === 'completed' ? 'Completed' :
+                 stats.payroll.lastRun?.status === 'processing' ? 'Processing' :
+                 stats.payroll.lastRun?.status === 'failed' ? 'Failed' : 'Draft'}
+              </span>
+            ) : stats?.payroll?.state === 'expected' ? (
+              <span className="text-xs font-medium text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded-full">
+                No payroll yet
+              </span>
+            ) : (
+              <span className="text-xs font-medium text-subtext-light dark:text-subtext-dark bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
+                Due in {stats?.payroll?.dueInDays || 0} days
+              </span>
+            )}
           </div>
           <h3 className="text-3xl font-bold text-text-light dark:text-text-dark">
-            ${stats?.payroll?.upcomingAmount?.toLocaleString() || '0'}
+            ${stats?.payroll?.totalMonthlyUsd?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
           </h3>
-          <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">Upcoming Payroll ({stats?.payroll?.currency || 'USD'})</p>
+          <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
+            {stats?.payroll?.state === 'last_payroll' ? 'Last Payroll' :
+             stats?.payroll?.state === 'expected' ? 'Expected Payroll' :
+             'Upcoming Payroll'} (USD)
+          </p>
         </div>
 
         {/* Candidates in Pipeline */}

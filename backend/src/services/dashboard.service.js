@@ -9,10 +9,15 @@ export const dashboardService = {
    * Get employer dashboard statistics
    */
   async getEmployerStats(organizationId) {
-    // Get member statistics (excluding owner)
+    // Get member statistics with quote data (excluding owner)
     const { data: members, error: membersError } = await supabase
       .from('organization_members')
-      .select('status, salary_amount, salary_currency, member_role')
+      .select(`
+        status, salary_amount, salary_currency, member_role, quote_id,
+        quote:eor_quotes!organization_members_quote_id_fkey(
+          total_monthly_cost_local, platform_fee_amount, platform_fee_currency, salary_currency
+        )
+      `)
       .eq('organization_id', organizationId)
       .neq('member_role', 'owner') // Exclude owner from stats
 
@@ -25,11 +30,23 @@ export const dashboardService = {
       onboarding: members.filter(m => m.status === 'onboarding').length
     }
 
-    // Calculate total monthly payroll for active members
+    // Fetch exchange rate from EOR config
+    const exchangeRate = await this._getExchangeRate()
+
+    // Calculate total monthly payroll in USD from quote data for active members
     const activeMembers = members.filter(m => m.status === 'active')
-    const totalPayroll = activeMembers.reduce((sum, m) => {
-      return sum + (m.salary_amount || 0)
-    }, 0)
+    let totalMonthlyUsd = 0
+    let membersWithQuotes = 0
+    for (const m of activeMembers) {
+      if (m.quote?.total_monthly_cost_local) {
+        const localCostNpr = m.quote.total_monthly_cost_local / 100 // paisa → NPR
+        const localCostUsd = localCostNpr * exchangeRate              // NPR → USD
+        const platformFeeUsd = (m.quote.platform_fee_amount || 0) / 100 // cents → USD
+        totalMonthlyUsd += localCostUsd + platformFeeUsd
+        membersWithQuotes++
+      }
+    }
+    totalMonthlyUsd = Math.round(totalMonthlyUsd * 100) / 100 // round to 2 decimals
 
     // Get pipeline stats (applications by stage) - if table exists
     let pipelineStats = {
@@ -88,10 +105,44 @@ export const dashboardService = {
       // Compliance tables may not exist yet
     }
 
-    // Calculate next payroll due date (assuming end of month)
+    // Calculate next payroll due date (26th of month)
     const now = new Date()
-    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    const daysUntilPayroll = Math.ceil((lastDayOfMonth - now) / (1000 * 60 * 60 * 24))
+    let payrollDate = new Date(now.getFullYear(), now.getMonth(), 26)
+    if (now.getDate() >= 26) {
+      payrollDate = new Date(now.getFullYear(), now.getMonth() + 1, 26)
+    }
+    const daysUntilPayroll = Math.max(0, Math.ceil((payrollDate - now) / (1000 * 60 * 60 * 24)))
+
+    // Determine payroll card state by checking current month's payroll runs
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      .toISOString().split('T')[0]
+    let payrollState = 'expected'
+    let lastRun = null
+
+    try {
+      const { data: currentRuns } = await supabase
+        .from('payroll_runs')
+        .select('id, status, pay_period_start, pay_period_end, processed_at, created_at')
+        .eq('organization_id', organizationId)
+        .gte('pay_period_start', currentMonthStart)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (currentRuns?.length > 0) {
+        payrollState = 'last_payroll'
+        lastRun = {
+          id: currentRuns[0].id,
+          status: currentRuns[0].status,
+          payPeriodStart: currentRuns[0].pay_period_start,
+          payPeriodEnd: currentRuns[0].pay_period_end,
+          createdAt: currentRuns[0].created_at
+        }
+      } else if (membersWithQuotes > 0) {
+        payrollState = 'upcoming'
+      }
+    } catch (e) {
+      // payroll_runs table may not exist yet, keep 'expected' state
+    }
 
     // Get employer notifications
     const notifications = await this.getEmployerNotifications(organizationId)
@@ -99,10 +150,13 @@ export const dashboardService = {
     return {
       members: memberStats,
       payroll: {
-        upcomingAmount: totalPayroll,
+        state: payrollState,
+        totalMonthlyUsd,
         currency: 'USD',
         dueInDays: daysUntilPayroll,
-        dueDate: lastDayOfMonth.toISOString().split('T')[0]
+        dueDate: payrollDate.toISOString().split('T')[0],
+        lastRun,
+        memberCount: membersWithQuotes
       },
       pipeline: pipelineStats,
       compliance: {
@@ -110,6 +164,24 @@ export const dashboardService = {
         alerts: complianceAlerts
       },
       notifications
+    }
+  },
+
+  /**
+   * Get NPR→USD exchange rate from active EOR config.
+   * Returns how many USD per 1 NPR (e.g., 0.0075 means 1 NPR = $0.0075).
+   */
+  async _getExchangeRate() {
+    try {
+      const { data: config } = await supabase
+        .from('eor_cost_config')
+        .select('exchange_rate')
+        .eq('is_active', true)
+        .limit(1)
+        .single()
+      return parseFloat(config?.exchange_rate) || 0.0075 // fallback default
+    } catch {
+      return 0.0075
     }
   },
 
@@ -212,6 +284,10 @@ export const dashboardService = {
         salary_currency,
         pay_frequency,
         start_date,
+        quote_id,
+        quote:eor_quotes!organization_members_quote_id_fkey(
+          total_monthly_cost_local, platform_fee_amount, platform_fee_currency, salary_currency
+        ),
         profile:profiles!organization_members_profile_id_fkey(id, full_name, first_name, last_name, email, avatar_url)
       `)
       .eq('organization_id', organizationId)
@@ -222,24 +298,36 @@ export const dashboardService = {
 
     if (error) throw error
 
+    // Fetch exchange rate for NPR→USD conversion
+    const exchangeRate = await this._getExchangeRate()
+
     // Format the response for frontend
-    return data.map(member => ({
-      id: member.id,
-      name: member.profile?.full_name
-        || `${member.profile?.first_name || ''} ${member.profile?.last_name || ''}`.trim()
-        || `${member.first_name || ''} ${member.last_name || ''}`.trim()
-        || member.invitation_email
-        || 'Unknown',
-      email: member.profile?.email || member.invitation_email,
-      avatar: member.profile?.avatar_url,
-      department: member.department || 'Not specified',
-      role: member.job_title || member.member_role || 'Team Member',
-      status: member.status,
-      startDate: member.start_date,
-      payroll: member.salary_amount
-        ? `$${member.salary_amount.toLocaleString()}/${member.pay_frequency === 'monthly' ? 'mo' : member.pay_frequency}`
-        : 'Not set'
-    }))
+    return data.map(member => {
+      let payroll = 'Not set'
+      if (member.quote?.total_monthly_cost_local) {
+        const localCostNpr = member.quote.total_monthly_cost_local / 100
+        const localCostUsd = localCostNpr * exchangeRate
+        const platformFeeUsd = (member.quote.platform_fee_amount || 0) / 100
+        const totalUsd = Math.round(localCostUsd + platformFeeUsd)
+        payroll = `$${totalUsd.toLocaleString()}/mo`
+      }
+
+      return {
+        id: member.id,
+        name: member.profile?.full_name
+          || `${member.profile?.first_name || ''} ${member.profile?.last_name || ''}`.trim()
+          || `${member.first_name || ''} ${member.last_name || ''}`.trim()
+          || member.invitation_email
+          || 'Unknown',
+        email: member.profile?.email || member.invitation_email,
+        avatar: member.profile?.avatar_url,
+        department: member.department || 'Not specified',
+        role: member.job_title || member.member_role || 'Team Member',
+        status: member.status,
+        startDate: member.start_date,
+        payroll
+      }
+    })
   },
 
   /**

@@ -1039,9 +1039,16 @@ export const onboardingService = {
       throw new BadRequestError('Cannot upload documents after entity is approved')
     }
 
-    // Decode base64
+    // Validate file type
+    const allowedMimes = ['application/pdf', 'image/png', 'image/jpeg']
+    if (!allowedMimes.includes(fileType)) {
+      throw new BadRequestError('Invalid file type. Only PDF, PNG, and JPEG are allowed.')
+    }
+
+    // Decode base64 and sanitize filename
     const buffer = Buffer.from(fileBase64, 'base64')
-    const fileExt = fileName.split('.').pop()
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const fileExt = safeName.split('.').pop()
     const storagePath = `${organizationId}/${docType}-${Date.now()}.${fileExt}`
 
     // Upload to Supabase Storage

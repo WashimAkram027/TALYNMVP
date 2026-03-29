@@ -98,13 +98,13 @@ export const documentsService = {
   },
 
   /**
-   * Get download URL for a document (just returns the document with file_url)
+   * Get a fresh download URL for a document
    * @param {string} documentId - Document UUID
    */
   async getDownloadUrl(documentId) {
-    const response = await api.get(`/documents/${documentId}`)
+    const response = await api.get(`/documents/${documentId}/download`)
     return {
-      file_url: response.data.file_url,
+      file_url: response.data.url,
       name: response.data.name
     }
   }

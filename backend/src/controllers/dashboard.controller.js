@@ -18,7 +18,7 @@ export const dashboardController = {
       if (!organizationId) {
         return successResponse(res, {
           members: { total: 0, active: 0, invited: 0, onboarding: 0 },
-          payroll: { upcomingAmount: 0, currency: 'USD', dueInDays: 0 },
+          payroll: { state: 'expected', totalMonthlyUsd: 0, currency: 'USD', dueInDays: 0, dueDate: null, lastRun: null, memberCount: 0 },
           pipeline: { total: 0, interview: 0, assessment: 0, offerSent: 0 },
           compliance: { score: 100, alerts: [] },
           notifications: [],

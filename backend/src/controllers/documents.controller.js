@@ -110,6 +110,29 @@ export const documentsController = {
   },
 
   /**
+   * GET /api/documents/:id/download
+   * Get a fresh download URL for a document
+   */
+  async download(req, res) {
+    try {
+      const { id } = req.params
+      const result = await documentsService.getDownloadUrl(id, req.user.organizationId)
+
+      if (!result) {
+        return notFoundResponse(res, 'Document not found')
+      }
+
+      return successResponse(res, result)
+    } catch (error) {
+      console.error('[DocumentsController] Download error:', error)
+      if (error.code === 'PGRST116') {
+        return notFoundResponse(res, 'Document not found')
+      }
+      return errorResponse(res, 'Failed to get download URL', 500, error)
+    }
+  },
+
+  /**
    * PUT /api/documents/:id
    * Update document metadata
    */
@@ -180,6 +203,20 @@ export const documentsController = {
   async getByMember(req, res) {
     try {
       const { memberId } = req.params
+
+      // Employees can only access their own member docs
+      if (req.user.role === 'candidate') {
+        const { data: member, error: memberErr } = await supabase
+          .from('organization_members')
+          .select('id')
+          .eq('id', memberId)
+          .eq('profile_id', req.user.id)
+          .single()
+
+        if (memberErr || !member) {
+          return forbiddenResponse(res, 'You can only access your own documents')
+        }
+      }
 
       const documents = await documentsService.getByMemberId(memberId, req.user.organizationId, req.user.id)
 

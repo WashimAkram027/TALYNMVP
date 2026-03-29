@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import TermsModal from './TermsModal'
 
 /**
  * Format minor units (paisa/cents) to major units with commas
@@ -16,6 +17,7 @@ export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPd
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState(null)
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const [showTermsModal, setShowTermsModal] = useState(false)
 
   if (!quote) return null
 
@@ -143,38 +145,37 @@ export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPd
         Quote valid until {validUntil}
       </p>
 
-      {/* Terms & Policies Acceptance — hidden in read-only mode */}
+      {/* Terms & Conditions — hidden in read-only mode */}
       {(onAccept || onBack || onSaveAndExit || onDownloadPdf) && (
         <div className="border border-border-light dark:border-border-dark rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={termsAccepted}
-              onChange={(e) => setTermsAccepted(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-            />
-            <span className="text-sm text-text-light dark:text-text-dark leading-snug">
-              I have reviewed and accept the{' '}
-              <a
-                href="/terms"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline font-medium"
-              >
-                Terms of Service
-              </a>{' '}
-              and{' '}
-              <a
-                href="/policies"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline font-medium"
-              >
-                Employment Policies
-              </a>
-            </span>
-          </label>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {termsAccepted ? (
+                <span className="material-icons-outlined text-green-500 text-lg">check_circle</span>
+              ) : (
+                <span className="material-icons-outlined text-subtext-light dark:text-subtext-dark text-lg">gavel</span>
+              )}
+              <span className="text-sm text-text-light dark:text-text-dark">
+                {termsAccepted ? 'Terms & Conditions accepted' : 'Review and accept Terms & Conditions'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTermsModal(true)}
+              className="px-3 py-1.5 text-sm text-primary border border-primary rounded-lg hover:bg-primary/5 transition"
+            >
+              {termsAccepted ? 'Review Again' : 'View Terms'}
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* Terms Modal */}
+      {showTermsModal && (
+        <TermsModal
+          onAccept={() => { setTermsAccepted(true); setShowTermsModal(false) }}
+          onClose={() => setShowTermsModal(false)}
+        />
       )}
 
       {/* Actions — hidden in read-only mode */}
