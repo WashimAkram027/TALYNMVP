@@ -12,6 +12,5 @@ nul
 *.md
 *.resolved
 !README.md
-backend/src/services/compiled/
 generated-pdfs/
 invoicesandreceiptsandpayslip/

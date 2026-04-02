@@ -7,7 +7,6 @@
   "scripts": {
     "build:components": "node scripts/buildComponents.js",
     "predev": "node scripts/buildComponents.js",
-    "prestart": "node scripts/buildComponents.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },
