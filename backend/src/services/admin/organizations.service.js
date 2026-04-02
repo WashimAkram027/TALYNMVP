@@ -2,6 +2,7 @@ import { supabase } from '../../config/supabase.js'
 import { NotFoundError, BadRequestError } from '../../utils/errors.js'
 import { auditLogService } from './auditLog.service.js'
 import { emailService } from '../email.service.js'
+import { notificationService } from '../notification.service.js'
 
 export const adminOrganizationsService = {
   /**
@@ -145,6 +146,19 @@ export const adminOrganizationsService = {
       if (ownerProfile) {
         await emailService.sendEntityApprovedEmail(ownerProfile.email, ownerProfile.first_name, org.name)
       }
+
+      // In-app notification
+      if (updated.owner_id) {
+        await notificationService.create({
+          recipientId: updated.owner_id,
+          organizationId: orgId,
+          type: 'entity_approved',
+          title: 'Entity verification approved',
+          message: `Your organization ${org.name} has been verified`,
+          actionUrl: '/dashboard',
+          metadata: { organization_id: orgId }
+        })
+      }
     } catch (emailErr) {
       console.error('[AdminOrganizationsService] Failed to send approval email:', emailErr)
     }
@@ -190,6 +204,19 @@ export const adminOrganizationsService = {
 
       if (ownerProfile) {
         await emailService.sendEntityRejectedEmail(ownerProfile.email, ownerProfile.first_name, org.name, reason)
+      }
+
+      // In-app notification
+      if (updated.owner_id) {
+        await notificationService.create({
+          recipientId: updated.owner_id,
+          organizationId: orgId,
+          type: 'entity_rejected',
+          title: 'Entity verification requires attention',
+          message: `Your organization verification was not approved${reason ? ': ' + reason : ''}`,
+          actionUrl: '/dashboard',
+          metadata: { organization_id: orgId, reason }
+        })
       }
     } catch (emailErr) {
       console.error('[AdminOrganizationsService] Failed to send rejection email:', emailErr)

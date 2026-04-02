@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js'
+import { notificationService } from './notification.service.js'
 import { BadRequestError, NotFoundError } from '../utils/errors.js'
 
 /**
@@ -12,7 +13,19 @@ export const payrollService = {
   async getPayrollRuns(orgId, filters = {}) {
     let query = supabase
       .from('payroll_runs')
-      .select('*')
+      .select(`
+        *,
+        invoice:invoices!payroll_runs_invoice_id_fkey(
+          id, invoice_number, total_amount_cents, exchange_rate, line_items, status
+        ),
+        items:payroll_items!payroll_items_payroll_run_id_fkey(
+          id, member_id, base_salary, employer_ssf, employee_ssf, deductions, net_amount,
+          payable_days, calendar_days, deduction_days, paid_leave_days, unpaid_leave_days,
+          member:organization_members!payroll_items_member_id_fkey(
+            first_name, last_name, job_title
+          )
+        )
+      `)
       .eq('organization_id', orgId)
       .order('pay_date', { ascending: false })
 
@@ -57,6 +70,8 @@ export const payrollService = {
         *,
         member:organization_members!payroll_items_member_id_fkey(
           id,
+          first_name,
+          last_name,
           job_title,
           profile:profiles!organization_members_profile_id_fkey(full_name, email, avatar_url)
         )
@@ -65,7 +80,18 @@ export const payrollService = {
 
     if (itemsError) throw new BadRequestError(itemsError.message)
 
-    return { ...run, items }
+    // Include linked invoice data for USD amounts (employer sees USD, not NPR)
+    let linkedInvoice = null
+    if (run.invoice_id) {
+      const { data: inv } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, total_amount_cents, line_items, exchange_rate, config_snapshot, status')
+        .eq('id', run.invoice_id)
+        .single()
+      linkedInvoice = inv || null
+    }
+
+    return { ...run, items, linkedInvoice }
   },
 
   /**
@@ -109,6 +135,29 @@ export const payrollService = {
         throw new NotFoundError('Payroll run not found')
       }
       throw new BadRequestError(error.message)
+    }
+
+    // Notify employer when payroll is completed (disbursement confirmed)
+    if (status === 'completed') {
+      try {
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('owner_id')
+          .eq('id', orgId)
+          .single()
+        if (org?.owner_id) {
+          const period = `${data.pay_period_start} to ${data.pay_period_end}`
+          await notificationService.create({
+            recipientId: org.owner_id,
+            organizationId: orgId,
+            type: 'payroll_completed',
+            title: 'Payroll disbursement complete',
+            message: `Payroll for period ${period} has been completed`,
+            actionUrl: '/payroll',
+            metadata: { payroll_run_id: runId, period }
+          })
+        }
+      } catch { /* non-blocking */ }
     }
 
     return data

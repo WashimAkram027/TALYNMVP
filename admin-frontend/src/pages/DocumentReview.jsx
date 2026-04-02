@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import StatusBadge from '../components/common/StatusBadge'
 import organizationsService from '../services/organizationsService'
@@ -17,7 +18,6 @@ export default function DocumentReview() {
   const [actionLoading, setActionLoading] = useState(null)
   const [rejectModal, setRejectModal] = useState({ open: false, orgId: null })
   const [rejectReason, setRejectReason] = useState('')
-  const [toast, setToast] = useState(null)
   const [previewDoc, setPreviewDoc] = useState(null)
 
   const fetchOrgs = useCallback(async () => {
@@ -51,19 +51,14 @@ export default function DocumentReview() {
     fetchOrgs()
   }, [fetchOrgs])
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
-  }
-
   const handleApprove = async (orgId) => {
     setActionLoading(orgId)
     try {
       await organizationsService.approveEntity(orgId)
-      showToast('Entity approved successfully')
+      toast.success('Entity approved successfully')
       fetchOrgs()
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to approve', 'error')
+      toast.error(err.response?.data?.error || 'Failed to approve')
     } finally {
       setActionLoading(null)
     }
@@ -74,12 +69,12 @@ export default function DocumentReview() {
     setActionLoading(rejectModal.orgId)
     try {
       await organizationsService.rejectEntity(rejectModal.orgId, rejectReason)
-      showToast('Entity rejected')
+      toast.success('Entity rejected')
       setRejectModal({ open: false, orgId: null })
       setRejectReason('')
       fetchOrgs()
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to reject', 'error')
+      toast.error(err.response?.data?.error || 'Failed to reject')
     } finally {
       setActionLoading(null)
     }
@@ -326,13 +321,6 @@ export default function DocumentReview() {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-lg shadow-lg text-sm font-medium z-50 
-          ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}>
-          {toast.message}
-        </div>
-      )}
     </div>
   )
 }

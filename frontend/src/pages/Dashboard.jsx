@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { Link, useNavigate } from 'react-router-dom'
 import { dashboardService } from '../services/dashboardService'
 import { membersService } from '../services/membersService'
 import { onboardingService } from '../services/onboardingService'
 import { useAuthStore } from '../store/authStore'
+import { useNotificationStore } from '../store/notificationStore'
 import InviteMemberModal from '../components/features/InviteMemberModal'
 import OnboardingChecklist from '../components/features/onboarding/OnboardingChecklist'
 import { StatusBadge } from '../utils/statusUtils'
@@ -25,6 +27,8 @@ const EMPLOYMENT_TYPE_OPTIONS = [
 export default function Dashboard() {
   const navigate = useNavigate()
   const { profile, organization } = useAuthStore()
+  const { notifications: storeNotifications, dismiss: dismissNotification, markRead: markNotifRead } = useNotificationStore()
+  const recentNotifs = storeNotifications.filter(n => !n.dismissed_at).slice(0, 5)
   const [stats, setStats] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
@@ -107,7 +111,7 @@ export default function Dashboard() {
       await refreshDashboard()
     } catch (err) {
       console.error('Failed to activate member:', err)
-      alert(err.message || 'Failed to activate member')
+      toast.error(err.message || 'Failed to activate member')
     } finally {
       setActionLoading(false)
     }
@@ -123,7 +127,7 @@ export default function Dashboard() {
       await refreshDashboard()
     } catch (err) {
       console.error('Failed to delete member:', err)
-      alert(err.message || 'Failed to delete member')
+      toast.error(err.message || 'Failed to delete member')
     } finally {
       setActionLoading(false)
     }
@@ -367,6 +371,44 @@ export default function Dashboard() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Notifications (from notification store) */}
+      {recentNotifs.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 mb-8">
+          <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+            <span className="material-icons-outlined text-primary">notifications_active</span>
+            Recent Notifications
+            <span className="bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">{recentNotifs.length}</span>
+          </h3>
+          <div className="space-y-3">
+            {recentNotifs.map(notif => (
+              <div
+                key={notif.id}
+                onClick={() => {
+                  if (!notif.read_at) markNotifRead(notif.id)
+                  if (notif.action_url) navigate(notif.action_url)
+                }}
+                className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors ${
+                  !notif.read_at ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                }`}
+              >
+                <span className="material-icons-outlined text-primary">{notif.type?.includes('leave') ? 'event_busy' : notif.type?.includes('invoice') ? 'request_quote' : notif.type?.includes('payroll') ? 'payments' : 'notifications'}</span>
+                <div className="flex-1">
+                  <p className={`text-sm ${!notif.read_at ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>{notif.title}</p>
+                  {notif.message && <p className="text-xs text-gray-500 dark:text-gray-400">{notif.message}</p>}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); dismissNotification(notif.id) }}
+                  className="text-gray-400 hover:text-red-500 transition shrink-0"
+                  title="Dismiss"
+                >
+                  <span className="material-icons-outlined text-sm">close</span>
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

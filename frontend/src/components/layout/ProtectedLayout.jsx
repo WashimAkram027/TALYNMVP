@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import { useNotificationStore } from '../../store/notificationStore'
+import NotificationPanel from '../features/NotificationPanel'
 
 export default function ProtectedLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showMobileNotifications, setShowMobileNotifications] = useState(false)
+  const unreadCount = useNotificationStore(state => state.unreadCount)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
@@ -30,12 +34,32 @@ export default function ProtectedLayout() {
             <span className="material-icons-outlined">language</span>
             <span>Talyn</span>
           </div>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-text-light dark:text-text-dark p-2"
-          >
-            <span className="material-icons-outlined">menu</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setShowMobileNotifications(prev => !prev)}
+                className="text-text-light dark:text-text-dark p-2 relative"
+              >
+                <span className="material-icons-outlined">notifications</span>
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {showMobileNotifications && (
+                <div className="absolute right-0 top-full mt-1 z-50">
+                  <NotificationPanel onClose={() => setShowMobileNotifications(false)} />
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="text-text-light dark:text-text-dark p-2"
+            >
+              <span className="material-icons-outlined">menu</span>
+            </button>
+          </div>
         </header>
 
         {/* Main Content Area */}

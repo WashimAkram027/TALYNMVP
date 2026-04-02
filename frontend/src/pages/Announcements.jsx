@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { announcementsService } from '../services/announcementsService'
 import { useAuthStore } from '../store/authStore'
 
@@ -57,7 +58,7 @@ export default function Announcements() {
       await announcementsService.deleteAnnouncement(id)
       await fetchAnnouncements()
     } catch (err) {
-      alert(err.message || 'Failed to delete announcement')
+      toast.error(err.message || 'Failed to delete announcement')
     } finally {
       setActionLoading(false)
     }
@@ -69,7 +70,7 @@ export default function Announcements() {
       await announcementsService.togglePin(id)
       await fetchAnnouncements()
     } catch (err) {
-      alert(err.message || 'Failed to toggle pin')
+      toast.error(err.message || 'Failed to toggle pin')
     } finally {
       setActionLoading(false)
     }

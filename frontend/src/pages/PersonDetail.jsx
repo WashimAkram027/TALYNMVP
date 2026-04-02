@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { membersService } from '../services/membersService'
 import { StatusBadge, formatStartDate } from '../utils/statusUtils'
@@ -55,7 +56,6 @@ export default function PersonDetail() {
   const [actionLoading, setActionLoading] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [confirmModal, setConfirmModal] = useState(null)
-  const [feedback, setFeedback] = useState(null)
 
   // Fetch member data
   const fetchMember = async () => {
@@ -102,7 +102,7 @@ export default function PersonDetail() {
           await fetchMember()
         } catch (err) {
           console.error('Failed to activate:', err)
-          alert(err.message || 'Failed to activate member')
+          toast.error(err.message || 'Failed to activate member')
         } finally {
           setActionLoading(false)
         }
@@ -122,7 +122,7 @@ export default function PersonDetail() {
           navigate('/people')
         } catch (err) {
           console.error('Failed to delete:', err)
-          alert(err.message || 'Failed to delete member')
+          toast.error(err.message || 'Failed to delete member')
         } finally {
           setActionLoading(false)
         }
@@ -194,12 +194,6 @@ export default function PersonDetail() {
         </ol>
       </nav>
 
-      {/* Feedback Message */}
-      {feedback && (
-        <div className={`px-4 py-3 rounded-lg mb-6 ${feedback.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' : 'bg-red-50 border border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'}`}>
-          {feedback.message}
-        </div>
-      )}
 
       {/* Change Request Banner */}
       {member.quote_dispute_note && (
@@ -441,8 +435,7 @@ export default function PersonDetail() {
           onSuccess={() => {
             setShowInviteModal(false)
             fetchMember()
-            setFeedback({ type: 'success', message: 'Offer updated and employee notified' })
-            setTimeout(() => setFeedback(null), 5000)
+            toast.success('Offer updated and employee notified')
           }}
           departments={[]}
         />

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { documentsService } from '../services/documentsService'
 import { useAuthStore } from '../store/authStore'
 
@@ -99,7 +100,7 @@ export default function Documents() {
       await documentsService.deleteDocument(id)
       await fetchDocuments()
     } catch (err) {
-      alert(err.message || 'Failed to delete document')
+      toast.error(err.message || 'Failed to delete document')
     } finally {
       setActionLoading(false)
     }
@@ -119,7 +120,7 @@ export default function Documents() {
         document.body.removeChild(a)
       }
     } catch (err) {
-      alert(err.message || 'Failed to download document')
+      toast.error(err.message || 'Failed to download document')
     }
   }
 

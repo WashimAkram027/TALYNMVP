@@ -22,7 +22,9 @@ const publicEndpoints = [
   '/auth/check-email',
   '/auth/forgot-password',
   '/auth/reset-password',
-  '/auth/resend-verification'
+  '/auth/resend-verification',
+  '/authorized-users/setup',
+  '/authorized-users/validate-token'
 ]
 
 /**

@@ -56,5 +56,29 @@ export const adminPayrollController = {
       const status = error.name === 'NotFoundError' ? 404 : error.name === 'BadRequestError' ? 400 : 500
       return errorResponse(res, error.message, status)
     }
+  },
+
+  async regenerate(req, res) {
+    try {
+      const ip = req.ip || req.headers['x-forwarded-for']
+      const result = await adminPayrollService.regeneratePayrollRun(req.params.id, req.admin.id, ip)
+      return successResponse(res, result, 'Payroll regenerated')
+    } catch (error) {
+      const status = error.name === 'NotFoundError' ? 404 : error.name === 'BadRequestError' ? 400 : 500
+      return errorResponse(res, error.message, status)
+    }
+  },
+
+  async resolveReview(req, res) {
+    try {
+      const rawNotes = (req.body || {}).resolutionNotes
+      const resolutionNotes = typeof rawNotes === 'string' ? rawNotes.slice(0, 2000) : ''
+      const ip = req.ip || req.headers['x-forwarded-for']
+      const result = await adminPayrollService.resolveReviewRequest(req.params.itemId, req.admin.id, resolutionNotes, ip)
+      return successResponse(res, result, 'Review resolved')
+    } catch (error) {
+      const status = error.name === 'NotFoundError' ? 404 : error.name === 'BadRequestError' ? 400 : 500
+      return errorResponse(res, error.message, status)
+    }
   }
 }

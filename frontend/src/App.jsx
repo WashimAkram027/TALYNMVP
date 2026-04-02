@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import AppRoutes from './routes'
 import { useAuthStore } from './store/authStore'
+import { useNotificationInit } from './hooks/useNotificationInit'
 
 export default function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth)
   const [authChecked, setAuthChecked] = useState(false)
+
+  useNotificationInit()
 
   useEffect(() => {
     const initAuth = async () => {

@@ -2,6 +2,8 @@ import { invoicesService } from '../services/invoices.service.js'
 import { invoiceGenerationService } from '../services/invoiceGeneration.service.js'
 import { paymentsService } from '../services/payments.service.js'
 import { emailService } from '../services/email.service.js'
+import { notificationService } from '../services/notification.service.js'
+import { supabase } from '../config/supabase.js'
 import { env } from '../config/env.js'
 import { successResponse, createdResponse, errorResponse, notFoundResponse } from '../utils/response.js'
 
@@ -140,6 +142,34 @@ export const invoicesController = {
         await emailService.sendInvoiceApprovedEmail(
           env.adminEmail, invoice.client_name || 'Unknown', invoice.invoice_number, amount, invoice.payment_type
         )
+
+        // In-app notification for employer
+        await notificationService.create({
+          recipientId: req.user.id,
+          organizationId: req.user.organizationId,
+          type: 'invoice_approved',
+          title: 'Invoice approved',
+          message: `Invoice ${invoice.invoice_number} for ${amount} has been approved`,
+          actionUrl: '/billing',
+          metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number, amount, payment_type: invoice.payment_type }
+        })
+
+        // In-app notification for admin
+        const { data: admins } = await supabase
+          .from('admin_roles')
+          .select('user_id')
+          .in('role', ['super_admin', 'finance_admin'])
+        for (const admin of admins || []) {
+          await notificationService.create({
+            recipientId: admin.user_id,
+            organizationId: req.user.organizationId,
+            type: 'invoice_approved',
+            title: 'Invoice approved by employer',
+            message: `${invoice.client_name || 'Employer'} approved invoice ${invoice.invoice_number} (${amount})`,
+            actionUrl: `/invoices`,
+            metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number, amount }
+          })
+        }
       } catch (emailErr) {
         console.error('Failed to send invoice approved email:', emailErr)
       }
@@ -186,6 +216,17 @@ export const invoicesController = {
         await emailService.sendInvoiceRejectedEmail(
           env.adminEmail, invoice.client_name || 'Unknown', invoice.invoice_number, reason, req.user.email
         )
+
+        // In-app notification for employer
+        await notificationService.create({
+          recipientId: req.user.id,
+          organizationId: req.user.organizationId,
+          type: 'invoice_rejected',
+          title: 'Invoice rejected',
+          message: `Invoice ${invoice.invoice_number} has been rejected${reason ? ': ' + reason : ''}`,
+          actionUrl: '/billing',
+          metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number, reason }
+        })
       } catch (emailErr) {
         console.error('Failed to send invoice rejected email:', emailErr)
       }
@@ -199,7 +240,8 @@ export const invoicesController = {
 
   async downloadInvoicePdf(req, res) {
     try {
-      const { pdfBuffer, invoiceNumber } = await invoiceGenerationService.generateInvoicePdf(req.params.id, req.user.organizationId)
+      const variant = req.query.variant === 'summary' ? 'summary' : 'detail'
+      const { pdfBuffer, invoiceNumber } = await invoiceGenerationService.generateInvoicePdf(req.params.id, req.user.organizationId, variant)
       res.setHeader('Content-Type', 'application/pdf')
       res.setHeader('Content-Disposition', `attachment; filename="${invoiceNumber}.pdf"`)
       return res.send(pdfBuffer)
@@ -211,7 +253,8 @@ export const invoicesController = {
 
   async downloadReceiptPdf(req, res) {
     try {
-      const { pdfBuffer, invoiceNumber } = await invoiceGenerationService.generateReceiptPdf(req.params.id, req.user.organizationId)
+      const variant = req.query.variant === 'summary' ? 'summary' : 'detail'
+      const { pdfBuffer, invoiceNumber } = await invoiceGenerationService.generateReceiptPdf(req.params.id, req.user.organizationId, variant)
       res.setHeader('Content-Type', 'application/pdf')
       res.setHeader('Content-Disposition', `attachment; filename="${invoiceNumber}-receipt.pdf"`)
       return res.send(pdfBuffer)

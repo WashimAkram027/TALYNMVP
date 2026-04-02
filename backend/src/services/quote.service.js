@@ -54,6 +54,8 @@ export const quoteService = {
 
   /**
    * Generate sequential quote number: TQ-YYYY-NNN
+   * Fetches all quotes for the org/year and finds the highest numeric suffix,
+   * skipping any non-numeric suffixes (e.g. TQ-2026-T01 from test data).
    */
   async generateQuoteNumber(orgId) {
     const year = new Date().getFullYear()
@@ -64,18 +66,19 @@ export const quoteService = {
       .select('quote_number')
       .eq('organization_id', orgId)
       .like('quote_number', `${prefix}%`)
-      .order('quote_number', { ascending: false })
-      .limit(1)
 
     if (error) throw error
 
-    let seq = 1
+    let maxSeq = 0
     if (data && data.length > 0) {
-      const lastNum = parseInt(data[0].quote_number.replace(prefix, ''), 10)
-      if (!isNaN(lastNum)) seq = lastNum + 1
+      for (const row of data) {
+        const suffix = row.quote_number.replace(prefix, '')
+        const num = parseInt(suffix, 10)
+        if (!isNaN(num) && num > maxSeq) maxSeq = num
+      }
     }
 
-    return `${prefix}${String(seq).padStart(3, '0')}`
+    return `${prefix}${String(maxSeq + 1).padStart(3, '0')}`
   },
 
   /**
@@ -84,7 +87,6 @@ export const quoteService = {
    */
   async generateQuote(userId, orgId, employeeData) {
     const config = await this.getCostConfig(employeeData.countryCode || 'NPL')
-    const quoteNumber = await this.generateQuoteNumber(orgId)
 
     const annualSalary = employeeData.salaryAmount
     if (!annualSalary || annualSalary <= 0) {
@@ -108,58 +110,69 @@ export const quoteService = {
     const validUntil = new Date()
     validUntil.setDate(validUntil.getDate() + 30)
 
-    const quoteData = {
-      organization_id: orgId,
-      quote_number: quoteNumber,
-      status: 'draft',
+    // Retry loop to handle duplicate quote number race conditions
+    const maxRetries = 3
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const quoteNumber = await this.generateQuoteNumber(orgId)
 
-      employee_email: employeeData.email,
-      employee_first_name: employeeData.firstName || null,
-      employee_last_name: employeeData.lastName || null,
-      job_title: employeeData.jobTitle || null,
-      department: employeeData.department || null,
-      employment_type: employeeData.employmentType || 'full_time',
-      start_date: employeeData.startDate || null,
+      const quoteData = {
+        organization_id: orgId,
+        quote_number: quoteNumber,
+        status: 'draft',
 
-      annual_salary: Math.round(annualSalary * 100), // store in minor units
-      salary_currency: employeeData.salaryCurrency || 'NPR',
-      pay_frequency: employeeData.payFrequency || 'monthly',
-      periods_per_year: periodsPerYear,
-      monthly_gross_salary: monthlyGross,
+        employee_email: employeeData.email,
+        employee_first_name: employeeData.firstName || null,
+        employee_last_name: employeeData.lastName || null,
+        job_title: employeeData.jobTitle || null,
+        department: employeeData.department || null,
+        employment_type: employeeData.employmentType || 'full_time',
+        start_date: employeeData.startDate || null,
 
-      employer_ssf_rate: config.employer_ssf_rate,
-      employer_ssf_amount: employerSsfAmount,
-      employee_ssf_rate: config.employee_ssf_rate,
-      employee_ssf_amount: employeeSsfAmount,
-      estimated_net_salary: estimatedNetSalary,
-      platform_fee_amount: config.platform_fee_amount,
-      platform_fee_currency: config.platform_fee_currency,
-      total_monthly_cost_local: totalMonthlyCostLocal,
-      total_annual_cost_local: totalAnnualCostLocal,
+        annual_salary: Math.round(annualSalary * 100), // store in minor units
+        salary_currency: employeeData.salaryCurrency || 'NPR',
+        pay_frequency: employeeData.payFrequency || 'monthly',
+        periods_per_year: periodsPerYear,
+        monthly_gross_salary: monthlyGross,
 
-      config_snapshot: {
-        country_code: config.country_code,
-        country_name: config.country_name,
         employer_ssf_rate: config.employer_ssf_rate,
+        employer_ssf_amount: employerSsfAmount,
         employee_ssf_rate: config.employee_ssf_rate,
+        employee_ssf_amount: employeeSsfAmount,
+        estimated_net_salary: estimatedNetSalary,
         platform_fee_amount: config.platform_fee_amount,
         platform_fee_currency: config.platform_fee_currency,
-        effective_from: config.effective_from
-      },
-      country_code: config.country_code,
+        total_monthly_cost_local: totalMonthlyCostLocal,
+        total_annual_cost_local: totalAnnualCostLocal,
 
-      valid_until: validUntil.toISOString(),
-      generated_by: userId
+        config_snapshot: {
+          country_code: config.country_code,
+          country_name: config.country_name,
+          employer_ssf_rate: config.employer_ssf_rate,
+          employee_ssf_rate: config.employee_ssf_rate,
+          platform_fee_amount: config.platform_fee_amount,
+          platform_fee_currency: config.platform_fee_currency,
+          effective_from: config.effective_from
+        },
+        country_code: config.country_code,
+
+        valid_until: validUntil.toISOString(),
+        generated_by: userId
+      }
+
+      const { data, error } = await supabase
+        .from('eor_quotes')
+        .insert(quoteData)
+        .select()
+        .single()
+
+      if (!error) return data
+
+      // Retry on duplicate key (23505), otherwise throw immediately
+      if (error.code !== '23505' || attempt === maxRetries - 1) {
+        throw error
+      }
+      console.warn(`[QuoteService] Quote number ${quoteNumber} conflict, retrying (attempt ${attempt + 1})`)
     }
-
-    const { data, error } = await supabase
-      .from('eor_quotes')
-      .insert(quoteData)
-      .select()
-      .single()
-
-    if (error) throw error
-    return data
   },
 
   /**

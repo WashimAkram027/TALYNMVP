@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { benefitsService } from '../services/benefitsService'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
@@ -66,7 +67,7 @@ export default function Benefits() {
       }
       await fetchPlans()
     } catch (err) {
-      alert(err.message || 'Failed to delete plan')
+      toast.error(err.message || 'Failed to delete plan')
     } finally {
       setActionLoading(false)
     }
@@ -82,7 +83,7 @@ export default function Benefits() {
         setEnrollees(data || [])
       }
     } catch (err) {
-      alert(err.message || 'Failed to cancel enrollment')
+      toast.error(err.message || 'Failed to cancel enrollment')
     } finally {
       setActionLoading(false)
     }

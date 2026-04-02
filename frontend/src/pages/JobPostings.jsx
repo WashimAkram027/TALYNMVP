@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { jobPostingsService } from '../services/jobPostingsService'
 import { useAuthStore } from '../store/authStore'
 
@@ -108,7 +109,7 @@ export default function JobPostings() {
       await jobPostingsService.updateJobPosting(posting.id, { status: 'open' })
       await fetchPostings()
     } catch (err) {
-      alert(err.message || 'Failed to publish posting')
+      toast.error(err.message || 'Failed to publish posting')
     } finally {
       setActionLoading(false)
     }
@@ -121,7 +122,7 @@ export default function JobPostings() {
       await jobPostingsService.updateJobPosting(posting.id, { status: 'closed' })
       await fetchPostings()
     } catch (err) {
-      alert(err.message || 'Failed to close posting')
+      toast.error(err.message || 'Failed to close posting')
     } finally {
       setActionLoading(false)
     }
@@ -134,7 +135,7 @@ export default function JobPostings() {
       await jobPostingsService.deleteJobPosting(posting.id)
       await fetchPostings()
     } catch (err) {
-      alert(err.message || 'Failed to delete posting')
+      toast.error(err.message || 'Failed to delete posting')
     } finally {
       setActionLoading(false)
     }

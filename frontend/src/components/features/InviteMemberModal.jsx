@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { quoteService } from '../../services/quoteService'
 import { membersService } from '../../services/membersService'
+import { useAuthStore } from '../../store/authStore'
 import QuoteReviewPanel from './quotes/QuoteReviewPanel'
 
 const ROLE_OPTIONS = [
@@ -16,6 +17,7 @@ const EMPLOYMENT_TYPE_OPTIONS = [
 ]
 
 export default function InviteMemberModal({ onClose, onSuccess, departments = [], editMember }) {
+  const { organization, profile } = useAuthStore()
   const isReissue = !!editMember
   const [formData, setFormData] = useState({
     firstName: editMember?.first_name || '',
@@ -125,7 +127,7 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
 
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col border border-border-light dark:border-border-dark">
+      <div className={`bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full mx-4 max-h-[90vh] flex flex-col border border-border-light dark:border-border-dark transition-all duration-200 ${phase === 'quote' ? 'max-w-4xl' : 'max-w-lg'}`}>
         <div className="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">
@@ -160,6 +162,8 @@ export default function InviteMemberModal({ onClose, onSuccess, departments = []
               onSaveAndExit={handleSaveAndExit}
               loading={loading}
               acceptLabel={isReissue ? 'Accept & Update Offer' : undefined}
+              orgName={organization?.name}
+              generatedBy={profile?.full_name}
             />
           ) : (
             <form onSubmit={handleGenerateQuote} className="space-y-4">

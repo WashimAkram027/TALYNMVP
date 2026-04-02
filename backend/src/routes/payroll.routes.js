@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { payrollController } from '../controllers/payroll.controller.js'
-import { authenticate, requireOrganization } from '../middleware/auth.js'
+import { authenticate, requireOrganization, requireEmployer } from '../middleware/auth.js'
 import { validateBody, validateQuery } from '../middleware/validate.js'
 import { createPayrollRunSchema, updatePayrollStatusSchema, updatePayrollItemSchema, payrollFiltersSchema } from '../utils/validators.js'
 
@@ -22,6 +22,24 @@ router.get('/runs', validateQuery(payrollFiltersSchema), payrollController.getRu
  * Get upcoming payroll for the organization
  */
 router.get('/upcoming', payrollController.getUpcoming)
+
+/**
+ * GET /api/payroll/runs/:runId/payslips/:memberId/pdf
+ * Download payslip PDF for a specific member
+ */
+router.get('/runs/:runId/payslips/:memberId/pdf', payrollController.downloadPayslipPdf)
+
+/**
+ * GET /api/payroll/runs/:runId/payslips/:memberId
+ * Get payslip data as JSON for a specific member
+ */
+router.get('/runs/:runId/payslips/:memberId', payrollController.getPayslipData)
+
+/**
+ * POST /api/payroll/runs/:runId/items/:memberId/review-request
+ * Employer flags an issue with an employee's calculated pay — notification only
+ */
+router.post('/runs/:runId/items/:memberId/review-request', requireEmployer, payrollController.submitReviewRequest)
 
 /**
  * GET /api/payroll/runs/:id

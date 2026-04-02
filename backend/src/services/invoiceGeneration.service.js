@@ -3,7 +3,7 @@ import { anvilClient } from '../config/anvil.js'
 import { quoteService } from './quote.service.js'
 import { invoicesService } from './invoices.service.js'
 import { leaveReconciliationService } from './leaveReconciliation.service.js'
-import { buildInvoiceHtml, buildReceiptHtml } from './pdfTemplate.service.js'
+import { buildInvoiceHtml, buildReceiptHtml, buildPayslipHtml } from './pdfTemplate.service.js'
 import { BadRequestError, NotFoundError } from '../utils/errors.js'
 
 export const invoiceGenerationService = {
@@ -22,8 +22,9 @@ export const invoiceGenerationService = {
     // Find orgs with stripe_customer_id set and at least 1 active member
     const { data: orgs, error: orgError } = await supabase
       .from('organizations')
-      .select('id, name, billing_email, email, payment_type, settings')
+      .select('id, name, billing_email, email, payment_type, settings, status')
       .not('stripe_customer_id', 'is', null)
+      .eq('status', 'active')
 
     if (orgError) throw orgError
 
@@ -57,6 +58,7 @@ export const invoiceGenerationService = {
       }
     }
 
+    summary.periodStart = periodStart
     return summary
   },
 
@@ -111,6 +113,9 @@ export const invoiceGenerationService = {
     if (orgError || !org) throw new NotFoundError('Organization not found')
 
     const exchangeRate = parseFloat(config.exchange_rate)
+    if (isNaN(exchangeRate) || exchangeRate < 0.001 || exchangeRate > 0.05) {
+      throw new BadRequestError(`Exchange rate ${config.exchange_rate} is outside safe bounds (0.001–0.05, i.e. 20–1000 NPR/USD). Admin must verify.`)
+    }
     const employerSsfRate = parseFloat(config.employer_ssf_rate)
     const employeeSsfRate = parseFloat(config.employee_ssf_rate)
     const platformFeePerEmployee = config.platform_fee_amount // in USD cents (59900 = $599)
@@ -143,8 +148,10 @@ export const invoiceGenerationService = {
       const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
       const totalCostLocal = monthlyGrossLocal + employerSsfLocal
 
-      // Convert local cost to USD cents
-      const costUsdCents = Math.round(totalCostLocal * exchangeRate)
+      // Convert local cost to USD cents (explicit 3-step: paisa → NPR → USD → cents)
+      const totalCostNpr = totalCostLocal / 100          // paisa → NPR
+      const totalCostUsd = totalCostNpr * exchangeRate   // NPR → USD
+      const costUsdCents = Math.round(totalCostUsd * 100) // USD → cents
 
       return {
         member_id: member.id,
@@ -175,18 +182,17 @@ export const invoiceGenerationService = {
     }))
 
     // Calculate totals
-    const subtotalLocalCents = lineItems.reduce((sum, item) => sum + item.total_cost_local, 0)
-    const subtotalUsdCents = lineItems.reduce((sum, item) => sum + item.cost_usd_cents, 0)
-    const totalPlatformFeeCents = platformFeePerEmployee * members.length
-    const totalAmountCents = subtotalUsdCents + totalPlatformFeeCents
+    const subtotalLocalCents = Math.round(lineItems.reduce((sum, item) => sum + item.total_cost_local, 0))
+    const subtotalUsdCents = Math.round(lineItems.reduce((sum, item) => sum + item.cost_usd_cents, 0))
+    const totalPlatformFeeCents = Math.round(platformFeePerEmployee * members.length)
+    const totalAmountCents = Math.round(subtotalUsdCents + totalPlatformFeeCents)
 
     // Generate invoice number
     const invoiceNumber = await invoicesService.generateInvoiceNumber(orgId)
 
-    // Calculate due date = 1st of next month
-    const periodStartDate = new Date(periodStart)
-    const dueDate = new Date(periodStartDate.getFullYear(), periodStartDate.getMonth() + 1, 1)
-      .toISOString().split('T')[0]
+    // Calculate due date = 1st of next month (UTC-safe string arithmetic)
+    const [psYear, psMonth] = periodStart.split('-').map(Number)
+    const dueDate = `${psMonth === 12 ? psYear + 1 : psYear}-${String(psMonth === 12 ? 1 : psMonth + 1).padStart(2, '0')}-01`
 
     // Config snapshot for historical reference
     const configSnapshot = {
@@ -260,7 +266,7 @@ export const invoiceGenerationService = {
         organization_id: orgId,
         pay_period_start: periodStart,
         pay_period_end: periodEnd,
-        pay_date: dueDate,
+        pay_date: periodEnd, // Set to period end as default; updated to actual date when admin approves disbursement
         status: 'draft',
         currency: 'NPR',
         total_amount: subtotalLocalCents / 100, // in NPR (major units)
@@ -275,6 +281,8 @@ export const invoiceGenerationService = {
     }
 
     // Create payroll items for each member with prorated data from line items
+    // Note: net_amount is a GENERATED ALWAYS column — do NOT include it in the insert.
+    // It auto-computes as: base_salary + bonuses + allowances - deductions - tax_amount
     if (payrollRun) {
       const payrollItems = lineItems.map(item => ({
         payroll_run_id: payrollRun.id,
@@ -285,7 +293,6 @@ export const invoiceGenerationService = {
         employee_ssf: item.employee_ssf_local / 100,
         leave_deduction: (item.full_monthly_gross_local - item.monthly_gross_local) / 100,
         deductions: item.employee_ssf_local / 100,
-        net_amount: (item.monthly_gross_local - item.employee_ssf_local) / 100,
         payable_days: item.payable_days,
         calendar_days: item.calendar_days,
         deduction_days: item.deduction_days,
@@ -299,13 +306,16 @@ export const invoiceGenerationService = {
 
       if (itemsError) {
         console.error('[InvoiceGeneration] Payroll items creation error:', itemsError)
+        // Clean up orphaned payroll run to avoid inconsistent state
+        await supabase.from('payroll_runs').delete().eq('id', payrollRun.id)
+        await supabase.from('invoices').update({ payroll_run_id: null }).eq('id', invoice.id)
+      } else {
+        // Link invoice to payroll run only on successful items creation
+        await supabase
+          .from('invoices')
+          .update({ payroll_run_id: payrollRun.id })
+          .eq('id', invoice.id)
       }
-
-      // Link invoice to payroll run
-      await supabase
-        .from('invoices')
-        .update({ payroll_run_id: payrollRun.id })
-        .eq('id', invoice.id)
     }
 
     return invoice
@@ -315,7 +325,7 @@ export const invoiceGenerationService = {
    * Generate invoice PDF via Anvil, cache in Supabase Storage.
    * Returns { pdfBuffer, pdfUrl, invoiceNumber }
    */
-  async generateInvoicePdf(invoiceId, orgId) {
+  async generateInvoicePdf(invoiceId, orgId, variant = 'detail') {
     if (!anvilClient) {
       throw new BadRequestError('PDF generation is not configured. Set ANVIL_API_KEY in environment.')
     }
@@ -325,8 +335,8 @@ export const invoiceGenerationService = {
       throw new NotFoundError('Invoice not found for this organization')
     }
 
-    // If PDF already cached, download from storage
-    if (invoice.pdf_url) {
+    // If PDF already cached and requesting default variant, download from storage
+    if (invoice.pdf_url && variant === 'detail') {
       const storagePath = `invoices/${invoice.organization_id}/${invoice.invoice_number}.pdf`
       const { data, error } = await supabase.storage
         .from('documents')
@@ -338,7 +348,7 @@ export const invoiceGenerationService = {
       }
     }
 
-    const { html, css } = buildInvoiceHtml(invoice, invoice.organization)
+    const { html, css } = buildInvoiceHtml(invoice, invoice.organization, variant)
 
     const { statusCode, data: pdfData } = await anvilClient.generatePDF({
       title: `Invoice ${invoice.invoice_number}`,
@@ -361,23 +371,20 @@ export const invoiceGenerationService = {
       return { pdfBuffer: pdfData, pdfUrl: null, invoiceNumber: invoice.invoice_number }
     }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('documents')
-      .getPublicUrl(storagePath)
-
+    // Store the storage path (not a public URL) for security — PDFs are served through authenticated endpoints
     await supabase
       .from('invoices')
-      .update({ pdf_url: publicUrl, updated_at: new Date().toISOString() })
+      .update({ pdf_url: storagePath, updated_at: new Date().toISOString() })
       .eq('id', invoiceId)
 
-    return { pdfBuffer: pdfData, pdfUrl: publicUrl, invoiceNumber: invoice.invoice_number }
+    return { pdfBuffer: pdfData, pdfUrl: storagePath, invoiceNumber: invoice.invoice_number }
   },
 
   /**
    * Generate receipt PDF after payment confirmation.
    * Returns { pdfBuffer, pdfUrl, invoiceNumber }
    */
-  async generateReceiptPdf(invoiceId, orgId) {
+  async generateReceiptPdf(invoiceId, orgId, variant = 'detail') {
     if (!anvilClient) {
       throw new BadRequestError('PDF generation is not configured. Set ANVIL_API_KEY in environment.')
     }
@@ -387,8 +394,8 @@ export const invoiceGenerationService = {
       throw new NotFoundError('Invoice not found for this organization')
     }
 
-    // If receipt already cached, download from storage
-    if (invoice.receipt_pdf_url) {
+    // If receipt already cached and requesting default variant, download from storage
+    if (invoice.receipt_pdf_url && variant === 'detail') {
       const storagePath = `receipts/${invoice.organization_id}/${invoice.invoice_number}-receipt.pdf`
       const { data, error } = await supabase.storage
         .from('documents')
@@ -400,7 +407,7 @@ export const invoiceGenerationService = {
       }
     }
 
-    const { html, css } = buildReceiptHtml(invoice, invoice.organization, invoice.paid_at)
+    const { html, css } = buildReceiptHtml(invoice, invoice.organization, invoice.paid_at, variant)
 
     const { statusCode, data: pdfData } = await anvilClient.generatePDF({
       title: `Receipt ${invoice.invoice_number}`,
@@ -422,16 +429,167 @@ export const invoiceGenerationService = {
       return { pdfBuffer: pdfData, pdfUrl: null, invoiceNumber: invoice.invoice_number }
     }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('documents')
-      .getPublicUrl(storagePath)
-
+    // Store the storage path (not a public URL) for security — receipts are served through authenticated endpoints
     await supabase
       .from('invoices')
-      .update({ receipt_pdf_url: publicUrl, updated_at: new Date().toISOString() })
+      .update({ receipt_pdf_url: storagePath, updated_at: new Date().toISOString() })
       .eq('id', invoiceId)
 
-    return { pdfBuffer: pdfData, pdfUrl: publicUrl, invoiceNumber: invoice.invoice_number }
+    return { pdfBuffer: pdfData, pdfUrl: storagePath, invoiceNumber: invoice.invoice_number }
+  },
+
+  /**
+   * Generate payslip PDF for a specific member in a payroll run.
+   * Returns { pdfBuffer, pdfUrl, memberName }
+   */
+  async generatePayslipPdf(payrollRunId, memberId, orgId) {
+    if (!anvilClient) {
+      throw new BadRequestError('PDF generation is not configured. Set ANVIL_API_KEY in environment.')
+    }
+
+    const { item, org, period } = await this._getPayslipDataInternal(payrollRunId, memberId, orgId)
+    const memberName = item.member?.profile?.full_name || 'employee'
+
+    // Check for cached payslip PDF
+    if (item.payslip_pdf_url) {
+      const storagePath = `payslips/${orgId}/${payrollRunId}-${memberId}.pdf`
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .download(storagePath)
+
+      if (!error && data) {
+        const buffer = Buffer.from(await data.arrayBuffer())
+        return { pdfBuffer: buffer, pdfUrl: item.payslip_pdf_url, memberName }
+      }
+    }
+
+    const { html, css } = buildPayslipHtml(
+      item,
+      {
+        full_name: item.member?.profile?.full_name,
+        email: item.member?.profile?.email,
+        job_title: item.member?.job_title,
+        start_date: item.member?.start_date,
+        member_id: item.member?.id || memberId,
+      },
+      org,
+      period
+    )
+
+    const { statusCode, data: pdfData } = await anvilClient.generatePDF({
+      title: `Payslip ${memberName} ${period}`,
+      type: 'html',
+      data: { html, css }
+    })
+
+    if (statusCode !== 200 || !pdfData) {
+      throw new BadRequestError(`Payslip PDF generation failed with status: ${statusCode}`)
+    }
+
+    const storagePath = `payslips/${orgId}/${payrollRunId}-${memberId}.pdf`
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(storagePath, pdfData, { contentType: 'application/pdf', upsert: true })
+
+    let pdfUrl = null
+    if (!uploadError) {
+      // Store the storage path (not a public URL) for security — payslips are served through authenticated endpoints
+      pdfUrl = storagePath
+
+      // Cache the storage path on the payroll item for future requests
+      await supabase.from('payroll_items')
+        .update({ payslip_pdf_url: storagePath })
+        .eq('payroll_run_id', payrollRunId)
+        .eq('member_id', memberId)
+    } else {
+      console.error('[InvoiceGeneration] Payslip upload error:', uploadError)
+    }
+
+    return { pdfBuffer: pdfData, pdfUrl, memberName }
+  },
+
+  /**
+   * Get payslip data as JSON for frontend rendering.
+   */
+  async getPayslipData(payrollRunId, memberId, orgId) {
+    const { item, period } = await this._getPayslipDataInternal(payrollRunId, memberId, orgId)
+
+    const baseSalary = parseFloat(item.base_salary) || 0
+    const basic = baseSalary * 0.6
+    const dearness = baseSalary * 0.4
+
+    return {
+      period,
+      employee: {
+        name: item.member?.profile?.full_name || '—',
+        oid: `TLN-${String(item.member?.id || memberId).substring(0, 8).toUpperCase()}`,
+        joinDate: item.member?.start_date || '—',
+        designation: item.member?.job_title || '—',
+        pan: '—',
+        bankAccount: null,
+        bankName: '—',
+      },
+      incomeItems: [
+        { label: 'Basic salary', amount: basic },
+        { label: 'Dearness allowance', amount: dearness },
+        { label: 'Other allowance', amount: null },
+        { label: 'Festival allowance', amount: null },
+        { label: 'Bonus', amount: null },
+        { label: 'Leave encashments', amount: null },
+        { label: 'Other payments', amount: null },
+      ],
+      deductionItems: [
+        { label: 'SSF (employee)', amount: parseFloat(item.employee_ssf) || null },
+        { label: 'Income tax', amount: null },
+      ],
+      totalGross: baseSalary,
+      totalDeductions: parseFloat(item.deductions) || 0,
+      netSalary: parseFloat(item.net_amount) || 0,
+      payableDays: item.payable_days,
+      calendarDays: item.calendar_days,
+    }
+  },
+
+  /**
+   * Internal helper to fetch payslip data with validation.
+   */
+  async _getPayslipDataInternal(payrollRunId, memberId, orgId) {
+    const { data: item, error } = await supabase
+      .from('payroll_items')
+      .select(`
+        *,
+        payroll_run:payroll_runs!payroll_items_payroll_run_id_fkey(
+          id, organization_id, pay_period_start, pay_period_end, pay_date
+        ),
+        member:organization_members!payroll_items_member_id_fkey(
+          id, job_title, start_date,
+          profile:profiles!organization_members_profile_id_fkey(full_name, email)
+        )
+      `)
+      .eq('payroll_run_id', payrollRunId)
+      .eq('member_id', memberId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') throw new NotFoundError('Payslip not found')
+      throw error
+    }
+
+    if (item.payroll_run?.organization_id !== orgId) {
+      throw new NotFoundError('Payslip not found for this organization')
+    }
+
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id, name')
+      .eq('id', orgId)
+      .single()
+
+    const period = new Date(item.payroll_run.pay_period_start).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long'
+    })
+
+    return { item, org, period }
   },
 
   /**

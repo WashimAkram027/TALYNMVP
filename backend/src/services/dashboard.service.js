@@ -218,10 +218,10 @@ export const dashboardService = {
       console.error('[DashboardService] Error fetching dispute members:', e)
     }
 
-    // 2. Pending time-off requests
+    // 2. Pending leave requests (leave_requests is the active table used by the UI)
     try {
       const { count: pendingTimeOff } = await supabase
-        .from('time_off_requests')
+        .from('leave_requests')
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', orgId)
         .eq('status', 'pending')

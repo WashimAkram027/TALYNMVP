@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { useNotificationStore } from '../../store/notificationStore'
+import NotificationPanel from '../features/NotificationPanel'
 
 const navLinkClass = ({ isActive }) =>
   `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
@@ -10,6 +13,8 @@ const navLinkClass = ({ isActive }) =>
 
 export default function Sidebar({ onClose }) {
   const { user, profile, logout } = useAuthStore()
+  const unreadCount = useNotificationStore(state => state.unreadCount)
+  const [showNotifications, setShowNotifications] = useState(false)
 
   // Determine user role for conditional rendering
   const isEmployer = profile?.role === 'employer'
@@ -108,11 +113,6 @@ export default function Sidebar({ onClose }) {
               Billing
             </NavLink>
 
-            <NavLink to="/invoices" onClick={handleNavClick} className={navLinkClass}>
-              <span className="material-icons-outlined">receipt_long</span>
-              Payslips
-            </NavLink>
-
             <NavLink to="/documents" onClick={handleNavClick} className={navLinkClass}>
               <span className="material-icons-outlined">folder_open</span>
               Documents
@@ -200,6 +200,22 @@ export default function Sidebar({ onClose }) {
             <p className="text-xs text-subtext-light dark:text-subtext-dark truncate">
               {user?.email || profile?.email || 'user@company.com'}
             </p>
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(prev => !prev)}
+              className="text-subtext-light dark:text-subtext-dark hover:text-primary relative"
+            >
+              <span className="material-icons-outlined text-xl">notifications</span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+            {showNotifications && (
+              <NotificationPanel onClose={() => setShowNotifications(false)} />
+            )}
           </div>
           <button
             onClick={logout}

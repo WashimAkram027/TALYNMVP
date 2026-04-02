@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { toast } from 'sonner'
 import { useAuthStore } from '../store/authStore'
 import { profileAPI, authAPI, onboardingAPI } from '../services/api'
 import { paymentsService } from '../services/paymentsService'
@@ -44,8 +45,6 @@ export default function Settings() {
     linkedinUrl: ''
   })
   const [profileLoading, setProfileLoading] = useState(false)
-  const [profileSuccess, setProfileSuccess] = useState('')
-  const [profileError, setProfileError] = useState('')
 
   // Avatar state
   const [avatarLoading, setAvatarLoading] = useState(false)
@@ -54,7 +53,6 @@ export default function Settings() {
 
   // Bank account state (candidates only)
   const [bankEditing, setBankEditing] = useState(false)
-  const [bankSuccess, setBankSuccess] = useState('')
 
   // Password form state
   const [passwordForm, setPasswordForm] = useState({
@@ -63,8 +61,6 @@ export default function Settings() {
     confirmPassword: ''
   })
   const [passwordLoading, setPasswordLoading] = useState(false)
-  const [passwordSuccess, setPasswordSuccess] = useState('')
-  const [passwordError, setPasswordError] = useState('')
 
   // Initialize form with profile data
   useEffect(() => {
@@ -79,34 +75,10 @@ export default function Settings() {
     }
   }, [profile])
 
-  // Clear success messages after delay
-  useEffect(() => {
-    if (profileSuccess) {
-      const timer = setTimeout(() => setProfileSuccess(''), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [profileSuccess])
-
-  useEffect(() => {
-    if (passwordSuccess) {
-      const timer = setTimeout(() => setPasswordSuccess(''), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [passwordSuccess])
-
-  useEffect(() => {
-    if (bankSuccess) {
-      const timer = setTimeout(() => setBankSuccess(''), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [bankSuccess])
-
   // Handle profile form submit
   const handleProfileSubmit = async (e) => {
     e.preventDefault()
     setProfileLoading(true)
-    setProfileError('')
-    setProfileSuccess('')
 
     try {
       await profileAPI.update({
@@ -116,9 +88,9 @@ export default function Settings() {
         linkedinUrl: profileForm.linkedinUrl || null
       })
       await fetchProfile()
-      setProfileSuccess('Profile updated successfully')
+      toast.success('Profile updated successfully')
     } catch (err) {
-      setProfileError(err.message || 'Failed to update profile')
+      toast.error(err.message || 'Failed to update profile')
     } finally {
       setProfileLoading(false)
     }
@@ -131,28 +103,27 @@ export default function Settings() {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      setProfileError('Please select an image file')
+      toast.error('Please select an image file')
       return
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      setProfileError('Image must be less than 5MB')
+      toast.error('Image must be less than 5MB')
       return
     }
 
     setAvatarLoading(true)
-    setProfileError('')
 
     try {
       const result = await profileAPI.uploadAvatar(file)
       if (result.success && result.data?.avatarUrl) {
         setAvatarPreview(result.data.avatarUrl)
         await fetchProfile()
-        setProfileSuccess('Avatar updated successfully')
+        toast.success('Avatar updated successfully')
       }
     } catch (err) {
-      setProfileError(err.message || 'Failed to upload avatar')
+      toast.error(err.message || 'Failed to upload avatar')
     } finally {
       setAvatarLoading(false)
     }
@@ -163,7 +134,7 @@ export default function Settings() {
     const response = await onboardingAPI.submitEmployeeBankDetails(bankData)
     if (!response.success) throw new Error(response.error || 'Failed to update bank details')
     await fetchProfile()
-    setBankSuccess('Bank details updated successfully')
+    toast.success('Bank details updated successfully')
     setBankEditing(false)
   }
 
@@ -171,37 +142,35 @@ export default function Settings() {
   const handlePasswordSubmit = async (e) => {
     e.preventDefault()
     setPasswordLoading(true)
-    setPasswordError('')
-    setPasswordSuccess('')
 
     // Validate passwords match
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError('New passwords do not match')
+      toast.error('New passwords do not match')
       setPasswordLoading(false)
       return
     }
 
     // Validate password strength
     if (passwordForm.newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters')
+      toast.error('Password must be at least 8 characters')
       setPasswordLoading(false)
       return
     }
 
     if (!/[A-Z]/.test(passwordForm.newPassword)) {
-      setPasswordError('Password must contain at least one uppercase letter')
+      toast.error('Password must contain at least one uppercase letter')
       setPasswordLoading(false)
       return
     }
 
     if (!/[a-z]/.test(passwordForm.newPassword)) {
-      setPasswordError('Password must contain at least one lowercase letter')
+      toast.error('Password must contain at least one lowercase letter')
       setPasswordLoading(false)
       return
     }
 
     if (!/\d/.test(passwordForm.newPassword)) {
-      setPasswordError('Password must contain at least one number')
+      toast.error('Password must contain at least one number')
       setPasswordLoading(false)
       return
     }
@@ -211,14 +180,14 @@ export default function Settings() {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword
       })
-      setPasswordSuccess('Password changed successfully')
+      toast.success('Password changed successfully')
       setPasswordForm({
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
       })
     } catch (err) {
-      setPasswordError(err.message || 'Failed to change password')
+      toast.error(err.message || 'Failed to change password')
     } finally {
       setPasswordLoading(false)
     }
@@ -282,19 +251,6 @@ export default function Settings() {
           </div>
 
           <form onSubmit={handleProfileSubmit} className="p-6">
-            {/* Messages */}
-            {profileError && (
-              <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-                {profileError}
-              </div>
-            )}
-            {profileSuccess && (
-              <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
-                <span className="material-icons text-sm">check_circle</span>
-                {profileSuccess}
-              </div>
-            )}
-
             <div className="flex flex-col md:flex-row gap-6">
               {/* Avatar */}
               <div className="flex-shrink-0">
@@ -422,13 +378,6 @@ export default function Settings() {
             </div>
 
             <div className="p-6">
-              {bankSuccess && (
-                <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
-                  <span className="material-icons text-sm">check_circle</span>
-                  {bankSuccess}
-                </div>
-              )}
-
               {profile?.pending_bank_details && !bankEditing ? (
                 /* Display mode */
                 <div className="space-y-4">
@@ -544,19 +493,6 @@ export default function Settings() {
           </div>
 
           <form onSubmit={handlePasswordSubmit} className="p-6">
-            {/* Messages */}
-            {passwordError && (
-              <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-                {passwordError}
-              </div>
-            )}
-            {passwordSuccess && (
-              <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
-                <span className="material-icons text-sm">check_circle</span>
-                {passwordSuccess}
-              </div>
-            )}
-
             <div className="space-y-4 max-w-md">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

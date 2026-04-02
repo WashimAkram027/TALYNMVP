@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { BadRequestError, NotFoundError } from '../utils/errors.js'
+import { notificationService } from './notification.service.js'
 
 /**
  * Time Off Service
@@ -234,6 +235,7 @@ export const timeOffService = {
     }
 
     // Try to use the RPC if available, otherwise create directly
+    let result
     try {
       const { data, error } = await supabase.rpc('request_time_off', {
         p_policy_id: policyId,
@@ -242,7 +244,7 @@ export const timeOffService = {
         p_reason: reason
       })
       if (error) throw error
-      return data
+      result = data
     } catch (rpcError) {
       // Fallback to direct insert if RPC doesn't exist
       console.log('[TimeOffService] RPC not available, using direct insert')
@@ -267,8 +269,39 @@ export const timeOffService = {
         .single()
 
       if (error) throw new BadRequestError(error.message)
-      return data
+      result = data
     }
+
+    // In-app notification for employer (non-blocking)
+    try {
+      const { data: memberData } = await supabase
+        .from('organization_members')
+        .select('profile_id, first_name, last_name')
+        .eq('id', memberId)
+        .single()
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('owner_id')
+        .eq('id', orgId)
+        .single()
+      if (org?.owner_id && memberData?.profile_id) {
+        const empName = `${memberData.first_name || ''} ${memberData.last_name || ''}`.trim() || 'An employee'
+        await notificationService.create({
+          recipientId: org.owner_id,
+          actorId: memberData.profile_id,
+          organizationId: orgId,
+          type: 'leave_requested',
+          title: 'New time-off request',
+          message: `${empName} requested time off`,
+          actionUrl: '/time-off',
+          metadata: { time_off_request_id: result?.id, policy_id: policyId, start_date: startDate, end_date: endDate, source: 'timeoff' }
+        })
+      }
+    } catch (notifErr) {
+      console.error('[TimeOffService] Failed to send notification:', notifErr)
+    }
+
+    return result
   },
 
   /**
@@ -291,6 +324,7 @@ export const timeOffService = {
     }
 
     // Try to use the RPC if available
+    let result
     try {
       const { data, error } = await supabase.rpc('review_time_off_request', {
         p_request_id: requestId,
@@ -298,7 +332,7 @@ export const timeOffService = {
         p_notes: notes
       })
       if (error) throw error
-      return data
+      result = data
     } catch (rpcError) {
       // Fallback to direct update if RPC doesn't exist
       console.log('[TimeOffService] RPC not available, using direct update')
@@ -316,8 +350,43 @@ export const timeOffService = {
         .single()
 
       if (error) throw new BadRequestError(error.message)
-      return data
+      result = data
     }
+
+    // In-app notification for the requesting employee (non-blocking)
+    try {
+      // Get the member_id from the request to find the employee's profile_id
+      const { data: reqData } = await supabase
+        .from('time_off_requests')
+        .select('member_id')
+        .eq('id', requestId)
+        .single()
+      if (reqData?.member_id) {
+        const { data: memberData } = await supabase
+          .from('organization_members')
+          .select('profile_id')
+          .eq('id', reqData.member_id)
+          .single()
+        if (memberData?.profile_id) {
+          await notificationService.create({
+            recipientId: memberData.profile_id,
+            actorId: reviewerId,
+            organizationId: orgId,
+            type: approved ? 'leave_approved' : 'leave_rejected',
+            title: approved ? 'Time-off request approved' : 'Time-off request not approved',
+            message: approved
+              ? 'Your time-off request has been approved'
+              : `Your time-off request was not approved${notes ? ': ' + notes : ''}`,
+            actionUrl: '/employee/time-off',
+            metadata: { time_off_request_id: requestId, notes, source: 'timeoff' }
+          })
+        }
+      }
+    } catch (notifErr) {
+      console.error('[TimeOffService] Failed to send review notification:', notifErr)
+    }
+
+    return result
   },
 
   /**
@@ -356,6 +425,36 @@ export const timeOffService = {
       .single()
 
     if (error) throw new BadRequestError(error.message)
+
+    // In-app notification for employer (non-blocking)
+    try {
+      const { data: memberData } = await supabase
+        .from('organization_members')
+        .select('profile_id, first_name, last_name')
+        .eq('id', memberId)
+        .single()
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('owner_id')
+        .eq('id', orgId)
+        .single()
+      if (org?.owner_id && memberData?.profile_id) {
+        const empName = `${memberData.first_name || ''} ${memberData.last_name || ''}`.trim() || 'An employee'
+        await notificationService.create({
+          recipientId: org.owner_id,
+          actorId: memberData.profile_id,
+          organizationId: orgId,
+          type: 'leave_cancelled',
+          title: 'Time-off request cancelled',
+          message: `${empName} cancelled their time-off request`,
+          actionUrl: '/time-off',
+          metadata: { time_off_request_id: requestId, source: 'timeoff' }
+        })
+      }
+    } catch (notifErr) {
+      console.error('[TimeOffService] Failed to send cancellation notification:', notifErr)
+    }
+
     return data
   },
 

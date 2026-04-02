@@ -151,7 +151,10 @@ export const leaveReconciliationService = {
         const actualGrossLocal = dailyRate * actualPayableDays
         // Credit amount (positive = credit to employer)
         const adjustmentAmountLocal = originalGrossLocal - actualGrossLocal
-        const adjustmentAmountUsdCents = Math.round(adjustmentAmountLocal * exchangeRate)
+        // Explicit 3-step conversion: paisa → NPR → USD → cents
+        const adjustmentNpr = adjustmentAmountLocal / 100
+        const adjustmentUsd = adjustmentNpr * exchangeRate
+        const adjustmentAmountUsdCents = Math.round(adjustmentUsd * 100)
 
         if (adjustmentAmountLocal <= 0) continue
 
@@ -246,12 +249,13 @@ export const leaveReconciliationService = {
       })
       .in('id', recordIds)
 
-    // Update the invoice with adjustment data
+    // Update the invoice with adjustment data and invalidate cached PDF
     await supabase
       .from('invoices')
       .update({
         leave_adjustments: adjustmentItems,
         adjustment_credits_cents: totalCreditCents,
+        pdf_url: null, // Force PDF regeneration since amounts changed
         updated_at: new Date().toISOString()
       })
       .eq('id', invoiceId)

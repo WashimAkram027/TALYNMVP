@@ -312,6 +312,144 @@ Don't have an account yet? Sign up first, then log in to review.
   },
 
   /**
+   * Send invitation email to authorized user
+   * @param {string} email - Recipient email
+   * @param {string} token - Raw invitation token
+   * @param {string} firstName - Invitee's first name
+   * @param {string} orgName - Organization name
+   * @param {string} inviterName - Name of person who sent the invitation
+   */
+  async sendAuthorizedUserInvitationEmail(email, token, firstName, orgName, inviterName) {
+    const setupUrl = `${env.frontendUrl}/setup-account?token=${token}`
+    const displayName = escapeHtml(firstName || 'there')
+    const safeOrgName = escapeHtml(orgName)
+    const safeInviterName = escapeHtml(inviterName)
+    const subject = `You've been invited to manage ${orgName} on Talyn`
+
+    if (!resend) {
+      console.warn('[EmailService] Resend not configured, skipping email send')
+      console.log('[EmailService] Authorized user invitation for', email, '- Setup at:', setupUrl)
+      await this.logEmail(email, 'authorized_user_invitation', subject, null, 'mock', { inviterName, orgName })
+      return { success: true, mock: true }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organization Access Invitation</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #eee;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #3B82F6;">Talyn</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; font-size: 20px; font-weight: 600; color: #1a1a1a;">Hi ${displayName},</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                ${safeInviterName} has invited you to manage <strong>${safeOrgName}</strong> on Talyn as an authorized user.
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                You'll have full access to the organization's dashboard, including team management, payroll, and more.
+              </p>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                Click the button below to set up your password and get started:
+              </p>
+
+              <!-- Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${setupUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #3B82F6; text-decoration: none; border-radius: 6px;">
+                      Set Up Your Account
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 20px 0; font-size: 14px; line-height: 1.6; color: #6a6a6a;">
+                This link will expire in 72 hours. If it expires, ask your administrator to resend the invitation.
+              </p>
+
+              <!-- Fallback URL -->
+              <p style="margin: 20px 0 0; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #888;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin: 8px 0 0; font-size: 12px; color: #3B82F6; word-break: break-all;">
+                ${setupUrl}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #888;">
+                &copy; ${new Date().getFullYear()} Talyn. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim()
+
+    const text = `
+Hi ${firstName || 'there'},
+
+${inviterName} has invited you to manage ${orgName} on Talyn as an authorized user.
+
+You'll have full access to the organization's dashboard, including team management, payroll, and more.
+
+Click the link below to set up your password and get started:
+
+${setupUrl}
+
+This link will expire in 72 hours. If it expires, ask your administrator to resend the invitation.
+
+- The Talyn Team
+    `.trim()
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html,
+        text
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        await this.logEmail(email, 'authorized_user_invitation', subject, null, 'failed', { inviterName, orgName }, error.message)
+        throw new Error(error.message || 'Failed to send email')
+      }
+
+      console.log('[EmailService] Authorized user invitation email sent:', data?.id)
+      await this.logEmail(email, 'authorized_user_invitation', subject, data?.id, 'sent', { inviterName, orgName })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send authorized user invitation email:', error)
+      await this.logEmail(email, 'authorized_user_invitation', subject, null, 'failed', { inviterName, orgName }, error.message)
+      throw error
+    }
+  },
+
+  /**
    * Send welcome email to employer after verification
    * @param {string} email - Recipient email
    * @param {string} firstName - User's first name
@@ -1194,6 +1332,120 @@ If you didn't request a password reset, you can safely ignore this email. Your p
     } catch (error) {
       console.error('[EmailService] Failed to send payroll failed email:', error)
       await this.logEmail(email, 'payroll_failed', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Notify employer that an invoice payment has failed (via Stripe webhook)
+   */
+  async sendInvoicePaymentFailedEmail(email, orgName, invoiceNumber, amount, errorReason) {
+    const subject = `Invoice payment failed - action required`
+    const displayName = orgName || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: invoice payment failed email to ${email}`)
+      await this.logEmail(email, 'invoice_payment_failed', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const dashboardUrl = `${env.frontendUrl}/billing`
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml(
+          'Invoice Payment Failed',
+          `Hi ${escapeHtml(displayName)},`,
+          `The payment of <strong>${escapeHtml(amount)}</strong> for invoice <strong>${escapeHtml(invoiceNumber)}</strong> has failed.`,
+          `<strong>Reason:</strong> ${escapeHtml(errorReason || 'Unknown error')}<br><br>Please review your payment method and retry from the billing dashboard.<br><br><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;padding:12px 24px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">Go to Billing</a>`
+        ),
+        text: `Hi ${displayName},\n\nThe payment of ${amount} for invoice ${invoiceNumber} has failed.\n\nReason: ${errorReason || 'Unknown error'}\n\nPlease review your payment method and retry from the billing dashboard: ${dashboardUrl}\n\n- The Talyn Team`
+      })
+
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'invoice_payment_failed', subject, data?.id, 'sent', { invoiceNumber })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send invoice payment failed email:', error)
+      await this.logEmail(email, 'invoice_payment_failed', subject, null, 'failed', { invoiceNumber }, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Notify admin that an employer has requested a payroll review
+   */
+  async sendPayrollReviewRequestEmail(email, orgName, memberName, issueType, description, period) {
+    const subject = `Payroll review requested — ${(orgName || '').replace(/[\r\n]/g, '')}`
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: payroll review request email to ${email}`)
+      await this.logEmail(email, 'payroll_review_requested', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const dashboardUrl = `${env.adminFrontendUrl || env.frontendUrl}/payroll`
+      const issueLabels = { incorrect_salary: 'Incorrect Salary', wrong_leave: 'Wrong Leave Count', missing_allowance: 'Missing Allowance', ssf_error: 'SSF Error', other: 'Other' }
+      const issueLabel = issueLabels[issueType] || issueType
+
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml(
+          'Payroll Review Requested',
+          `Hi Admin,`,
+          `<strong>${escapeHtml(orgName)}</strong> has flagged an issue with <strong>${escapeHtml(memberName)}</strong>'s payroll for <strong>${escapeHtml(period)}</strong>.<br><br><strong>Issue type:</strong> ${escapeHtml(issueLabel)}<br><strong>Description:</strong> ${escapeHtml(description)}`,
+          `<a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;padding:12px 24px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">Go to Payroll</a>`
+        ),
+        text: `Payroll review requested.\n\n${orgName} flagged ${memberName}'s pay for ${period}.\nIssue: ${issueLabel}\nDescription: ${description}\n\nReview at: ${dashboardUrl}\n\n- Talyn Platform`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payroll_review_requested', subject, data?.id, 'sent', { orgName, memberName, issueType })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send payroll review request email:', error)
+      await this.logEmail(email, 'payroll_review_requested', subject, null, 'failed', { orgName, memberName }, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Notify employer that their payroll review request has been resolved
+   */
+  async sendReviewResolvedEmail(email, employerName, memberName, period, resolutionNotes) {
+    const subject = `Payroll review resolved — ${(memberName || '').replace(/[\r\n]/g, '')}`
+    const displayName = employerName || 'there'
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: review resolved email to ${email}`)
+      await this.logEmail(email, 'payroll_review_resolved', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const dashboardUrl = `${env.frontendUrl}/payroll`
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml(
+          'Payroll Review Resolved',
+          `Hi ${escapeHtml(displayName)},`,
+          `Your review request for <strong>${escapeHtml(memberName)}</strong>'s payroll (${escapeHtml(period)}) has been resolved.${resolutionNotes ? `<br><br><strong>Resolution:</strong> ${escapeHtml(resolutionNotes)}` : ''}`,
+          `<a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;padding:12px 24px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">View Payroll</a>`
+        ),
+        text: `Hi ${displayName},\n\nYour review request for ${memberName}'s payroll (${period}) has been resolved.${resolutionNotes ? `\n\nResolution: ${resolutionNotes}` : ''}\n\nView at: ${dashboardUrl}\n\n- The Talyn Team`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'payroll_review_resolved', subject, data?.id, 'sent', { memberName })
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send review resolved email:', error)
+      await this.logEmail(email, 'payroll_review_resolved', subject, null, 'failed', { memberName }, error.message)
       return { success: false }
     }
   },
@@ -2351,5 +2603,103 @@ Review your updated offer: ${loginUrl}
   </table>
 </body>
 </html>`.trim()
+  },
+
+  /**
+   * Send leave request notification to employer
+   */
+  async sendLeaveRequestedEmail(email, employerName, employeeName, leaveType, startDate, endDate, days, reason) {
+    const subject = `New leave request from ${employeeName}`
+    const displayName = employerName || 'there'
+    const formattedType = leaveType.replace(/_/g, ' ')
+    const reasonLine = reason ? `<br><strong>Reason:</strong> ${reason}` : ''
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: leave requested email to ${email}`)
+      await this.logEmail(email, 'leave_requested', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('New Leave Request', `Hi ${displayName},`, `<strong>${employeeName}</strong> has submitted a leave request.<br><br><strong>Type:</strong> ${formattedType}<br><strong>Dates:</strong> ${startDate} to ${endDate}<br><strong>Days:</strong> ${days}${reasonLine}`, 'Please review this request in your <a href="' + (env.frontendUrl || '') + '/time-off" style="color:#3B82F6;">Time Off dashboard</a>.'),
+        text: `Hi ${displayName},\n\n${employeeName} has submitted a leave request.\n\nType: ${formattedType}\nDates: ${startDate} to ${endDate}\nDays: ${days}\n${reason ? 'Reason: ' + reason + '\n' : ''}\nPlease review this request in your Time Off dashboard.\n\n- The Talyn Team`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'leave_requested', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send leave requested email:', error)
+      await this.logEmail(email, 'leave_requested', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send leave approved notification to employee
+   */
+  async sendLeaveApprovedEmail(email, employeeName, leaveType, startDate, endDate, days) {
+    const subject = 'Your leave request has been approved'
+    const displayName = employeeName || 'there'
+    const formattedType = leaveType.replace(/_/g, ' ')
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: leave approved email to ${email}`)
+      await this.logEmail(email, 'leave_approved', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Leave Approved', `Hi ${displayName},`, `Your <strong>${formattedType}</strong> request has been approved.<br><br><strong>Dates:</strong> ${startDate} to ${endDate}<br><strong>Days:</strong> ${days}`, 'Enjoy your time off!'),
+        text: `Hi ${displayName},\n\nYour ${formattedType} request has been approved.\n\nDates: ${startDate} to ${endDate}\nDays: ${days}\n\nEnjoy your time off!\n\n- The Talyn Team`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'leave_approved', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send leave approved email:', error)
+      await this.logEmail(email, 'leave_approved', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
+  },
+
+  /**
+   * Send leave rejected notification to employee
+   */
+  async sendLeaveRejectedEmail(email, employeeName, leaveType, startDate, endDate, days, rejectionReason) {
+    const subject = 'Your leave request was not approved'
+    const displayName = employeeName || 'there'
+    const formattedType = leaveType.replace(/_/g, ' ')
+    const reasonLine = rejectionReason ? `<br><br><strong>Reason:</strong> ${rejectionReason}` : ''
+
+    if (!resend) {
+      console.log(`[EmailService] Mock: leave rejected email to ${email}`)
+      await this.logEmail(email, 'leave_rejected', subject, null, 'mock')
+      return { success: true, mock: true }
+    }
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: env.emailFrom || 'Talyn <noreply@resend.dev>',
+        to: [email],
+        subject,
+        html: this._paymentEmailHtml('Leave Request Not Approved', `Hi ${displayName},`, `Your <strong>${formattedType}</strong> request was not approved.<br><br><strong>Dates:</strong> ${startDate} to ${endDate}<br><strong>Days:</strong> ${days}${reasonLine}`, 'If you have questions, please speak with your manager or contact support.'),
+        text: `Hi ${displayName},\n\nYour ${formattedType} request was not approved.\n\nDates: ${startDate} to ${endDate}\nDays: ${days}\n${rejectionReason ? 'Reason: ' + rejectionReason + '\n' : ''}\nIf you have questions, please speak with your manager or contact support.\n\n- The Talyn Team`
+      })
+      if (error) throw new Error(error.message)
+      await this.logEmail(email, 'leave_rejected', subject, data?.id, 'sent')
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Failed to send leave rejected email:', error)
+      await this.logEmail(email, 'leave_rejected', subject, null, 'failed', null, error.message)
+      return { success: false }
+    }
   }
 }

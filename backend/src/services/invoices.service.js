@@ -233,7 +233,7 @@ export const invoicesService = {
   async rejectInvoice(invoiceId, orgId, userId, reason) {
     const { data: inv } = await supabase
       .from('invoices')
-      .select('status')
+      .select('status, payroll_run_id')
       .eq('id', invoiceId)
       .eq('organization_id', orgId)
       .eq('type', 'billing')
@@ -259,6 +259,15 @@ export const invoicesService = {
       .single()
 
     if (error) throw new BadRequestError(error.message)
+
+    // Cancel the linked payroll run when invoice is rejected
+    if (inv.payroll_run_id) {
+      await supabase
+        .from('payroll_runs')
+        .update({ status: 'cancelled', notes: `Invoice rejected: ${reason || 'No reason provided'}` })
+        .eq('id', inv.payroll_run_id)
+    }
+
     return data
   },
 

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
 import InviteMemberModal from '../components/features/InviteMemberModal'
 import DraftQuotesList from '../components/features/quotes/DraftQuotesList'
+import AuthorizedUsersTab from '../components/features/AuthorizedUsersTab'
 import { StatusBadge, STATUS_FILTER_OPTIONS, formatStartDate } from '../utils/statusUtils'
 
 const ROLE_OPTIONS = [
@@ -39,12 +41,14 @@ export default function People() {
   const [departmentFilter, setDepartmentFilter] = useState('')
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState('')
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState('employees')
+
   // Modal states
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
-  const [feedback, setFeedback] = useState(null)
   const [confirmModal, setConfirmModal] = useState(null)
 
   // Fetch members
@@ -111,7 +115,7 @@ export default function People() {
       await fetchMembers()
       await fetchStats()
     } catch (err) {
-      alert(err.message || 'Failed to activate member')
+      toast.error(err.message || 'Failed to activate member')
     } finally {
       setActionLoading(false)
     }
@@ -129,7 +133,7 @@ export default function People() {
           await fetchMembers()
           await fetchStats()
         } catch (err) {
-          alert(err.message || 'Failed to delete member')
+          toast.error(err.message || 'Failed to delete member')
         } finally {
           setActionLoading(false)
         }
@@ -141,11 +145,9 @@ export default function People() {
     try {
       setActionLoading(true)
       await membersService.resendInvitation(memberId)
-      setFeedback({ type: 'success', message: 'Invitation resent successfully' })
-      setTimeout(() => setFeedback(null), 3000)
+      toast.success('Invitation resent successfully')
     } catch (err) {
-      setFeedback({ type: 'error', message: err.message || 'Failed to resend invitation' })
-      setTimeout(() => setFeedback(null), 3000)
+      toast.error(err.message || 'Failed to resend invitation')
     } finally {
       setActionLoading(false)
     }
@@ -174,7 +176,7 @@ export default function People() {
           <h1 className="text-2xl font-bold text-gray-900">People</h1>
           <p className="text-gray-600">Manage your organization members</p>
         </div>
-        {profile?.role === 'employer' && (
+        {profile?.role === 'employer' && activeTab === 'employees' && (
           <button
             onClick={() => setShowInviteModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
@@ -183,6 +185,40 @@ export default function People() {
           </button>
         )}
       </div>
+
+      {/* Tabs */}
+      {profile?.role === 'employer' && (
+        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+          <button
+            onClick={() => setActiveTab('employees')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'employees'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Team Members
+          </button>
+          <button
+            onClick={() => setActiveTab('authorized')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'authorized'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Authorized Users
+          </button>
+        </div>
+      )}
+
+      {/* Authorized Users Tab */}
+      {activeTab === 'authorized' && (
+        <AuthorizedUsersTab />
+      )}
+
+      {/* Team Members Tab */}
+      {activeTab === 'employees' && <>
 
       {/* Stats Cards */}
       {stats && (
@@ -261,13 +297,6 @@ export default function People() {
           </select>
         </div>
       </div>
-
-      {/* Feedback Message */}
-      {feedback && (
-        <div className={`px-4 py-3 rounded-lg mb-6 ${feedback.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
-          {feedback.message}
-        </div>
-      )}
 
       {/* Error Message */}
       {error && (
@@ -428,6 +457,8 @@ export default function People() {
           </table>
         </div>
       )}
+
+      </>}
 
       {/* Invite Modal */}
       {showInviteModal && (

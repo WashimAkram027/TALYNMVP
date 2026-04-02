@@ -18,7 +18,6 @@ import EmployeeTimeOff from '../pages/employee/EmployeeTimeOff'
 import EmployeeBenefits from '../pages/employee/EmployeeBenefits'
 import EmployeeDocuments from '../pages/employee/EmployeeDocuments'
 import EmployeeCompany from '../pages/employee/EmployeeCompany'
-import Invoices from '../pages/Invoices'
 import Payroll from '../pages/Payroll'
 import TimeOff from '../pages/TimeOff'
 import Benefits from '../pages/Benefits'
@@ -36,6 +35,9 @@ import EmployerSignup from '../pages/auth/EmployerSignup'
 import EmployeeSignup from '../pages/auth/EmployeeSignup'
 import EmployerLogin from '../pages/auth/EmployerLogin'
 import EmployeeLogin from '../pages/auth/EmployeeLogin'
+
+// Setup
+import SetupAccount from '../pages/SetupAccount'
 
 // Onboarding
 import EmployerOnboarding from '../pages/onboarding/EmployerOnboarding'
@@ -63,6 +65,7 @@ export default function AppRoutes() {
         <Route path="forgot-password" element={<ForgotPassword />} />
         <Route path="reset-password" element={<ResetPassword />} />
         <Route path="verify-email" element={<VerifyEmail />} />
+        <Route path="setup-account" element={<SetupAccount />} />
       </Route>
 
       {/* Onboarding routes - protected but no sidebar, no onboarding requirement */}
@@ -157,14 +160,6 @@ export default function AppRoutes() {
           }
         />
         <Route
-          path="invoices"
-          element={
-            <ProtectedRoute allowedRoles={['employer']}>
-              <Invoices />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="documents"
           element={
             <ProtectedRoute allowedRoles={['employer']}>
@@ -203,12 +198,6 @@ export default function AppRoutes() {
               <BillingInvoices />
             </ProtectedRoute>
           }
-        />
-
-        {/* Legacy route redirect */}
-        <Route
-          path="people-copy"
-          element={<Navigate to="/invoices" replace />}
         />
 
         {/* Employee routes */}

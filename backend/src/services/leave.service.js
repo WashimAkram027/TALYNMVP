@@ -1,5 +1,7 @@
 import { supabase } from '../config/supabase.js'
 import { BadRequestError, NotFoundError } from '../utils/errors.js'
+import { emailService } from './email.service.js'
+import { notificationService } from './notification.service.js'
 import {
   adToBs, getCurrentFiscalYear, countBsMonthsElapsed,
   countWorkingDays, countConsecutiveCalendarDays, daysBetween
@@ -179,6 +181,48 @@ export const leaveService = {
 
     if (error) throw error
 
+    // Send email notification to employer (non-blocking)
+    try {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('owner_id')
+        .eq('id', orgId)
+        .single()
+      const empName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'An employee'
+      if (org?.owner_id) {
+        const { data: owner } = await supabase
+          .from('profiles')
+          .select('email, first_name')
+          .eq('id', org.owner_id)
+          .single()
+        if (owner?.email) {
+          await emailService.sendLeaveRequestedEmail(
+            owner.email, owner.first_name, empName,
+            leaveTypeCode, startDate, endDate, totalDays, reason
+          )
+        }
+
+        // In-app notification for employer
+        const { data: memberProfile } = await supabase
+          .from('organization_members')
+          .select('profile_id')
+          .eq('id', employeeId)
+          .single()
+        await notificationService.create({
+          recipientId: org.owner_id,
+          actorId: memberProfile?.profile_id || null,
+          organizationId: orgId,
+          type: 'leave_requested',
+          title: 'New leave request',
+          message: `${empName} requested ${leaveTypeCode.replace('_', ' ')} (${totalDays} day${totalDays > 1 ? 's' : ''})`,
+          actionUrl: '/time-off',
+          metadata: { leave_request_id: request.id, leave_type_code: leaveTypeCode, start_date: startDate, end_date: endDate, total_days: totalDays }
+        })
+      }
+    } catch (emailErr) {
+      console.error('[LeaveService] Failed to send leave request email:', emailErr)
+    }
+
     return {
       ...request,
       warnings: medicalCertRequired
@@ -225,6 +269,37 @@ export const leaveService = {
       request.paid_days
     )
 
+    // Send approval email to employee (non-blocking)
+    try {
+      const { data: empMember } = await supabase
+        .from('organization_members')
+        .select('profile_id, profile:profiles!organization_members_profile_id_fkey(email, first_name)')
+        .eq('id', request.employee_id)
+        .single()
+      if (empMember?.profile?.email) {
+        await emailService.sendLeaveApprovedEmail(
+          empMember.profile.email, empMember.profile.first_name,
+          request.leave_type_code, request.start_date, request.end_date, request.total_days
+        )
+      }
+
+      // In-app notification for employee
+      if (empMember?.profile_id) {
+        await notificationService.create({
+          recipientId: empMember.profile_id,
+          actorId: approverId,
+          organizationId: request.organization_id,
+          type: 'leave_approved',
+          title: 'Leave request approved',
+          message: `Your ${request.leave_type_code.replace('_', ' ')} request has been approved`,
+          actionUrl: '/employee/time-off',
+          metadata: { leave_request_id: requestId, leave_type_code: request.leave_type_code, start_date: request.start_date, end_date: request.end_date }
+        })
+      }
+    } catch (emailErr) {
+      console.error('[LeaveService] Failed to send leave approved email:', emailErr)
+    }
+
     return updated
   },
 
@@ -246,6 +321,37 @@ export const leaveService = {
       .single()
 
     if (error) throw new NotFoundError('Pending leave request not found')
+
+    // Send rejection email to employee (non-blocking)
+    try {
+      const { data: empMember } = await supabase
+        .from('organization_members')
+        .select('profile_id, profile:profiles!organization_members_profile_id_fkey(email, first_name)')
+        .eq('id', data.employee_id)
+        .single()
+      if (empMember?.profile?.email) {
+        await emailService.sendLeaveRejectedEmail(
+          empMember.profile.email, empMember.profile.first_name,
+          data.leave_type_code, data.start_date, data.end_date, data.total_days, reason
+        )
+      }
+
+      // In-app notification for employee
+      if (empMember?.profile_id) {
+        await notificationService.create({
+          recipientId: empMember.profile_id,
+          organizationId: orgId,
+          type: 'leave_rejected',
+          title: 'Leave request not approved',
+          message: `Your ${data.leave_type_code.replace('_', ' ')} request was not approved${reason ? ': ' + reason : ''}`,
+          actionUrl: '/employee/time-off',
+          metadata: { leave_request_id: requestId, leave_type_code: data.leave_type_code, start_date: data.start_date, end_date: data.end_date, rejection_reason: reason || null }
+        })
+      }
+    } catch (emailErr) {
+      console.error('[LeaveService] Failed to send leave rejected email:', emailErr)
+    }
+
     return data
   },
 

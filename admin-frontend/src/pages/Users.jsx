@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import StatusBadge from '../components/common/StatusBadge'
 import usersService from '../services/usersService'
@@ -15,7 +16,6 @@ export default function Users() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
-  const [toast, setToast] = useState(null)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -41,35 +41,30 @@ export default function Users() {
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
-  }
-
   const handleAction = async (userId, action) => {
     setActionLoading(userId)
     try {
       switch (action) {
         case 'suspend':
           await usersService.suspend(userId, 'Suspended by admin')
-          showToast('User suspended')
+          toast.success('User suspended')
           break
         case 'reactivate':
           await usersService.reactivate(userId)
-          showToast('User reactivated')
+          toast.success('User reactivated')
           break
         case 'resetPassword':
           await usersService.resetPassword(userId)
-          showToast('Password reset email sent')
+          toast.success('Password reset email sent')
           break
         case 'verifyEmail':
           await usersService.verifyEmail(userId)
-          showToast('Email verified')
+          toast.success('Email verified')
           break
       }
       fetchUsers()
     } catch (err) {
-      showToast(err.response?.data?.error || `Failed to ${action}`, 'error')
+      toast.error(err.response?.data?.error || `Failed to ${action}`)
     } finally {
       setActionLoading(null)
     }
@@ -78,11 +73,11 @@ export default function Users() {
   const handleSaveUser = async (userId, updates) => {
     try {
       await usersService.update(userId, updates)
-      showToast('User updated successfully')
+      toast.success('User updated successfully')
       setEditUser(null)
       fetchUsers()
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to update user', 'error')
+      toast.error(err.response?.data?.error || 'Failed to update user')
     }
   }
 
@@ -91,11 +86,11 @@ export default function Users() {
     setDeleteLoading(true)
     try {
       await usersService.deleteUser(deleteTarget.id)
-      showToast('User deleted successfully')
+      toast.success('User deleted successfully')
       setDeleteTarget(null)
       fetchUsers()
     } catch (err) {
-      showToast(err.response?.data?.error || err.response?.data?.message || 'Failed to delete user', 'error')
+      toast.error(err.response?.data?.error || err.response?.data?.message || 'Failed to delete user')
     } finally {
       setDeleteLoading(false)
     }
@@ -347,12 +342,6 @@ export default function Users() {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-lg shadow-lg text-sm font-medium z-50 ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}>
-          {toast.message}
-        </div>
-      )}
     </div>
   )
 }

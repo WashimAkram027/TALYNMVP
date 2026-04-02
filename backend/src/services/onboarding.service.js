@@ -2,6 +2,7 @@ import { supabase } from '../config/supabase.js'
 import { BadRequestError } from '../utils/errors.js'
 import { authService } from './auth.service.js'
 import { emailService } from './email.service.js'
+import { notificationService } from './notification.service.js'
 
 export const onboardingService = {
   /**
@@ -1198,6 +1199,17 @@ export const onboardingService = {
         await emailService.sendEntitySubmittedEmail(ownerProfile.email, ownerProfile.first_name, updatedOrg.name)
       }
       await emailService.sendAdminEntitySubmittedNotification(updatedOrg.name, organizationId)
+
+      // In-app notification for employer
+      await notificationService.create({
+        recipientId: userId,
+        organizationId: organizationId,
+        type: 'entity_submitted',
+        title: 'Entity documents submitted',
+        message: `Your documents for ${updatedOrg.name} are under review`,
+        actionUrl: '/dashboard',
+        metadata: { organization_id: organizationId }
+      })
     } catch (emailErr) {
       console.error('[OnboardingService] Failed to send entity submission emails:', emailErr)
     }

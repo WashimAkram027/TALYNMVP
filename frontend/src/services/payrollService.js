@@ -97,4 +97,28 @@ export const payrollService = {
     return { success: true }
   },
 
+  /**
+   * Download payslip PDF for a specific member
+   * @param {string} runId - Payroll run UUID
+   * @param {string} memberId - Member UUID
+   * @returns {Promise<Blob>}
+   */
+  async downloadPayslipPdf(runId, memberId) {
+    // api interceptor unwraps response.data, so result IS the blob directly
+    const blob = await api.get(`/payroll/runs/${runId}/payslips/${memberId}/pdf`, {
+      responseType: 'blob'
+    })
+    return blob
+  },
+
+  /**
+   * Get payslip data as JSON for a specific member
+   * @param {string} runId - Payroll run UUID
+   * @param {string} memberId - Member UUID
+   */
+  async getPayslipData(runId, memberId) {
+    const response = await api.get(`/payroll/runs/${runId}/payslips/${memberId}`)
+    return response.data
+  },
+
 }

@@ -1,8 +1,10 @@
+import crypto from 'crypto'
 import { env } from '../config/env.js'
 import { invoiceGenerationService } from '../services/invoiceGeneration.service.js'
 import { leaveAccrualService } from '../services/leaveAccrual.service.js'
 import { leaveReconciliationService } from '../services/leaveReconciliation.service.js'
 import { emailService } from '../services/email.service.js'
+import { notificationService } from '../services/notification.service.js'
 import { supabase } from '../config/supabase.js'
 
 /**
@@ -10,7 +12,9 @@ import { supabase } from '../config/supabase.js'
  */
 function validateCronSecret(req, res) {
   const secret = req.headers['x-cron-secret']
-  if (!env.cronSecret || secret !== env.cronSecret) {
+  if (!env.cronSecret || !secret
+    || Buffer.byteLength(secret) !== Buffer.byteLength(env.cronSecret)
+    || !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(env.cronSecret))) {
     res.status(403).json({ error: 'Unauthorized' })
     return false
   }
@@ -33,15 +37,30 @@ export const cronController = {
     if (!validateCronSecret(req, res)) return
 
     try {
+      // IMPORTANT: Admin must verify exchange_rate in eor_cost_config before running.
+      // The exchange rate is a static value — it does NOT auto-update from market data.
       console.log('[Cron] Starting monthly invoice generation...')
+
+      // Check for test-value platform fee
+      try {
+        const { quoteService } = await import('../services/quote.service.js')
+        const config = await quoteService.getCostConfig('NPL')
+        if (config.platform_fee_amount < 10000) {
+          console.warn(
+            `[Cron] WARNING: platform_fee_amount is ${config.platform_fee_amount} cents`,
+            `($${(config.platform_fee_amount / 100).toFixed(2)}/employee).`,
+            'Production value should be ~59900 ($599). Verify eor_cost_config is correct.'
+          )
+        }
+      } catch { /* config check is non-blocking */ }
+
       const summary = await invoiceGenerationService.generateMonthlyInvoices()
       console.log('[Cron] Invoice generation summary:', summary)
 
       // For each generated invoice, generate PDF and send email
       if (summary.generated > 0) {
-        // Fetch the invoices we just created (this month's billing invoices)
-        const now = new Date()
-        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+        // Use the periodStart from the service to avoid date drift on retries
+        const periodStart = summary.periodStart
 
         const { data: invoices } = await supabase
           .from('invoices')
@@ -75,8 +94,21 @@ export const cronController = {
                 dueDate
               )
             }
+
+            // In-app notification for employer
+            if (org?.owner_id) {
+              await notificationService.create({
+                recipientId: org.owner_id,
+                organizationId: inv.organization_id,
+                type: 'invoice_generated',
+                title: 'New invoice ready',
+                message: `Invoice ${inv.invoice_number} for ${formatUsd(inv.total_amount_cents)} is ready for review`,
+                actionUrl: '/billing',
+                metadata: { invoice_id: inv.id, invoice_number: inv.invoice_number, total_amount_cents: inv.total_amount_cents, due_date: inv.due_date }
+              })
+            }
           } catch (emailErr) {
-            console.error(`[Cron] Email failed for invoice ${inv.invoice_number}:`, emailErr.message)
+            console.error(`[Cron] Email/notification failed for invoice ${inv.invoice_number}:`, emailErr.message)
           }
         }
       }
@@ -84,7 +116,7 @@ export const cronController = {
       res.json({ success: true, summary })
     } catch (error) {
       console.error('[Cron] Monthly invoice generation failed:', error)
-      res.status(500).json({ error: 'Invoice generation failed', message: error.message })
+      res.status(500).json({ error: 'Invoice generation failed' })
     }
   },
 
@@ -123,7 +155,8 @@ export const cronController = {
           await paymentsService.processInvoicePayment(inv.id, inv.organization_id)
           processed++
         } catch (err) {
-          errors.push({ invoiceId: inv.id, error: err.message })
+          console.error(`[Cron] Payment processing failed for invoice ${inv.id}:`, err.message)
+          errors.push({ invoiceId: inv.id, error: 'processing failed' })
         }
       }
 
@@ -157,7 +190,7 @@ export const cronController = {
       res.json({ success: true, processed, reminders, errors })
     } catch (error) {
       console.error('[Cron] Payment collection failed:', error)
-      res.status(500).json({ error: 'Payment collection failed', message: error.message })
+      res.status(500).json({ error: 'Payment collection failed' })
     }
   },
 
@@ -185,7 +218,7 @@ export const cronController = {
       res.json({ success: true, marked: (data || []).length })
     } catch (error) {
       console.error('[Cron] Mark overdue failed:', error)
-      res.status(500).json({ error: 'Mark overdue failed', message: error.message })
+      res.status(500).json({ error: 'Mark overdue failed' })
     }
   },
 
@@ -205,7 +238,7 @@ export const cronController = {
       res.json({ success: true, ...result })
     } catch (error) {
       console.error('[Cron] Leave accrual failed:', error)
-      res.status(500).json({ error: 'Leave accrual failed', message: error.message })
+      res.status(500).json({ error: 'Leave accrual failed' })
     }
   },
 
@@ -225,7 +258,7 @@ export const cronController = {
       res.json({ success: true, ...result })
     } catch (error) {
       console.error('[Cron] Fiscal year rollover failed:', error)
-      res.status(500).json({ error: 'Fiscal year rollover failed', message: error.message })
+      res.status(500).json({ error: 'Fiscal year rollover failed' })
     }
   },
 
@@ -245,7 +278,7 @@ export const cronController = {
       res.json({ success: true, ...result })
     } catch (error) {
       console.error('[Cron] Leave reconciliation failed:', error)
-      res.status(500).json({ error: 'Leave reconciliation failed', message: error.message })
+      res.status(500).json({ error: 'Leave reconciliation failed' })
     }
   }
 }

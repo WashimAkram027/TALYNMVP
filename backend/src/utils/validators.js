@@ -76,6 +76,20 @@ export const updateProfileSchema = z.object({
   linkedinUrl: z.string().url().optional().nullable()
 })
 
+// Authorized user schemas
+export const inviteAuthorizedUserSchema = z.object({
+  email: z.string().email('Invalid email address').transform(v => v.toLowerCase()),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required')
+})
+
+export const setupAuthorizedUserSchema = z.object({
+  token: z.string().min(1, 'Invitation token is required'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(passwordRegex, 'Password must contain at least 1 uppercase letter, 1 lowercase letter, and 1 number')
+})
+
 // Member schemas
 export const inviteMemberSchema = z.object({
   email: z.string().email('Invalid email address'),

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { leaveService } from '../../services/leaveService'
 import { useAuthStore } from '../../store/authStore'
+import { useNotificationStore } from '../../store/notificationStore'
 
 function formatLeaveType(code) {
   return code?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || code
@@ -18,11 +20,14 @@ function statusBadge(status) {
 
 export default function EmployeeTimeOff() {
   const { profile, membership } = useAuthStore()
+  const { notifications, dismiss: dismissNotification } = useNotificationStore()
+  const rejectedLeaveNotifs = notifications.filter(n =>
+    n.type === 'leave_rejected' && !n.dismissed_at
+  )
   const [balances, setBalances] = useState(null)
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [feedback, setFeedback] = useState(null)
 
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ leaveTypeCode: 'sick_leave', startDate: '', endDate: '', reason: '' })
@@ -58,7 +63,7 @@ export default function EmployeeTimeOff() {
       await leaveService.createRequest({ memberId, leaveTypeCode: form.leaveTypeCode, startDate: form.startDate, endDate: form.endDate, reason: form.reason })
       setShowModal(false)
       setForm({ leaveTypeCode: 'sick_leave', startDate: '', endDate: '', reason: '' })
-      setFeedback({ type: 'success', message: 'Leave request submitted for approval' })
+      toast.success('Leave request submitted for approval')
       const [bal, reqs] = await Promise.all([
         leaveService.getBalanceSummary(memberId),
         leaveService.listRequests({ memberId })
@@ -70,7 +75,6 @@ export default function EmployeeTimeOff() {
     } finally {
       setSubmitting(false)
     }
-    setTimeout(() => setFeedback(null), 3000)
   }
 
   if (loading) {
@@ -94,11 +98,27 @@ export default function EmployeeTimeOff() {
         </button>
       </header>
 
-      {feedback && (
-        <div className={`mb-4 px-4 py-3 rounded-lg text-sm ${feedback.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-          {feedback.message}
+      {/* Rejected leave alerts (from notification store) */}
+      {rejectedLeaveNotifs.map(notif => (
+        <div key={notif.id} className="mb-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start gap-3">
+          <span className="material-icons-outlined text-red-500 mt-0.5">event_busy</span>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800 dark:text-red-300">
+              {notif.title}
+            </p>
+            {notif.message && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{notif.message}</p>
+            )}
+          </div>
+          <button
+            onClick={() => dismissNotification(notif.id)}
+            className="text-red-400 hover:text-red-600 transition shrink-0"
+            title="Dismiss"
+          >
+            <span className="material-icons-outlined text-lg">close</span>
+          </button>
         </div>
-      )}
+      ))}
 
       {/* Balance Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -178,7 +198,12 @@ export default function EmployeeTimeOff() {
                     <span className="text-text-light dark:text-text-dark">{r.total_days}d</span>
                     {parseFloat(r.unpaid_days) > 0 && <span className="text-xs text-red-500 ml-1">({r.unpaid_days} unpaid)</span>}
                   </td>
-                  <td className="px-6 py-4">{statusBadge(r.status)}</td>
+                  <td className="px-6 py-4">
+                    {statusBadge(r.status)}
+                    {r.status === 'rejected' && r.rejection_reason && (
+                      <p className="text-xs text-red-500 mt-1 max-w-[200px]">{r.rejection_reason}</p>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

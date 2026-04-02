@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { holidaysService } from '../services/holidaysService'
 import { useAuthStore } from '../store/authStore'
 
@@ -41,7 +42,7 @@ export default function Holidays() {
       await holidaysService.deleteHoliday(id)
       await fetchHolidays()
     } catch (err) {
-      alert(err.message || 'Failed to delete holiday')
+      toast.error(err.message || 'Failed to delete holiday')
     } finally {
       setActionLoading(false)
     }
@@ -53,7 +54,7 @@ export default function Holidays() {
       await holidaysService.copyGlobalHolidays(null, selectedYear)
       await fetchHolidays()
     } catch (err) {
-      alert(err.message || 'Failed to copy global holidays')
+      toast.error(err.message || 'Failed to copy global holidays')
     } finally {
       setActionLoading(false)
     }

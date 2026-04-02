@@ -330,18 +330,18 @@ export const paymentsService = {
     const run = claimed
 
     try {
-      // 2. Sum all items' net_pay → cents (using integer arithmetic to avoid float issues)
+      // 2. Sum all items' net_amount → cents (using integer arithmetic to avoid float issues)
       const { data: items, error: itemsError } = await supabase
         .from('payroll_items')
-        .select('net_pay')
+        .select('net_amount')
         .eq('payroll_run_id', runId)
 
       if (itemsError) throw new BadRequestError('Failed to fetch payroll items')
       if (!items || items.length === 0) throw new BadRequestError('Payroll run has no items')
 
-      // Convert each item's net_pay to cents individually to minimize floating point error
+      // Convert each item's net_amount to cents individually to minimize floating point error
       const totalCents = items.reduce((sum, item) => {
-        const pay = Number(item.net_pay) || 0
+        const pay = Number(item.net_amount) || 0
         return sum + Math.round(pay * 100)
       }, 0)
 
@@ -685,6 +685,13 @@ export const paymentsService = {
     const totalCents = Number(invoice.total_amount_cents)
     if (!totalCents || totalCents <= 0) throw new BadRequestError('Invoice total must be greater than zero')
 
+    // Sync linked payroll run — mark payment as pending
+    if (invoice.payroll_run_id) {
+      await supabase.from('payroll_runs')
+        .update({ payment_status: 'pending' })
+        .eq('id', invoice.payroll_run_id)
+    }
+
     try {
       // 2. Get active payment method + stripe customer
       const paymentMethod = await this.getActivePaymentMethod(orgId)
@@ -807,6 +814,12 @@ export const paymentsService = {
           funded_at: new Date().toISOString()
         })
         .eq('id', invoice.payroll_run_id)
+
+      // Mark all payroll items as paid so employees see their pay history
+      await supabase
+        .from('payroll_items')
+        .update({ status: 'paid' })
+        .eq('payroll_run_id', invoice.payroll_run_id)
     }
   },
 
@@ -829,6 +842,19 @@ export const paymentsService = {
         error_message: errorMsg || 'Payment failed'
       })
       .eq('stripe_payment_intent_id', paymentIntentId)
+
+    // Sync linked payroll run — mark payment as failed
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('payroll_run_id')
+      .eq('id', invoiceId)
+      .single()
+
+    if (inv?.payroll_run_id) {
+      await supabase.from('payroll_runs')
+        .update({ payment_status: 'failed' })
+        .eq('id', inv.payroll_run_id)
+    }
   },
 
   // ─── Invoice Refund / Dispute Handlers ────────────────────────

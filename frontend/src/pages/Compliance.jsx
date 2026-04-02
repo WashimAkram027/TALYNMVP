@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { complianceService } from '../services/complianceService'
 import { useAuthStore } from '../store/authStore'
 
@@ -147,7 +148,7 @@ export default function Compliance() {
       await complianceService.deleteComplianceItem(item.id)
       await fetchData()
     } catch (err) {
-      alert(err.message || 'Failed to delete item')
+      toast.error(err.message || 'Failed to delete item')
     } finally {
       setActionLoading(false)
     }

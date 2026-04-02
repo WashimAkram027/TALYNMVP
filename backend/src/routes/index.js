@@ -21,6 +21,8 @@ import quoteRoutes from './quote.routes.js'
 import adminRoutes from './admin/index.js'
 import leaveRoutes from './leave.routes.js'
 import cronRoutes from './cron.routes.js'
+import notificationsRoutes from './notifications.routes.js'
+import authorizedUsersRoutes from './authorizedUsers.routes.js'
 
 const router = Router()
 
@@ -56,5 +58,7 @@ router.use('/quotes', quoteRoutes)
 router.use('/leave', leaveRoutes)
 router.use('/admin', adminRoutes)
 router.use('/cron', cronRoutes)
+router.use('/notifications', notificationsRoutes)
+router.use('/authorized-users', authorizedUsersRoutes)
 
 export default router

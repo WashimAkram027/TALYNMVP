@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { leaveService } from '../services/leaveService'
 import { membersService } from '../services/membersService'
 import { useAuthStore } from '../store/authStore'
@@ -67,7 +68,6 @@ export default function TimeOff() {
   const [balances, setBalances] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [feedback, setFeedback] = useState(null)
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('')
@@ -81,6 +81,11 @@ export default function TimeOff() {
     expectedDeliveryDate: '', childBirthDate: '', deceasedName: '', relationship: '', deathDate: ''
   })
   const [submitting, setSubmitting] = useState(false)
+
+  // Rejection modal
+  const [rejectModal, setRejectModal] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejecting, setRejecting] = useState(false)
 
   // Fetch requests
   const fetchRequests = async () => {
@@ -125,24 +130,32 @@ export default function TimeOff() {
   const handleApprove = async (id) => {
     try {
       await leaveService.approveRequest(id)
-      setFeedback({ type: 'success', message: 'Leave request approved' })
+      toast.success('Leave request approved')
       fetchRequests()
     } catch (err) {
-      setFeedback({ type: 'error', message: err.message })
+      toast.error(err.message)
     }
-    setTimeout(() => setFeedback(null), 3000)
   }
 
-  const handleReject = async (id) => {
-    const reason = window.prompt('Rejection reason (optional):')
+  const handleReject = (req) => {
+    setRejectModal(req)
+    setRejectReason('')
+  }
+
+  const submitReject = async () => {
+    if (!rejectModal || !rejectReason.trim()) return
     try {
-      await leaveService.rejectRequest(id, reason || '')
-      setFeedback({ type: 'success', message: 'Leave request rejected' })
+      setRejecting(true)
+      await leaveService.rejectRequest(rejectModal.id, rejectReason.trim())
+      toast.success('Leave request rejected')
+      setRejectModal(null)
+      setRejectReason('')
       fetchRequests()
     } catch (err) {
-      setFeedback({ type: 'error', message: err.message })
+      toast.error(err.message)
+    } finally {
+      setRejecting(false)
     }
-    setTimeout(() => setFeedback(null), 3000)
   }
 
   const handleSubmitRequest = async (e) => {
@@ -189,7 +202,7 @@ export default function TimeOff() {
         })
       }
       setShowRequestModal(false)
-      setFeedback({ type: 'success', message: 'Leave request submitted' })
+      toast.success('Leave request submitted')
       fetchRequests()
       setRequestForm({ memberId: '', leaveTypeCode: 'sick_leave', startDate: '', endDate: '', reason: '', expectedDeliveryDate: '', childBirthDate: '', deceasedName: '', relationship: '', deathDate: '' })
     } catch (err) {
@@ -197,7 +210,6 @@ export default function TimeOff() {
     } finally {
       setSubmitting(false)
     }
-    setTimeout(() => setFeedback(null), 3000)
   }
 
   const getEmployeeName = (req) => {
@@ -227,11 +239,6 @@ export default function TimeOff() {
       </div>
 
       {/* Feedback */}
-      {feedback && (
-        <div className={`mb-4 px-4 py-3 rounded-lg text-sm ${feedback.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-          {feedback.message}
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="flex border-b border-border-light dark:border-border-dark mb-6">
@@ -273,6 +280,7 @@ export default function TimeOff() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Leave Type</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Dates</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Days</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Reason</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Status</th>
                     {isEmployer && <th className="px-4 py-3 text-left text-xs font-medium text-subtext-light uppercase">Actions</th>}
                   </tr>
@@ -292,13 +300,19 @@ export default function TimeOff() {
                           <span className="text-xs text-red-500 ml-1">({req.unpaid_days} unpaid)</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-subtext-light dark:text-subtext-dark text-xs max-w-[200px] truncate" title={req.reason || ''}>
+                        {req.reason || '—'}
+                        {req.status === 'rejected' && req.rejection_reason && (
+                          <p className="text-red-500 mt-0.5 truncate" title={req.rejection_reason}>Rejected: {req.rejection_reason}</p>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{statusBadge(req.status)}</td>
                       {isEmployer && (
                         <td className="px-4 py-3">
                           {req.status === 'pending' && (
                             <div className="flex gap-2">
                               <button onClick={() => handleApprove(req.id)} className="text-green-600 hover:text-green-800 text-xs font-medium">Approve</button>
-                              <button onClick={() => handleReject(req.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">Reject</button>
+                              <button onClick={() => handleReject(req)} className="text-red-600 hover:text-red-800 text-xs font-medium">Reject</button>
                             </div>
                           )}
                           {req.medical_certificate_required && (
@@ -544,6 +558,57 @@ export default function TimeOff() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="px-6 py-4 border-b border-border-light dark:border-border-dark">
+              <h2 className="text-lg font-semibold text-text-light dark:text-text-dark">Reject Leave Request</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-sm">
+                <p className="font-medium text-text-light dark:text-text-dark">{getEmployeeName(rejectModal)}</p>
+                <p className="text-subtext-light dark:text-subtext-dark">
+                  {formatLeaveType(rejectModal.leave_type_code)} &middot;{' '}
+                  {new Date(rejectModal.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {rejectModal.start_date !== rejectModal.end_date && ` — ${new Date(rejectModal.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                  {' '}&middot; {rejectModal.total_days}d
+                </p>
+                {rejectModal.reason && (
+                  <p className="text-subtext-light dark:text-subtext-dark mt-1">Employee's reason: {rejectModal.reason}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-1">Reason for rejection</label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={3}
+                  className="w-full border border-border-light dark:border-border-dark rounded-lg px-3 py-2 text-sm bg-surface-light dark:bg-gray-800 text-text-light dark:text-text-dark resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
+                  placeholder="Please provide a reason for rejecting this request..."
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => { setRejectModal(null); setRejectReason('') }}
+                  className="px-4 py-2 text-sm border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitReject}
+                  disabled={!rejectReason.trim() || rejecting}
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  {rejecting ? 'Rejecting...' : 'Reject Request'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

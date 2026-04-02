@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { applicationsService } from '../services/applicationsService'
 import { jobPostingsService } from '../services/jobPostingsService'
 import { useAuthStore } from '../store/authStore'
@@ -93,7 +94,7 @@ export default function Applications() {
       const pipelineData = await applicationsService.getPipelineSummary().catch(() => null)
       setPipeline(pipelineData)
     } catch (err) {
-      alert(err.message || 'Failed to update stage')
+      toast.error(err.message || 'Failed to update stage')
     } finally {
       setActionLoading(false)
     }

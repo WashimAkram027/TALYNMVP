@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { dashboardService } from '../../services/dashboardService'
 import { useAuthStore } from '../../store/authStore'
+import { useNotificationStore } from '../../store/notificationStore'
 import PendingInvitationsBanner from '../../components/employee/PendingInvitationsBanner'
 import OnboardingTodoList from '../../components/employee/OnboardingTodoList'
 import EmptyState from '../../components/employee/EmptyState'
 
 export default function EmployeeOverview() {
-  const { profile } = useAuthStore()
+  const { profile, membership } = useAuthStore()
   const navigate = useNavigate()
+  const { notifications, dismiss: dismissNotification } = useNotificationStore()
   const [stats, setStats] = useState(null)
   const [holidays, setHolidays] = useState([])
   const [nepalHolidays, setNepalHolidays] = useState([])
@@ -16,6 +18,11 @@ export default function EmployeeOverview() {
   const [pendingTasks, setPendingTasks] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // Rejected leave notifications from the centralized store
+  const rejectedLeaveNotifs = notifications.filter(n =>
+    n.type === 'leave_rejected' && !n.dismissed_at
+  )
 
   const today = new Date()
   const dateString = today.toLocaleDateString('en-US', {
@@ -100,6 +107,32 @@ export default function EmployeeOverview() {
 
       {/* Pending Invitations */}
       <PendingInvitationsBanner />
+
+      {/* Rejected Leave Alerts (from notification store) */}
+      {rejectedLeaveNotifs.map(notif => (
+        <div
+          key={notif.id}
+          onClick={() => { navigate(notif.action_url || '/employee/time-off') }}
+          className="mb-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start gap-3 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/20 transition"
+        >
+          <span className="material-icons-outlined text-red-500 mt-0.5">event_busy</span>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800 dark:text-red-300">
+              {notif.title}
+            </p>
+            {notif.message && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{notif.message}</p>
+            )}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); dismissNotification(notif.id) }}
+            className="text-red-400 hover:text-red-600 transition shrink-0"
+            title="Dismiss"
+          >
+            <span className="material-icons-outlined text-lg">close</span>
+          </button>
+        </div>
+      ))}
 
       {/* Onboarding Todo Checklist */}
       <OnboardingTodoList tasks={pendingTasks} onTaskComplete={refreshData} />

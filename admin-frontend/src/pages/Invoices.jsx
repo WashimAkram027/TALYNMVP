@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import StatusBadge from '../components/common/StatusBadge'
 import invoicesService from '../services/invoicesService'
@@ -44,7 +45,7 @@ export default function Invoices() {
       const detail = await invoicesService.getDetail(id)
       setSelectedInvoice(detail)
     } catch (err) {
-      alert('Failed to load invoice detail')
+      toast.error('Failed to load invoice detail')
     } finally {
       setDetailLoading(false)
     }
@@ -66,7 +67,7 @@ export default function Invoices() {
       setSelectedInvoice(null)
       fetchInvoices()
     } catch (err) {
-      alert(err.response?.data?.error || err.message || `Failed to ${action}`)
+      toast.error(err.response?.data?.error || err.message || `Failed to ${action}`)
     } finally {
       setActionLoading(false)
     }

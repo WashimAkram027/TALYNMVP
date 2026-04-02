@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { emailService } from './email.service.js'
+import { notificationService } from './notification.service.js'
 
 /**
  * Members Service
@@ -17,6 +18,7 @@ export const membersService = {
         profile:profiles!organization_members_profile_id_fkey(id, full_name, first_name, last_name, email, phone, avatar_url)
       `)
       .eq('organization_id', orgId)
+      .neq('member_role', 'authorized_user')
       .order('joined_at', { ascending: false, nullsFirst: false })
 
     if (filters.status) {
@@ -328,6 +330,24 @@ export const membersService = {
       .single()
 
     if (error) throw error
+
+    // In-app notification for the activated employee (non-blocking)
+    try {
+      if (data?.profile_id) {
+        await notificationService.create({
+          recipientId: data.profile_id,
+          organizationId: orgId,
+          type: 'member_activated',
+          title: 'Account activated',
+          message: 'Your account has been activated by your employer',
+          actionUrl: '/employee/overview',
+          metadata: { member_id: memberId }
+        })
+      }
+    } catch (notifErr) {
+      console.error('[MembersService] Activation notification failed:', notifErr)
+    }
+
     return data
   },
 
@@ -551,6 +571,18 @@ export const membersService = {
             invitation.organization?.name || 'your organization'
           )
         }
+
+        // In-app notification for the inviter
+        await notificationService.create({
+          recipientId: invitation.invited_by,
+          actorId: profileId,
+          organizationId: invitation.organization_id,
+          type: 'invitation_accepted',
+          title: 'Invitation accepted',
+          message: `${candidateName} accepted the invitation to join ${invitation.organization?.name || 'your organization'}`,
+          actionUrl: '/people',
+          metadata: { member_id: memberId }
+        })
       }
     } catch (emailError) {
       console.error('[MembersService] Failed to send acceptance notification:', emailError)
@@ -620,6 +652,18 @@ export const membersService = {
             invitation.organization?.name || 'your organization'
           )
         }
+
+        // In-app notification for the inviter
+        await notificationService.create({
+          recipientId: invitation.invited_by,
+          actorId: profileId,
+          organizationId: invitation.organization_id,
+          type: 'invitation_declined',
+          title: 'Invitation declined',
+          message: `${invitation.invitation_email} declined the invitation to join ${invitation.organization?.name || 'your organization'}`,
+          actionUrl: '/people',
+          metadata: { member_id: memberId, invitation_email: invitation.invitation_email }
+        })
       }
     } catch (emailError) {
       console.error('[MembersService] Failed to send decline notification:', emailError)

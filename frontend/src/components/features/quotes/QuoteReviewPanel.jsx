@@ -1,19 +1,9 @@
 import { useState } from 'react'
 import TermsModal from './TermsModal'
+import { QuoteDocument } from '../../QuoteDocument'
+import talynLogo from '../../../assets/talyn-logo.png'
 
-/**
- * Format minor units (paisa/cents) to major units with commas
- */
-function formatAmount(minorUnits, currency = 'NPR') {
-  const major = minorUnits / 100
-  return `${currency} ${major.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-}
-
-function formatRate(rate) {
-  return `${(parseFloat(rate) * 100).toFixed(0)}%`
-}
-
-export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPdf, onSaveAndExit, loading, acceptLabel }) {
+export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPdf, onSaveAndExit, loading, acceptLabel, orgName = '', generatedBy = '' }) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState(null)
   const [termsAccepted, setTermsAccepted] = useState(false)
@@ -21,129 +11,43 @@ export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPd
 
   if (!quote) return null
 
-  const validUntil = new Date(quote.valid_until).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  })
-
-  const employeeName = [quote.employee_first_name, quote.employee_last_name]
-    .filter(Boolean).join(' ') || quote.employee_email
-
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wide">EOR Cost Quote</p>
-            <p className="text-lg font-semibold text-text-light dark:text-text-dark mt-1">{quote.quote_number}</p>
-          </div>
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-            Draft
-          </span>
-        </div>
-        <div className="mt-2 text-sm text-subtext-light dark:text-subtext-dark">
-          <span className="font-medium text-text-light dark:text-text-dark">{employeeName}</span>
-          {quote.job_title && <span> &middot; {quote.job_title}</span>}
-          {quote.department && <span> &middot; {quote.department}</span>}
-        </div>
+      {/* Quote Document Preview */}
+      <div style={{ marginBottom: 24, border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
+        <QuoteDocument
+          logoSrc={talynLogo}
+          quoteNumber={quote.quote_number}
+          date={new Date(quote.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+          validUntil={quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '\u2014'}
+          orgName={orgName || '\u2014'}
+          generatedBy={generatedBy || '\u2014'}
+          employee={{
+            name: [quote.employee_first_name, quote.employee_last_name].filter(Boolean).join(' ') || quote.employee_email,
+            email: quote.employee_email,
+            role: quote.job_title,
+            department: quote.department,
+            employmentType: quote.employment_type?.replace(/_/g, ' '),
+            startDate: quote.start_date ? new Date(quote.start_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : undefined,
+            payFrequency: quote.pay_frequency?.replace(/_/g, ' '),
+            country: 'Nepal (NPL)',
+          }}
+          costs={{
+            currency: quote.salary_currency || 'NPR',
+            monthlyGross: (quote.monthly_gross_salary || 0) / 100,
+            employerSsf: (quote.employer_ssf_amount || 0) / 100,
+            employerSsfRate: quote.employer_ssf_rate,
+            subtotalLocal: (quote.total_monthly_cost_local || 0) / 100,
+            platformFee: (quote.platform_fee_amount || 0) / 100,
+            employeeSsf: (quote.employee_ssf_amount || 0) / 100,
+            employeeSsfRate: quote.employee_ssf_rate,
+            estimatedNetSalary: (quote.estimated_net_salary || 0) / 100,
+            annualCostLocal: (quote.total_annual_cost_local || 0) / 100,
+            annualPlatformFee: ((quote.platform_fee_amount || 0) * 12) / 100,
+          }}
+          status={quote.status || 'draft'}
+        />
       </div>
-
-      {/* Monthly Cost Breakdown */}
-      <div>
-        <h3 className="text-sm font-semibold text-text-light dark:text-text-dark mb-3 flex items-center gap-1.5">
-          <span className="material-icons-outlined text-base">receipt_long</span>
-          Monthly Employer Cost
-        </h3>
-        <div className="border border-border-light dark:border-border-dark rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-border-light dark:divide-border-dark">
-              <tr className="bg-surface-light dark:bg-surface-dark">
-                <td className="px-4 py-2.5 text-subtext-light dark:text-subtext-dark">Employee Gross Salary</td>
-                <td className="px-4 py-2.5 text-right font-medium text-text-light dark:text-text-dark">
-                  {formatAmount(quote.monthly_gross_salary, quote.salary_currency)}
-                </td>
-              </tr>
-              <tr className="bg-surface-light dark:bg-surface-dark">
-                <td className="px-4 py-2.5 text-subtext-light dark:text-subtext-dark">
-                  Employer SSF Contribution ({formatRate(quote.employer_ssf_rate)})
-                </td>
-                <td className="px-4 py-2.5 text-right font-medium text-text-light dark:text-text-dark">
-                  {formatAmount(quote.employer_ssf_amount, quote.salary_currency)}
-                </td>
-              </tr>
-              <tr className="bg-gray-50 dark:bg-gray-800/50 font-semibold">
-                <td className="px-4 py-2.5 text-text-light dark:text-text-dark">
-                  Subtotal (Local)
-                </td>
-                <td className="px-4 py-2.5 text-right text-text-light dark:text-text-dark">
-                  {formatAmount(quote.total_monthly_cost_local, quote.salary_currency)}
-                </td>
-              </tr>
-              <tr className="bg-surface-light dark:bg-surface-dark">
-                <td className="px-4 py-2.5 text-subtext-light dark:text-subtext-dark">
-                  Talyn Platform Fee
-                </td>
-                <td className="px-4 py-2.5 text-right font-medium text-text-light dark:text-text-dark">
-                  {formatAmount(quote.platform_fee_amount, quote.platform_fee_currency)}/mo
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Reference: Employee Deductions */}
-      <div>
-        <h3 className="text-sm font-semibold text-text-light dark:text-text-dark mb-3 flex items-center gap-1.5">
-          <span className="material-icons-outlined text-base">info</span>
-          Reference (Employee Side)
-        </h3>
-        <div className="border border-border-light dark:border-border-dark rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-border-light dark:divide-border-dark">
-              <tr className="bg-surface-light dark:bg-surface-dark">
-                <td className="px-4 py-2.5 text-subtext-light dark:text-subtext-dark">
-                  Employee SSF Deduction ({formatRate(quote.employee_ssf_rate)})
-                </td>
-                <td className="px-4 py-2.5 text-right text-text-light dark:text-text-dark">
-                  {formatAmount(quote.employee_ssf_amount, quote.salary_currency)}
-                </td>
-              </tr>
-              <tr className="bg-surface-light dark:bg-surface-dark">
-                <td className="px-4 py-2.5 text-subtext-light dark:text-subtext-dark">
-                  Est. Net Salary (before income tax)
-                </td>
-                <td className="px-4 py-2.5 text-right text-text-light dark:text-text-dark">
-                  {formatAmount(quote.estimated_net_salary, quote.salary_currency)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Annual Estimate */}
-      <div className="bg-gray-50 dark:bg-gray-800/50 border border-border-light dark:border-border-dark rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Annual Estimate (Local)</p>
-            <p className="text-xl font-bold text-text-light dark:text-text-dark mt-0.5">
-              {formatAmount(quote.total_annual_cost_local, quote.salary_currency)}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Platform Fee (Annual)</p>
-            <p className="text-xl font-bold text-text-light dark:text-text-dark mt-0.5">
-              {formatAmount(quote.platform_fee_amount * 12, quote.platform_fee_currency)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Valid Until */}
-      <p className="text-xs text-subtext-light dark:text-subtext-dark text-center">
-        Quote valid until {validUntil}
-      </p>
 
       {/* Terms & Conditions — hidden in read-only mode */}
       {(onAccept || onBack || onSaveAndExit || onDownloadPdf) && (

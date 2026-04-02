@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { paymentsService } from './payments.service.js'
+import { notificationService } from './notification.service.js'
 
 export const webhooksService = {
   /**
@@ -147,6 +148,36 @@ export const webhooksService = {
                   if (employerEmail) {
                     await emailService.sendPaymentReceiptEmail(employerEmail, org.name, inv.invoice_number, amount, receiptUrl)
                   }
+
+                  // In-app notification for employer
+                  if (org?.owner_id) {
+                    await notificationService.create({
+                      recipientId: org.owner_id,
+                      organizationId: inv.organization_id,
+                      type: 'invoice_paid',
+                      title: 'Invoice payment received',
+                      message: `Payment of ${amount} for invoice ${inv.invoice_number} was successful`,
+                      actionUrl: '/billing',
+                      metadata: { invoice_id: invoiceId, invoice_number: inv.invoice_number, amount }
+                    })
+                  }
+
+                  // In-app notification for admin: payroll funded
+                  const { data: admins } = await supabase
+                    .from('admin_roles')
+                    .select('user_id')
+                    .in('role', ['super_admin', 'finance_admin'])
+                  for (const admin of admins || []) {
+                    await notificationService.create({
+                      recipientId: admin.user_id,
+                      organizationId: inv.organization_id,
+                      type: 'payroll_funded',
+                      title: 'ACH payment received',
+                      message: `${amount} collected from ${org.name || 'employer'} for invoice ${inv.invoice_number}. Payroll ready for disbursement.`,
+                      actionUrl: '/payroll-runs',
+                      metadata: { invoice_id: invoiceId, invoice_number: inv.invoice_number, amount }
+                    })
+                  }
                 }
               }
             } catch (emailErr) {
@@ -183,6 +214,19 @@ export const webhooksService = {
 
                   if (owner) {
                     await emailService.sendPayrollFundedEmail(owner.email, owner.first_name, amount, period)
+                  }
+
+                  // In-app notification
+                  if (org?.owner_id) {
+                    await notificationService.create({
+                      recipientId: org.owner_id,
+                      organizationId: run.organization_id,
+                      type: 'payroll_funded',
+                      title: 'Payroll funds collected',
+                      message: `${amount} has been collected for payroll period ${period}`,
+                      actionUrl: '/payroll',
+                      metadata: { payroll_run_id: runId, amount, period }
+                    })
                   }
 
                   try {
@@ -233,7 +277,37 @@ export const webhooksService = {
                   const employerEmail = org.billing_email || org.email
                   const amount = `$${((inv.total_amount_cents || 0) / 100).toFixed(2)}`
                   if (employerEmail) {
-                    await emailService.sendPayrollFailedEmail(employerEmail, org.name, amount, inv.invoice_number, errorMsg)
+                    await emailService.sendInvoicePaymentFailedEmail(employerEmail, org.name, inv.invoice_number, amount, errorMsg)
+                  }
+
+                  // In-app notification for employer
+                  if (org?.owner_id) {
+                    await notificationService.create({
+                      recipientId: org.owner_id,
+                      organizationId: inv.organization_id,
+                      type: 'invoice_failed',
+                      title: 'Invoice payment failed',
+                      message: `Payment for invoice ${inv.invoice_number} failed: ${errorMsg}`,
+                      actionUrl: '/billing',
+                      metadata: { invoice_id: invoiceId, invoice_number: inv.invoice_number, error: errorMsg }
+                    })
+                  }
+
+                  // In-app notification for admin
+                  const { data: admins } = await supabase
+                    .from('admin_roles')
+                    .select('user_id')
+                    .in('role', ['super_admin', 'finance_admin'])
+                  for (const admin of admins || []) {
+                    await notificationService.create({
+                      recipientId: admin.user_id,
+                      organizationId: inv.organization_id,
+                      type: 'payroll_failed',
+                      title: 'Invoice payment failed',
+                      message: `Payment for ${org.name || 'employer'} invoice ${inv.invoice_number} failed: ${errorMsg}`,
+                      actionUrl: '/payroll-runs',
+                      metadata: { invoice_id: invoiceId, invoice_number: inv.invoice_number, error: errorMsg }
+                    })
                   }
                 }
               }
@@ -269,6 +343,19 @@ export const webhooksService = {
                     const amount = `$${((run.total_pull_amount_cents || 0) / 100).toFixed(2)}`
                     const period = `${run.pay_period_start} to ${run.pay_period_end}`
                     await emailService.sendPayrollFailedEmail(owner.email, owner.first_name, amount, period, errorMsg)
+                  }
+
+                  // In-app notification
+                  if (org?.owner_id) {
+                    await notificationService.create({
+                      recipientId: org.owner_id,
+                      organizationId: run.organization_id,
+                      type: 'payroll_failed',
+                      title: 'Payroll payment failed',
+                      message: `Payroll payment of ${amount} failed: ${errorMsg}`,
+                      actionUrl: '/payroll',
+                      metadata: { payroll_run_id: runId, amount, period, error: errorMsg }
+                    })
                   }
                 }
               }
@@ -320,6 +407,19 @@ export const webhooksService = {
                     await emailService.sendPayrollDisputedEmail(owner.email, owner.first_name, amount, period, reason)
                   }
 
+                  // In-app notification
+                  if (org?.owner_id) {
+                    await notificationService.create({
+                      recipientId: org.owner_id,
+                      organizationId: run.organization_id,
+                      type: 'payroll_disputed',
+                      title: 'Payroll payment disputed',
+                      message: `An ACH dispute has been filed for ${amount} (${reason})`,
+                      actionUrl: '/payroll',
+                      metadata: { payroll_run_id: run.id, amount, period, reason, dispute_id: dispute.id }
+                    })
+                  }
+
                   try {
                     const { env } = await import('../config/env.js')
                     await emailService.sendAdminPayrollDisputedEmail(
@@ -367,6 +467,19 @@ export const webhooksService = {
                       await emailService.sendInvoiceDisputedEmail(
                         owner.email, owner.first_name, invoice.invoice_number, amount, reason
                       )
+                    }
+
+                    // In-app notification
+                    if (org?.owner_id) {
+                      await notificationService.create({
+                        recipientId: org.owner_id,
+                        organizationId: invoice.organization_id,
+                        type: 'invoice_disputed',
+                        title: 'Invoice payment disputed',
+                        message: `A dispute has been filed for invoice ${invoice.invoice_number} (${amount})`,
+                        actionUrl: '/billing',
+                        metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number, amount, reason, dispute_id: dispute.id }
+                      })
                     }
 
                     try {
@@ -500,6 +613,19 @@ export const webhooksService = {
                     await emailService.sendPayrollRefundedEmail(owner.email, owner.first_name, refundedAmount, period)
                   }
 
+                  // In-app notification
+                  if (org?.owner_id) {
+                    await notificationService.create({
+                      recipientId: org.owner_id,
+                      organizationId: run.organization_id,
+                      type: 'payroll_refunded',
+                      title: 'Payroll payment refunded',
+                      message: `${refundedAmount} has been refunded for payroll period ${period}`,
+                      actionUrl: '/payroll',
+                      metadata: { payroll_run_id: run.id, refunded_amount: refundedAmount, period }
+                    })
+                  }
+
                   try {
                     const { env } = await import('../config/env.js')
                     await emailService.sendAdminPayrollRefundedEmail(
@@ -549,6 +675,19 @@ export const webhooksService = {
                       await emailService.sendInvoiceRefundedEmail(
                         owner.email, owner.first_name, invoice.invoice_number, refundedAmount, period
                       )
+                    }
+
+                    // In-app notification
+                    if (org?.owner_id) {
+                      await notificationService.create({
+                        recipientId: org.owner_id,
+                        organizationId: invoice.organization_id,
+                        type: 'invoice_refunded',
+                        title: 'Invoice payment refunded',
+                        message: `${refundedAmount} has been refunded for invoice ${invoice.invoice_number}`,
+                        actionUrl: '/billing',
+                        metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number, refunded_amount: refundedAmount }
+                      })
                     }
 
                     try {
