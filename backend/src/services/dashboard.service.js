@@ -180,9 +180,9 @@ export const dashboardService = {
         .eq('is_active', true)
         .limit(1)
         .single()
-      return parseFloat(config?.exchange_rate) || 0.0075 // fallback default
+      return parseFloat(config?.exchange_rate) || 0
     } catch {
-      return 0.0075
+      return 0
     }
   },
 

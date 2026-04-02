@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import StatusBadge from '../components/common/StatusBadge'
 import payrollService from '../services/payrollService'
+import eorConfigService from '../services/eorConfigService'
 
 // ============================================================
 // PAYROLL LIST VIEW
@@ -107,6 +108,7 @@ function PayrollDetail() {
   const [resolveItem, setResolveItem] = useState(null)
   const [resolveNotes, setResolveNotes] = useState('')
   const [regenerateLoading, setRegenerateLoading] = useState(false)
+  const [liveExchangeRate, setLiveExchangeRate] = useState(null)
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -122,6 +124,13 @@ function PayrollDetail() {
   }, [id])
 
   useEffect(() => { fetchDetail() }, [fetchDetail])
+
+  useEffect(() => {
+    eorConfigService.list().then(configs => {
+      const npl = (configs || []).find(c => c.country_code === 'NPL' && c.is_active)
+      if (npl?.exchange_rate) setLiveExchangeRate(npl.exchange_rate)
+    }).catch(() => {})
+  }, [])
 
   const handleConfirm = async () => {
     setActionLoading(true)
@@ -328,7 +337,7 @@ function PayrollDetail() {
       )}
 
       {/* Modals */}
-      {editItem && activeTab === 'employer' && <EmployerEditModal item={editItem} invoice={invoice} onClose={() => setEditItem(null)} onSave={handleSaveEmployerEdit} />}
+      {editItem && activeTab === 'employer' && <EmployerEditModal item={editItem} invoice={invoice} liveExchangeRate={liveExchangeRate} onClose={() => setEditItem(null)} onSave={handleSaveEmployerEdit} />}
       {editItem && activeTab === 'payout' && <EditEmployeeModal item={editItem} onClose={() => setEditItem(null)} onSave={handleSaveItem} />}
       {confirmOpen && <ConfirmDialog run={run} items={items} loading={actionLoading} onConfirm={handleConfirm} onClose={() => setConfirmOpen(false)} />}
       {rejectOpen && <RejectDialog notes={rejectNotes} setNotes={setRejectNotes} loading={actionLoading} onReject={handleReject} onClose={() => setRejectOpen(false)} />}
@@ -728,7 +737,7 @@ function ModalInputField({ label, value, onChange, readOnly, suffix }) {
 // ============================================================
 // EMPLOYER EDIT MODAL (salary, days, live cost preview)
 // ============================================================
-function EmployerEditModal({ item, invoice, onClose, onSave }) {
+function EmployerEditModal({ item, invoice, liveExchangeRate, onClose, onSave }) {
   const member = item.member || {}
   const profile = member.profile || {}
   const empName = profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || '—'
@@ -737,10 +746,13 @@ function EmployerEditModal({ item, invoice, onClose, onSave }) {
   const config = invoice?.config_snapshot || {}
   const employerSsfRate = parseFloat(config.employer_ssf_rate) || 0.20
   const employeeSsfRate = parseFloat(config.employee_ssf_rate) || 0.11
-  const exchangeRate = parseFloat(config.exchange_rate) || parseFloat(invoice?.exchange_rate) || 0
+  const snapshotRate = parseFloat(config.exchange_rate) || parseFloat(invoice?.exchange_rate) || 0
+  const exchangeRate = snapshotRate
   const platformFeePerEmployee = config.platform_fee_amount || 0
   const periodsPerYear = config.periods_per_year || 12
   const calendarDays = item.calendar_days || 30
+  const liveRate = liveExchangeRate ? parseFloat(liveExchangeRate) : null
+  const rateChanged = liveRate && Math.abs(liveRate - snapshotRate) > 0.000001
 
   const [form, setForm] = useState({
     salary_amount: Number(member.salary_amount ?? (item.gross_salary * periodsPerYear) ?? 0),
@@ -841,7 +853,15 @@ function EmployerEditModal({ item, invoice, onClose, onSave }) {
                 onChange={(v) => handleChange('salary_amount', v)}
               />
               <ModalInputField label="Monthly Gross (NPR)" value={monthlyGrossNpr.toLocaleString()} readOnly />
-              <ModalInputField label="Exchange Rate (NPR→USD)" value={exchangeRate} readOnly />
+              <div>
+                <ModalInputField label="Exchange Rate (NPR→USD)" value={exchangeRate} readOnly />
+                {rateChanged && (
+                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                    <span className="material-icons text-[12px]">info</span>
+                    Live rate is now {liveRate.toFixed(6)} — applies to next invoice
+                  </p>
+                )}
+              </div>
               <ModalInputField label="Monthly Gross (USD)" value={`$${monthlyGrossUsd.toFixed(2)}`} readOnly />
             </div>
           </div>

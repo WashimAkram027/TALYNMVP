@@ -1,5 +1,5 @@
 import { supabase } from '../../config/supabase.js'
-import { NotFoundError } from '../../utils/errors.js'
+import { NotFoundError, BadRequestError } from '../../utils/errors.js'
 import { auditLogService } from './auditLog.service.js'
 
 export const adminEorConfigService = {
@@ -34,12 +34,24 @@ export const adminEorConfigService = {
    * Create a new config
    */
   async create(configData, adminId, ip) {
+    let exchangeRate = null
+    if (configData.exchangeRate !== undefined && configData.exchangeRate !== null) {
+      if (typeof configData.exchangeRate !== 'number' && typeof configData.exchangeRate !== 'string') {
+        throw new BadRequestError('Exchange rate must be a number')
+      }
+      exchangeRate = parseFloat(configData.exchangeRate)
+      if (!isFinite(exchangeRate) || exchangeRate < 0.001 || exchangeRate > 0.05) {
+        throw new BadRequestError('Exchange rate must be between 0.001 and 0.05 (20–1000 NPR/USD)')
+      }
+    }
+
     const { data, error } = await supabase
       .from('eor_cost_config')
       .insert({
         country_code: configData.countryCode,
         country_name: configData.countryName,
         currency: configData.currency || 'NPR',
+        exchange_rate: exchangeRate,
         employer_ssf_rate: configData.employerSsfRate || 0,
         employee_ssf_rate: configData.employeeSsfRate || 0,
         platform_fee_amount: configData.platformFeeAmount || 0,
@@ -54,7 +66,12 @@ export const adminEorConfigService = {
 
     if (error) throw error
 
-    await auditLogService.log(adminId, 'eor_config_created', 'eor_cost_config', data.id, { countryCode: configData.countryCode }, ip)
+    await auditLogService.log(adminId, 'eor_config_created', 'eor_cost_config', data.id, {
+      countryCode: configData.countryCode,
+      exchangeRate: data.exchange_rate,
+      employerSsfRate: data.employer_ssf_rate,
+      platformFeeAmount: data.platform_fee_amount
+    }, ip)
     return data
   },
 
@@ -63,6 +80,16 @@ export const adminEorConfigService = {
    */
   async update(id, configData, adminId, ip) {
     const updates = {}
+    if (configData.exchangeRate !== undefined) {
+      if (typeof configData.exchangeRate !== 'number' && typeof configData.exchangeRate !== 'string') {
+        throw new BadRequestError('Exchange rate must be a number')
+      }
+      const rate = parseFloat(configData.exchangeRate)
+      if (!isFinite(rate) || rate < 0.001 || rate > 0.05) {
+        throw new BadRequestError('Exchange rate must be between 0.001 and 0.05 (20–1000 NPR/USD)')
+      }
+      updates.exchange_rate = rate
+    }
     if (configData.countryCode !== undefined) updates.country_code = configData.countryCode
     if (configData.countryName !== undefined) updates.country_name = configData.countryName
     if (configData.currency !== undefined) updates.currency = configData.currency
@@ -75,6 +102,11 @@ export const adminEorConfigService = {
     if (configData.effectiveFrom !== undefined) updates.effective_from = configData.effectiveFrom
     if (configData.effectiveTo !== undefined) updates.effective_to = configData.effectiveTo
 
+    // Fetch previous state for audit trail
+    const existing = updates.exchange_rate !== undefined ? await this.getById(id) : null
+
+    updates.updated_at = new Date().toISOString()
+
     const { data, error } = await supabase
       .from('eor_cost_config')
       .update(updates)
@@ -84,7 +116,11 @@ export const adminEorConfigService = {
 
     if (error) throw error
 
-    await auditLogService.log(adminId, 'eor_config_updated', 'eor_cost_config', id, updates, ip)
+    const { updated_at: _ts, ...auditData } = updates
+    if (existing && updates.exchange_rate !== undefined) {
+      auditData.previous_exchange_rate = existing.exchange_rate
+    }
+    await auditLogService.log(adminId, 'eor_config_updated', 'eor_cost_config', id, auditData, ip)
     return data
   },
 

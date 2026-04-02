@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import StatusBadge from '../components/common/StatusBadge'
 import dashboardService from '../services/dashboardService'
+import eorConfigService from '../services/eorConfigService'
 import { formatDate } from '../utils/formatters'
 
 export default function Dashboard() {
@@ -12,21 +14,37 @@ export default function Dashboard() {
   const [pendingOnboardings, setPendingOnboardings] = useState([])
   const [onboardingsLoading, setOnboardingsLoading] = useState(true)
 
+  // Exchange rate state
+  const [eorConfig, setEorConfig] = useState(null)
+  const [rateEditing, setRateEditing] = useState(false)
+  const [rateInput, setRateInput] = useState('')
+  const [rateSaving, setRateSaving] = useState(false)
+
   useEffect(() => {
     async function fetchData() {
       try {
-        const [metrics, onboardings] = await Promise.all([
+        const [metricsResult, onboardingsResult, configsResult] = await Promise.allSettled([
           dashboardService.getMetrics(),
-          dashboardService.getPendingOnboardings()
+          dashboardService.getPendingOnboardings(),
+          eorConfigService.list()
         ])
-        setCounts({
-          pendingDocs: metrics.pendingVerifications || 0,
-          pendingPayroll: metrics.pendingPayrollRuns || 0,
-          totalUsers: metrics.totalUsers || 0,
-          pendingOnboardings: metrics.pendingOnboardings || 0,
-          staleInvitations: metrics.staleInvitations || 0,
-        })
-        setPendingOnboardings(onboardings || [])
+        if (metricsResult.status === 'fulfilled') {
+          const metrics = metricsResult.value
+          setCounts({
+            pendingDocs: metrics.pendingVerifications || 0,
+            pendingPayroll: metrics.pendingPayrollRuns || 0,
+            totalUsers: metrics.totalUsers || 0,
+            pendingOnboardings: metrics.pendingOnboardings || 0,
+            staleInvitations: metrics.staleInvitations || 0,
+          })
+        }
+        if (onboardingsResult.status === 'fulfilled') {
+          setPendingOnboardings(onboardingsResult.value || [])
+        }
+        if (configsResult.status === 'fulfilled') {
+          const nplConfig = (configsResult.value || []).find(c => c.country_code === 'NPL' && c.is_active)
+          if (nplConfig) setEorConfig(nplConfig)
+        }
       } catch (err) {
         console.error('Dashboard fetch error:', err)
       } finally {
@@ -36,6 +54,25 @@ export default function Dashboard() {
     }
     fetchData()
   }, [])
+
+  const handleRateSave = async () => {
+    const rate = parseFloat(rateInput)
+    if (isNaN(rate) || rate < 0.001 || rate > 0.05) {
+      toast.error('Rate must be between 0.001 and 0.05 (20–1000 NPR/USD)')
+      return
+    }
+    setRateSaving(true)
+    try {
+      const updated = await eorConfigService.update(eorConfig.id, { exchangeRate: rate })
+      setEorConfig(updated)
+      setRateEditing(false)
+      toast.success('Exchange rate updated')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update exchange rate')
+    } finally {
+      setRateSaving(false)
+    }
+  }
 
   if (loading) return <LoadingSpinner />
 
@@ -134,6 +171,92 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Exchange Rate Widget */}
+      {eorConfig && (
+        <div className="mt-8">
+          <div className="bg-white rounded-2xl border border-border-main p-6 max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                <span className="material-icons text-[20px] text-indigo-600">currency_exchange</span>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-text-primary">Exchange Rate (NPR → USD)</h3>
+                <p className="text-xs text-text-secondary">Used for next invoice generation</p>
+              </div>
+            </div>
+
+            {!rateEditing ? (
+              <div>
+                <div className="flex items-baseline gap-3 mb-1">
+                  <span className="text-3xl font-bold text-text-primary">
+                    {eorConfig.exchange_rate ? parseFloat(eorConfig.exchange_rate).toFixed(6) : '—'}
+                  </span>
+                </div>
+                {eorConfig.exchange_rate && (
+                  <p className="text-sm text-text-secondary mb-3">
+                    1 NPR = ${parseFloat(eorConfig.exchange_rate).toFixed(4)} USD
+                    <span className="mx-2">·</span>
+                    1 USD = {(1 / parseFloat(eorConfig.exchange_rate)).toFixed(2)} NPR
+                  </p>
+                )}
+                {eorConfig.updated_at && (
+                  <p className="text-xs text-text-secondary mb-4">
+                    Last updated: {new Date(eorConfig.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                )}
+                <button
+                  onClick={() => { setRateInput(eorConfig.exchange_rate ? String(parseFloat(eorConfig.exchange_rate)) : ''); setRateEditing(true) }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+                >
+                  <span className="material-icons text-[16px]">edit</span>
+                  Update Rate
+                </button>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">New Exchange Rate (NPR → USD)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={rateInput}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9.]/g, '')
+                    if ((v.match(/\./g) || []).length <= 1) setRateInput(v)
+                  }}
+                  autoFocus
+                  placeholder="e.g. 0.0075"
+                  className="w-full px-3 py-2 rounded-lg border border-border-main text-sm mb-1 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                {rateInput && !isNaN(parseFloat(rateInput)) && parseFloat(rateInput) > 0 && (
+                  <p className="text-xs text-text-secondary mb-3">
+                    1 USD = {(1 / parseFloat(rateInput)).toFixed(2)} NPR
+                  </p>
+                )}
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={handleRateSave}
+                    disabled={rateSaving || !rateInput || isNaN(parseFloat(rateInput)) || parseFloat(rateInput) < 0.001 || parseFloat(rateInput) > 0.05}
+                    className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
+                  >
+                    {rateSaving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => setRateEditing(false)}
+                    className="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-xs text-amber-600 mt-3 flex items-start gap-1">
+                  <span className="material-icons text-[14px] mt-0.5">info</span>
+                  Changes apply to the next invoice generation only. Existing invoices are not affected.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Pending Onboardings Table */}
       <div className="mt-8">

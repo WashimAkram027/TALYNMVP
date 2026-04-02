@@ -13,7 +13,8 @@ router.get('/', async (req, res) => {
     const data = await adminEorConfigService.list()
     return successResponse(res, data)
   } catch (error) {
-    return errorResponse(res, error.message, 500)
+    if (!error.isOperational) console.error('[EorConfig] List error:', error)
+    return errorResponse(res, error.isOperational ? error.message : 'Failed to list EOR configs', 500)
   }
 })
 
@@ -23,7 +24,10 @@ router.get('/:id', async (req, res) => {
     const data = await adminEorConfigService.getById(req.params.id)
     return successResponse(res, data)
   } catch (error) {
-    return errorResponse(res, error.message, error.statusCode || 500)
+    const status = error.statusCode || 500
+    const message = error.isOperational ? error.message : 'Failed to retrieve EOR config'
+    if (status === 500) console.error('[EorConfig] Get error:', error)
+    return errorResponse(res, message, status)
   }
 })
 
@@ -34,7 +38,10 @@ router.post('/', requireAdminRole('super_admin', 'finance_admin'), async (req, r
     const data = await adminEorConfigService.create(req.body, req.admin.id, ip)
     return successResponse(res, data, 'EOR config created', 201)
   } catch (error) {
-    return errorResponse(res, error.message, error.statusCode || 500)
+    const status = error.statusCode || (error.name === 'BadRequestError' ? 400 : 500)
+    const message = error.isOperational ? error.message : 'Failed to create EOR config'
+    if (status === 500) console.error('[EorConfig] Create error:', error)
+    return errorResponse(res, message, status)
   }
 })
 
@@ -45,7 +52,10 @@ router.put('/:id', requireAdminRole('super_admin', 'finance_admin'), async (req,
     const data = await adminEorConfigService.update(req.params.id, req.body, req.admin.id, ip)
     return successResponse(res, data, 'EOR config updated')
   } catch (error) {
-    return errorResponse(res, error.message, error.statusCode || 500)
+    const status = error.statusCode || (error.name === 'BadRequestError' ? 400 : 500)
+    const message = error.isOperational ? error.message : 'Failed to update EOR config'
+    if (status === 500) console.error('[EorConfig] Update error:', error)
+    return errorResponse(res, message, status)
   }
 })
 
@@ -56,7 +66,10 @@ router.delete('/:id', requireAdminRole('super_admin'), async (req, res) => {
     await adminEorConfigService.delete(req.params.id, req.admin.id, ip)
     return successResponse(res, null, 'EOR config deleted')
   } catch (error) {
-    return errorResponse(res, error.message, error.statusCode || 500)
+    const status = error.statusCode || 500
+    const message = error.isOperational ? error.message : 'Failed to delete EOR config'
+    if (status === 500) console.error('[EorConfig] Delete error:', error)
+    return errorResponse(res, message, status)
   }
 })
 
