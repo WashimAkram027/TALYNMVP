@@ -20,6 +20,7 @@ export const dashboardService = {
       `)
       .eq('organization_id', organizationId)
       .neq('member_role', 'owner') // Exclude owner from stats
+      .neq('member_role', 'authorized_user')
 
     if (membersError) throw membersError
 
@@ -293,6 +294,7 @@ export const dashboardService = {
       .eq('organization_id', organizationId)
       .in('status', ['active', 'invited', 'onboarding'])
       .neq('member_role', 'owner') // Exclude owner from team list
+      .neq('member_role', 'authorized_user')
       .order('joined_at', { ascending: false, nullsFirst: false })
       .limit(limit)
 

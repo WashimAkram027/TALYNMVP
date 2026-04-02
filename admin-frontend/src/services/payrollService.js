@@ -34,6 +34,11 @@ const payrollService = {
   async resolveReview(itemId, resolutionNotes) {
     const { data } = await api.post(`/admin/payroll/items/${itemId}/resolve-review`, { resolutionNotes })
     return data.data
+  },
+
+  async employerEditItem(itemId, updates) {
+    const { data } = await api.put(`/admin/payroll/items/${itemId}/employer-edit`, updates)
+    return data.data
   }
 }
 

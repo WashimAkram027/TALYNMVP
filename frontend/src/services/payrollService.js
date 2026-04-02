@@ -112,6 +112,19 @@ export const payrollService = {
   },
 
   /**
+   * Download per-employee invoice PDF (employer cost breakdown for one employee)
+   * @param {string} runId - Payroll run UUID
+   * @param {string} memberId - Member UUID
+   * @returns {Promise<Blob>}
+   */
+  async downloadEmployeeInvoicePdf(runId, memberId) {
+    const blob = await api.get(`/payroll/runs/${runId}/employee-invoice/${memberId}/pdf`, {
+      responseType: 'blob'
+    })
+    return blob
+  },
+
+  /**
    * Get payslip data as JSON for a specific member
    * @param {string} runId - Payroll run UUID
    * @param {string} memberId - Member UUID

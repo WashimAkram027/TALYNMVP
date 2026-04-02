@@ -243,7 +243,7 @@ export const invoicesController = {
       const variant = req.query.variant === 'summary' ? 'summary' : 'detail'
       const { pdfBuffer, invoiceNumber } = await invoiceGenerationService.generateInvoicePdf(req.params.id, req.user.organizationId, variant)
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="${invoiceNumber}.pdf"`)
+      res.setHeader('Content-Disposition', `inline; filename="${invoiceNumber}.pdf"`)
       return res.send(pdfBuffer)
     } catch (error) {
       if (error.statusCode === 404) return notFoundResponse(res, error.message)
@@ -256,11 +256,11 @@ export const invoicesController = {
       const variant = req.query.variant === 'summary' ? 'summary' : 'detail'
       const { pdfBuffer, invoiceNumber } = await invoiceGenerationService.generateReceiptPdf(req.params.id, req.user.organizationId, variant)
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="${invoiceNumber}-receipt.pdf"`)
+      res.setHeader('Content-Disposition', `inline; filename="${invoiceNumber}-receipt.pdf"`)
       return res.send(pdfBuffer)
     } catch (error) {
-      if (error.statusCode === 404) return notFoundResponse(res, error.message)
-      return errorResponse(res, 'Failed to generate receipt PDF', 500, error)
+      if (error.statusCode === 404) return notFoundResponse(res, 'Receipt not found')
+      return errorResponse(res, 'Failed to generate receipt PDF', 500)
     }
   },
 

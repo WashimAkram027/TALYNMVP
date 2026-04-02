@@ -3,7 +3,7 @@ import { anvilClient } from '../config/anvil.js'
 import { quoteService } from './quote.service.js'
 import { invoicesService } from './invoices.service.js'
 import { leaveReconciliationService } from './leaveReconciliation.service.js'
-import { buildInvoiceHtml, buildReceiptHtml, buildPayslipHtml } from './pdfTemplate.service.js'
+import { buildInvoiceHtml, buildReceiptHtml, buildPayslipHtml, buildPerEmployeeInvoiceHtml } from './pdfTemplate.service.js'
 import { BadRequestError, NotFoundError } from '../utils/errors.js'
 
 export const invoiceGenerationService = {
@@ -39,6 +39,7 @@ export const invoiceGenerationService = {
           .eq('organization_id', org.id)
           .eq('status', 'active')
           .neq('member_role', 'owner')
+          .neq('member_role', 'authorized_user')
 
         if (countError) throw countError
         if (!count || count === 0) {
@@ -90,6 +91,7 @@ export const invoiceGenerationService = {
       .eq('organization_id', orgId)
       .eq('status', 'active')
       .neq('member_role', 'owner')
+      .neq('member_role', 'authorized_user')
 
     if (membersError) throw membersError
     if (!members || members.length === 0) {
@@ -509,6 +511,125 @@ export const invoiceGenerationService = {
   },
 
   /**
+   * Generate per-employee invoice PDF showing the employer's cost breakdown for one employee.
+   * Returns { pdfBuffer, pdfUrl, memberName }
+   */
+  async generatePerEmployeeInvoicePdf(payrollRunId, memberId, orgId) {
+    if (!anvilClient) {
+      throw new BadRequestError('PDF generation is not configured. Set ANVIL_API_KEY in environment.')
+    }
+
+    const { item, org, period } = await this._getPayslipDataInternal(payrollRunId, memberId, orgId)
+    const memberName = item.member?.profile?.full_name || 'employee'
+
+    // Require a linked billing invoice for exchange rate, dates, and platform fee data
+    const invoiceId = item.payroll_run?.invoice_id
+    if (!invoiceId) {
+      throw new BadRequestError('Per-employee invoice requires a linked billing invoice')
+    }
+
+    // Check for cached PDF first
+    const storagePath = `employee-invoices/${orgId}/${payrollRunId}-${memberId}.pdf`
+    const { data: cached, error: cacheErr } = await supabase.storage
+      .from('documents')
+      .download(storagePath)
+    if (!cacheErr && cached) {
+      const buffer = Buffer.from(await cached.arrayBuffer())
+      return { pdfBuffer: buffer, pdfUrl: storagePath, memberName }
+    }
+
+    // Fetch the parent billing invoice
+    const { data: invoice, error: invError } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, exchange_rate, config_snapshot, issue_date, due_date, line_items')
+      .eq('id', invoiceId)
+      .single()
+
+    if (invError || !invoice) {
+      throw new NotFoundError('Linked billing invoice not found')
+    }
+
+    const exchangeRate = parseFloat(invoice.exchange_rate) || 0
+    const baseSalaryNPR = parseFloat(item.base_salary) || 0
+    const employerSsfNPR = parseFloat(item.employer_ssf) || 0
+
+    // Build line items
+    const lineItems = [
+      {
+        description: 'Monthly salary',
+        detail: `Gross salary for ${period}`,
+        amountNPR: baseSalaryNPR,
+        amountUSD: Math.round(baseSalaryNPR * exchangeRate * 100) / 100,
+      },
+      {
+        description: `Employer SSF (${invoice.config_snapshot?.employer_ssf_rate ? (invoice.config_snapshot.employer_ssf_rate * 100).toFixed(0) + '%' : '20%'})`,
+        detail: 'Social Security Fund — employer contribution',
+        amountNPR: employerSsfNPR,
+        amountUSD: Math.round(employerSsfNPR * exchangeRate * 100) / 100,
+      },
+    ]
+
+    // Add platform fee from invoice line_items if available
+    const memberLineItem = (invoice.line_items || []).find(li => li.member_id === memberId)
+    const platformFeeCents = memberLineItem?.platform_fee_cents || 0
+    if (platformFeeCents > 0) {
+      lineItems.push({
+        description: 'EOR platform fee',
+        detail: 'Employer of Record service fee',
+        amountUSD: platformFeeCents / 100,
+      })
+    }
+
+    const totalDue = lineItems.reduce((sum, li) => sum + (li.amountUSD || 0), 0)
+
+    // Construct doc number from parent invoice number + stable member ID suffix
+    const docNumber = `${invoice.invoice_number}-E${memberId.substring(0, 4).toUpperCase()}`
+
+    const periodStr = `${new Date(item.payroll_run.pay_period_start).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} to ${new Date(item.payroll_run.pay_period_end).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+
+    const { html, css } = buildPerEmployeeInvoiceHtml({
+      docNumber,
+      issueDate: invoice.issue_date,
+      dueDate: invoice.due_date,
+      organization: org,
+      employee: {
+        name: memberName,
+        jobTitle: item.member?.job_title || '',
+      },
+      period: periodStr,
+      lineItems,
+      totalDue,
+      paymentDetails: exchangeRate ? {
+        exchangeFrom: 'NPR',
+        exchangeTo: 'USD',
+        exchangeRate: exchangeRate.toFixed(7),
+      } : undefined,
+      refNumber: invoice.id?.substring(0, 8),
+    })
+
+    const { statusCode, data: pdfData } = await anvilClient.generatePDF({
+      title: `Employee Invoice ${docNumber}`,
+      type: 'html',
+      data: { html, css }
+    })
+
+    if (statusCode !== 200 || !pdfData) {
+      throw new BadRequestError(`Per-employee invoice PDF generation failed with status: ${statusCode}`)
+    }
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(storagePath, pdfData, { contentType: 'application/pdf', upsert: true })
+
+    if (uploadError) {
+      console.error('[InvoiceGeneration] Per-employee invoice upload error:', uploadError)
+    }
+
+    return { pdfBuffer: pdfData, pdfUrl: uploadError ? null : storagePath, memberName }
+  },
+
+  /**
    * Get payslip data as JSON for frontend rendering.
    */
   async getPayslipData(payrollRunId, memberId, orgId) {
@@ -559,7 +680,7 @@ export const invoiceGenerationService = {
       .select(`
         *,
         payroll_run:payroll_runs!payroll_items_payroll_run_id_fkey(
-          id, organization_id, pay_period_start, pay_period_end, pay_date
+          id, organization_id, pay_period_start, pay_period_end, pay_date, invoice_id
         ),
         member:organization_members!payroll_items_member_id_fkey(
           id, job_title, start_date,
@@ -581,7 +702,7 @@ export const invoiceGenerationService = {
 
     const { data: org } = await supabase
       .from('organizations')
-      .select('id, name')
+      .select('id, name, email, billing_email, phone, address_line1, address_line2, city, state, postal_code, country')
       .eq('id', orgId)
       .single()
 

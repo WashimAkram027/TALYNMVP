@@ -50,7 +50,7 @@ export const adminPayrollService = {
       .select(`
         *,
         member:organization_members!payroll_items_member_id_fkey(
-          id, job_title, start_date, pan_number, ssf_number, bank_account_number, bank_name,
+          id, job_title, start_date, pan_number, ssf_number, bank_account_number, bank_name, salary_amount, salary_currency,
           profile:profiles!organization_members_profile_id_fkey(id, email, first_name, last_name, full_name)
         )
       `)
@@ -345,6 +345,196 @@ export const adminPayrollService = {
   },
 
   /**
+   * Employer-view edit: update salary/day fields, recalculate from scratch, sync invoice.
+   * Used by admins editing the employer-facing payroll view.
+   */
+  async employerEditPayrollItem(itemId, updates, adminId, ip) {
+    const allowedFields = ['salary_amount', 'payable_days', 'paid_leave_days', 'unpaid_leave_days']
+    const filteredUpdates = {}
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        const num = Number(updates[key])
+        if (isNaN(num)) throw new BadRequestError(`${key} must be a valid number`)
+        filteredUpdates[key] = num
+      }
+    }
+    const resolveReview = updates.resolve_review === true
+
+    if (Object.keys(filteredUpdates).length === 0) {
+      throw new BadRequestError('No valid fields to update')
+    }
+
+    if (filteredUpdates.salary_amount !== undefined && (filteredUpdates.salary_amount <= 0 || filteredUpdates.salary_amount > 100_000_000)) {
+      throw new BadRequestError('Annual salary must be between 1 and 100,000,000')
+    }
+    if (filteredUpdates.payable_days !== undefined && filteredUpdates.payable_days < 0) {
+      throw new BadRequestError('Payable days cannot be negative')
+    }
+    if (filteredUpdates.paid_leave_days !== undefined && filteredUpdates.paid_leave_days < 0) {
+      throw new BadRequestError('Paid leave days cannot be negative')
+    }
+    if (filteredUpdates.unpaid_leave_days !== undefined && filteredUpdates.unpaid_leave_days < 0) {
+      throw new BadRequestError('Unpaid leave days cannot be negative')
+    }
+
+    // Fetch item with member data
+    const { data: item, error: fetchError } = await supabase
+      .from('payroll_items')
+      .select(`
+        *,
+        member:organization_members!payroll_items_member_id_fkey(
+          id, salary_amount, salary_currency
+        )
+      `)
+      .eq('id', itemId)
+      .single()
+
+    if (fetchError || !item) throw new NotFoundError('Payroll item not found')
+
+    // Verify parent run is editable
+    const { data: run } = await supabase
+      .from('payroll_runs')
+      .select('id, status, invoice_id')
+      .eq('id', item.payroll_run_id)
+      .single()
+
+    if (!run) throw new NotFoundError('Payroll run not found')
+    if (!['draft', 'pending_approval'].includes(run.status)) {
+      throw new BadRequestError('Payroll run is not editable (status: ' + run.status + ')')
+    }
+
+    // Validate payable_days <= calendar_days
+    const calendarDays = item.calendar_days || 30
+    const payableDays = filteredUpdates.payable_days !== undefined ? filteredUpdates.payable_days : item.payable_days
+    if (payableDays > calendarDays) {
+      throw new BadRequestError('Payable days cannot exceed calendar days (' + calendarDays + ')')
+    }
+
+    // Determine effective values
+    const annualSalary = filteredUpdates.salary_amount !== undefined ? filteredUpdates.salary_amount : item.member.salary_amount
+    const paidLeaveDays = filteredUpdates.paid_leave_days !== undefined ? filteredUpdates.paid_leave_days : item.paid_leave_days
+    const unpaidLeaveDays = filteredUpdates.unpaid_leave_days !== undefined ? filteredUpdates.unpaid_leave_days : item.unpaid_leave_days
+
+    // Load config: prefer invoice config_snapshot, fall back to live config
+    let config = null
+    if (run.invoice_id) {
+      const { data: inv } = await supabase
+        .from('invoices')
+        .select('config_snapshot')
+        .eq('id', run.invoice_id)
+        .single()
+      config = inv?.config_snapshot || null
+    }
+    if (!config?.exchange_rate) {
+      const { quoteService } = await import('../quote.service.js')
+      config = await quoteService.getCostConfig('NPL')
+    }
+
+    const employerSsfRate = parseFloat(config.employer_ssf_rate)
+    const employeeSsfRate = parseFloat(config.employee_ssf_rate)
+    const exchangeRate = parseFloat(config.exchange_rate)
+    const periodsPerYear = config.periods_per_year || 12
+
+    if (isNaN(employerSsfRate) || employerSsfRate < 0 || employerSsfRate > 0.5) {
+      throw new BadRequestError('Employer SSF rate is outside safe bounds')
+    }
+    if (isNaN(employeeSsfRate) || employeeSsfRate < 0 || employeeSsfRate > 0.5) {
+      throw new BadRequestError('Employee SSF rate is outside safe bounds')
+    }
+    if (isNaN(exchangeRate) || exchangeRate < 0.001 || exchangeRate > 0.05) {
+      throw new BadRequestError('Exchange rate is outside safe bounds')
+    }
+
+    // Recalculate (same formula as regeneratePayrollRun)
+    const fullMonthlyGrossLocal = Math.round((annualSalary / periodsPerYear) * 100) // paisa
+    const deductionDays = calendarDays - payableDays
+
+    let monthlyGrossLocal = fullMonthlyGrossLocal
+    if (deductionDays > 0 && calendarDays > 0) {
+      const dailyRate = Math.round(fullMonthlyGrossLocal / calendarDays)
+      monthlyGrossLocal = dailyRate * payableDays
+    }
+
+    const employerSsfLocal = Math.round(monthlyGrossLocal * employerSsfRate)
+    const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
+
+    // Update organization_members.salary_amount if salary changed
+    if (filteredUpdates.salary_amount !== undefined && filteredUpdates.salary_amount !== item.member.salary_amount) {
+      await supabase
+        .from('organization_members')
+        .update({ salary_amount: filteredUpdates.salary_amount, updated_at: new Date().toISOString() })
+        .eq('id', item.member_id)
+    }
+
+    // Update payroll item with recalculated fields
+    const itemUpdate = {
+      base_salary: monthlyGrossLocal / 100,
+      gross_salary: fullMonthlyGrossLocal / 100,
+      employer_ssf: employerSsfLocal / 100,
+      employee_ssf: employeeSsfLocal / 100,
+      leave_deduction: (fullMonthlyGrossLocal - monthlyGrossLocal) / 100,
+      deductions: employeeSsfLocal / 100,
+      payable_days: payableDays,
+      deduction_days: deductionDays,
+      paid_leave_days: paidLeaveDays,
+      unpaid_leave_days: unpaidLeaveDays,
+      updated_at: new Date().toISOString()
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('payroll_items')
+      .update(itemUpdate)
+      .eq('id', itemId)
+      .select()
+      .single()
+
+    if (updateError) throw updateError
+
+    // Resolve review if requested
+    if (resolveReview && item.review_status === 'pending') {
+      const existingNotes = item.review_notes || []
+      await supabase
+        .from('payroll_items')
+        .update({
+          review_status: 'resolved',
+          review_notes: [...existingNotes, {
+            resolved_by: adminId,
+            resolved_at: new Date().toISOString(),
+            resolution_notes: 'Resolved via employer edit'
+          }]
+        })
+        .eq('id', itemId)
+    }
+
+    // Recalculate parent run total
+    const { data: allItems } = await supabase
+      .from('payroll_items')
+      .select('net_amount')
+      .eq('payroll_run_id', item.payroll_run_id)
+
+    const newTotal = (allItems || []).reduce((sum, i) => sum + Number(i.net_amount || 0), 0)
+    await supabase
+      .from('payroll_runs')
+      .update({ total_amount: newTotal, updated_at: new Date().toISOString() })
+      .eq('id', item.payroll_run_id)
+
+    // Sync linked invoice
+    if (run.invoice_id) {
+      await this._syncInvoiceFromPayroll(run.invoice_id, item.payroll_run_id)
+    }
+
+    await auditLogService.log(adminId, 'payroll_item_employer_edited', 'payroll_item', itemId, {
+      payroll_run_id: item.payroll_run_id,
+      member_id: item.member_id,
+      changes: filteredUpdates,
+      salary_changed: filteredUpdates.salary_amount !== undefined,
+      review_resolved: !!(resolveReview && item.review_status === 'pending')
+    }, ip)
+
+    return updated
+  },
+
+  /**
    * Sync a linked invoice's line_items and totals from current payroll items.
    * Called after admin edits a payroll item.
    */
@@ -441,6 +631,17 @@ export const adminPayrollService = {
         .eq('id', invoiceId)
         .in('status', ['pending', 'approved'])
 
+      // Clear cached per-employee invoice PDFs so they regenerate with updated data
+      const { data: run } = await supabase
+        .from('payroll_runs')
+        .select('organization_id')
+        .eq('id', payrollRunId)
+        .single()
+      if (run) {
+        const filesToRemove = items.map(item => `employee-invoices/${run.organization_id}/${payrollRunId}-${item.member_id}.pdf`)
+        await supabase.storage.from('documents').remove(filesToRemove)
+      }
+
       console.log(`[AdminPayrollService] Invoice ${invoiceId} synced from payroll items`)
     } catch (err) {
       console.error('[AdminPayrollService] Invoice sync failed:', err.message)
@@ -477,6 +678,7 @@ export const adminPayrollService = {
       .eq('organization_id', orgId)
       .eq('status', 'active')
       .neq('member_role', 'owner')
+      .neq('member_role', 'authorized_user')
 
     if (membersErr) throw membersErr
     if (!members || members.length === 0) {
@@ -552,37 +754,107 @@ export const adminPayrollService = {
       }
     }))
 
-    // Build new items first, then delete+insert (minimize window of missing data)
-    const payrollItems = lineItems.map(item => ({
-      payroll_run_id: runId,
-      member_id: item.member_id,
-      base_salary: item.monthly_gross_local / 100,
-      gross_salary: item.full_monthly_gross_local / 100,
-      employer_ssf: item.employer_ssf_local / 100,
-      employee_ssf: item.employee_ssf_local / 100,
-      leave_deduction: (item.full_monthly_gross_local - item.monthly_gross_local) / 100,
-      deductions: item.employee_ssf_local / 100,
-      payable_days: item.payable_days,
-      calendar_days: item.calendar_days,
-      deduction_days: item.deduction_days,
-      paid_leave_days: item.paid_leave_days,
-      unpaid_leave_days: item.unpaid_leave_days
-    }))
+    // Snapshot existing items to preserve admin manual edits
+    const { data: existingItems } = await supabase
+      .from('payroll_items')
+      .select('id, member_id, payable_days, calendar_days, deduction_days, paid_leave_days, unpaid_leave_days, bonuses, dearness_allowance, other_allowance, festival_allowance, leave_encashments, other_payments, tax_amount, review_status, review_notes')
+      .eq('payroll_run_id', runId)
 
-    // Delete old items, then insert new ones
-    await supabase.from('payroll_items').delete().eq('payroll_run_id', runId)
-
-    const { error: itemsErr } = await supabase.from('payroll_items').insert(payrollItems)
-    if (itemsErr) {
-      // Items deleted but insert failed — admin must retry regenerate
-      console.error('[AdminPayrollService] Regenerate insert failed after delete:', itemsErr.message)
-      throw new BadRequestError('Failed to insert recalculated items. Please retry regeneration.')
+    const existingMap = {}
+    for (const ei of existingItems || []) {
+      existingMap[ei.member_id] = ei
     }
 
-    // Recalculate run total
-    const subtotalLocalCents = lineItems.reduce((s, i) => s + i.total_cost_local, 0)
+    // Build recalculated items, preserving admin day count overrides + payout fields + review data
+    const activeMemberIds = new Set(lineItems.map(i => i.member_id))
+    const upsertItems = lineItems.map(item => {
+      const existing = existingMap[item.member_id]
+
+      // For existing items: preserve admin day count edits, recalculate salary from source
+      // For new members: use freshly calculated day counts
+      const useDays = existing
+        ? { payable_days: existing.payable_days, calendar_days: existing.calendar_days ?? item.calendar_days, deduction_days: existing.deduction_days, paid_leave_days: existing.paid_leave_days, unpaid_leave_days: existing.unpaid_leave_days }
+        : { payable_days: item.payable_days, calendar_days: item.calendar_days, deduction_days: item.deduction_days, paid_leave_days: item.paid_leave_days, unpaid_leave_days: item.unpaid_leave_days }
+
+      // Recalculate salary fields using preserved day counts (so proration matches admin edits)
+      let recalcBase = item.monthly_gross_local
+      let recalcLeaveDeduction = item.full_monthly_gross_local - item.monthly_gross_local
+      if (existing && existing.payable_days !== item.payable_days) {
+        const calDays = useDays.calendar_days || item.calendar_days || 30
+        const dedDays = Math.max(0, calDays - useDays.payable_days)
+        if (dedDays > 0 && calDays > 0) {
+          const dailyRate = Math.round(item.full_monthly_gross_local / calDays)
+          recalcBase = dailyRate * useDays.payable_days
+        } else {
+          recalcBase = item.full_monthly_gross_local
+        }
+        recalcLeaveDeduction = item.full_monthly_gross_local - recalcBase
+      }
+      const recalcEmployerSsf = Math.round(recalcBase * employerSsfRate)
+      const recalcEmployeeSsf = Math.round(recalcBase * employeeSsfRate)
+
+      return {
+        ...(existing?.id ? { id: existing.id } : {}),
+        payroll_run_id: runId,
+        member_id: item.member_id,
+        base_salary: recalcBase / 100,
+        gross_salary: item.full_monthly_gross_local / 100,
+        employer_ssf: recalcEmployerSsf / 100,
+        employee_ssf: recalcEmployeeSsf / 100,
+        leave_deduction: recalcLeaveDeduction / 100,
+        deductions: recalcEmployeeSsf / 100,
+        payable_days: useDays.payable_days,
+        calendar_days: useDays.calendar_days,
+        deduction_days: useDays.deduction_days,
+        paid_leave_days: useDays.paid_leave_days,
+        unpaid_leave_days: useDays.unpaid_leave_days,
+        // Preserve admin payout-view edits
+        bonuses: existing?.bonuses || 0,
+        dearness_allowance: existing?.dearness_allowance || 0,
+        other_allowance: existing?.other_allowance || 0,
+        festival_allowance: existing?.festival_allowance || 0,
+        leave_encashments: existing?.leave_encashments || 0,
+        other_payments: existing?.other_payments || 0,
+        tax_amount: existing?.tax_amount || 0,
+        // Preserve review data
+        review_status: existing?.review_status || null,
+        review_notes: existing?.review_notes || null,
+        updated_at: new Date().toISOString()
+      }
+    })
+
+    // Remove items for members no longer active
+    const staleIds = (existingItems || [])
+      .filter(ei => !activeMemberIds.has(ei.member_id))
+      .map(ei => ei.id)
+    if (staleIds.length > 0) {
+      await supabase.from('payroll_items').delete().in('id', staleIds)
+    }
+
+    // Upsert: update existing items in place, insert new ones
+    const toUpdate = upsertItems.filter(i => i.id)
+    const toInsert = upsertItems.filter(i => !i.id)
+
+    for (const item of toUpdate) {
+      const { id, ...fields } = item
+      await supabase.from('payroll_items').update(fields).eq('id', id)
+    }
+    if (toInsert.length > 0) {
+      const { error: insertErr } = await supabase.from('payroll_items').insert(toInsert)
+      if (insertErr) {
+        console.error('[AdminPayrollService] Regenerate insert new members failed:', insertErr.message)
+        throw new BadRequestError('Failed to insert items for new members. Please retry.')
+      }
+    }
+
+    // Recalculate run total from current net_amount (includes preserved bonuses/allowances)
+    const { data: allItems } = await supabase
+      .from('payroll_items')
+      .select('net_amount')
+      .eq('payroll_run_id', runId)
+    const newTotal = (allItems || []).reduce((sum, i) => sum + Number(i.net_amount || 0), 0)
     await supabase.from('payroll_runs')
-      .update({ total_amount: subtotalLocalCents / 100, updated_at: new Date().toISOString() })
+      .update({ total_amount: newTotal, updated_at: new Date().toISOString() })
       .eq('id', runId)
 
     // Sync linked invoice
@@ -592,9 +864,12 @@ export const adminPayrollService = {
 
     await auditLogService.log(adminId, 'payroll_regenerated', 'payroll_run', runId, {
       employee_count: members.length,
-      total_amount_npr: subtotalLocalCents / 100
+      total_amount_npr: newTotal,
+      preserved_existing: toUpdate.length,
+      new_members: toInsert.length,
+      removed_members: staleIds.length
     }, ip)
 
-    return { success: true, employeeCount: members.length, totalNpr: subtotalLocalCents / 100 }
+    return { success: true, employeeCount: members.length, totalNpr: newTotal }
   }
 }

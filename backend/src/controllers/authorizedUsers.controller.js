@@ -52,7 +52,7 @@ export const authorizedUsersController = {
   async revoke(req, res) {
     try {
       const { id } = req.params
-      const result = await authorizedUsersService.revokeAuthorizedUser(id, req.user.organizationId)
+      const result = await authorizedUsersService.revokeAuthorizedUser(id, req.user.organizationId, req.user.id)
       return successResponse(res, result, 'User access revoked')
     } catch (error) {
       console.error('Revoke authorized user error:', error)

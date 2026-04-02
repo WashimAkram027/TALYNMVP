@@ -30,6 +30,12 @@ router.get('/upcoming', payrollController.getUpcoming)
 router.get('/runs/:runId/payslips/:memberId/pdf', payrollController.downloadPayslipPdf)
 
 /**
+ * GET /api/payroll/runs/:runId/employee-invoice/:memberId/pdf
+ * Download per-employee invoice PDF (employer cost breakdown for one employee)
+ */
+router.get('/runs/:runId/employee-invoice/:memberId/pdf', payrollController.downloadPerEmployeeInvoicePdf)
+
+/**
  * GET /api/payroll/runs/:runId/payslips/:memberId
  * Get payslip data as JSON for a specific member
  */

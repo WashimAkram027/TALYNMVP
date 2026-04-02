@@ -57,6 +57,7 @@ export const leaveAccrualService = {
       .select('id, organization_id')
       .eq('status', 'active')
       .neq('member_role', 'owner')
+      .neq('member_role', 'authorized_user')
 
     if (membersError) throw membersError
 
@@ -169,6 +170,7 @@ export const leaveAccrualService = {
       .select('id, organization_id, joined_at')
       .eq('status', 'active')
       .neq('member_role', 'owner')
+      .neq('member_role', 'authorized_user')
 
     if (error) throw error
 

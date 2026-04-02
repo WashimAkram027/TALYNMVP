@@ -69,6 +69,19 @@ export const adminPayrollController = {
     }
   },
 
+  async employerEdit(req, res) {
+    try {
+      const ip = req.ip || req.headers['x-forwarded-for']
+      const result = await adminPayrollService.employerEditPayrollItem(req.params.itemId, req.body, req.admin.id, ip)
+      return successResponse(res, result, 'Employer payroll item updated')
+    } catch (error) {
+      const status = error.name === 'NotFoundError' ? 404 : error.name === 'BadRequestError' ? 400 : 500
+      const message = status === 500 ? 'An internal error occurred' : error.message
+      if (status === 500) console.error('[AdminPayroll] employerEdit error:', error)
+      return errorResponse(res, message, status)
+    }
+  },
+
   async resolveReview(req, res) {
     try {
       const rawNotes = (req.body || {}).resolutionNotes

@@ -1,4 +1,4 @@
-// frontend/src/components/QuoteDocument.jsx
+// ../frontend/src/components/QuoteDocument.jsx
 import { useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 var BRAND = "#1a73e8";

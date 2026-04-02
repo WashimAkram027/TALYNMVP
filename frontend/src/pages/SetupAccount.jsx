@@ -29,7 +29,7 @@ export default function SetupAccount() {
         const result = await authorizedUsersService.validateToken(token)
         setInviteInfo(result.data || result)
       } catch (err) {
-        setError(err.response?.data?.message || err.message || 'This invitation link is invalid or has expired.')
+        setError(err.response?.data?.message || 'This invitation link is invalid or has expired.')
       } finally {
         setValidating(false)
       }
@@ -84,7 +84,7 @@ export default function SetupAccount() {
       await checkAuth()
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to set up account. Please try again.')
+      setError(err.response?.data?.message || 'Failed to set up account. Please try again.')
     } finally {
       setLoading(false)
     }

@@ -173,11 +173,11 @@ export const authorizedUsersService = {
     }
 
     if (member.status !== 'invited') {
-      throw new BadRequestError('This invitation has already been used')
+      throw new BadRequestError('This invitation link is invalid or has expired.')
     }
 
     if (new Date(member.invitation_token_expires_at) < new Date()) {
-      throw new BadRequestError('This invitation link has expired. Please ask for a new one.')
+      throw new BadRequestError('This invitation link is invalid or has expired.')
     }
 
     return {
@@ -212,11 +212,11 @@ export const authorizedUsersService = {
     }
 
     if (member.status !== 'invited') {
-      throw new BadRequestError('This invitation has already been used')
+      throw new BadRequestError('This invitation link is invalid or has expired.')
     }
 
     if (new Date(member.invitation_token_expires_at) < new Date()) {
-      throw new BadRequestError('This invitation link has expired. Please ask for a new one.')
+      throw new BadRequestError('This invitation link is invalid or has expired.')
     }
 
     // Create Supabase auth user (email pre-confirmed)
@@ -233,13 +233,12 @@ export const authorizedUsersService = {
 
     if (authError) {
       console.error('[AuthorizedUsers] Auth user creation error:', authError)
-      throw new BadRequestError('Failed to create account. This email may already be in use.')
+      throw new BadRequestError('Failed to create account. Please contact support.')
     }
 
     const userId = authData.user.id
 
     // Create profile
-    const fullName = `${member.first_name} ${member.last_name}`.trim()
     const { error: profileError } = await supabase
       .from('profiles')
       .upsert({
@@ -247,7 +246,6 @@ export const authorizedUsersService = {
         email: member.invitation_email,
         first_name: member.first_name,
         last_name: member.last_name,
-        full_name: fullName,
         role: 'employer',
         status: 'active',
         organization_id: member.organization_id,
@@ -277,6 +275,9 @@ export const authorizedUsersService = {
 
     if (updateError) {
       console.error('[AuthorizedUsers] Membership update error:', updateError)
+      // Rollback: delete auth user (cascades to profile)
+      await supabase.auth.admin.deleteUser(userId)
+      throw new BadRequestError('Failed to activate account. Please contact support.')
     }
 
     // Generate JWT
@@ -320,7 +321,18 @@ export const authorizedUsersService = {
   /**
    * Revoke an authorized user's access (deletes their account entirely)
    */
-  async revokeAuthorizedUser(memberId, orgId) {
+  async revokeAuthorizedUser(memberId, orgId, callerId) {
+    // Prevent self-revocation
+    const { data: target } = await supabase
+      .from('organization_members')
+      .select('profile_id')
+      .eq('id', memberId)
+      .single()
+
+    if (target?.profile_id === callerId) {
+      throw new BadRequestError('You cannot revoke your own access')
+    }
+
     // Fetch the member
     const { data: member, error: fetchError } = await supabase
       .from('organization_members')
@@ -392,7 +404,8 @@ export const authorizedUsersService = {
       .update({
         invitation_token_hash: token.hash,
         invitation_token_expires_at: token.expiresAt,
-        invited_at: new Date().toISOString()
+        invited_at: new Date().toISOString(),
+        invited_by: resenderId
       })
       .eq('id', memberId)
 

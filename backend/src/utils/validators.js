@@ -79,8 +79,8 @@ export const updateProfileSchema = z.object({
 // Authorized user schemas
 export const inviteAuthorizedUserSchema = z.object({
   email: z.string().email('Invalid email address').transform(v => v.toLowerCase()),
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required')
+  firstName: z.string().min(1, 'First name is required').max(100, 'First name is too long'),
+  lastName: z.string().min(1, 'Last name is required').max(100, 'Last name is too long')
 })
 
 export const setupAuthorizedUserSchema = z.object({

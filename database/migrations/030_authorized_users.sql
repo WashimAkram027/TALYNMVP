@@ -1,6 +1,6 @@
 -- Migration 030: Authorized Users
 -- Adds invitation token columns to organization_members for the authorized user invite flow.
--- member_role is TEXT (not an enum), so 'authorized_user' needs no ALTER TYPE.
+-- member_role is a Postgres enum. Migration 031 adds 'authorized_user' to it.
 
 -- Add invitation token columns
 ALTER TABLE organization_members

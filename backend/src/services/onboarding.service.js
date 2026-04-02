@@ -214,6 +214,7 @@ export const onboardingService = {
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .neq('member_role', 'owner')
+      .neq('member_role', 'authorized_user')
 
     // Step 1: Complete Org Profile
     const step1Completed = !!org.setup_step_1_completed_at

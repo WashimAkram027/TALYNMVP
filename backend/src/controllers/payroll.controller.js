@@ -230,13 +230,55 @@ export const payrollController = {
         runId, memberId, req.user.organizationId
       )
 
+      const safeName = (memberName || memberId).replace(/[^a-zA-Z0-9_\- ]/g, '_')
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="payslip-${memberName || memberId}.pdf"`)
+      res.setHeader('Content-Disposition', `inline; filename="payslip-${safeName}.pdf"`)
       return res.send(pdfBuffer)
     } catch (error) {
       console.error('[PayrollController] DownloadPayslipPdf error:', error)
-      if (error.statusCode === 404) return notFoundResponse(res, error.message)
-      return errorResponse(res, 'Failed to generate payslip PDF', 500, error)
+      if (error.statusCode === 404) return notFoundResponse(res, 'Payslip not found')
+      return errorResponse(res, 'Failed to generate payslip PDF', 500)
+    }
+  },
+
+  /**
+   * GET /api/payroll/runs/:runId/employee-invoice/:memberId/pdf
+   * Download per-employee invoice PDF showing employer's cost breakdown for one employee
+   */
+  async downloadPerEmployeeInvoicePdf(req, res) {
+    try {
+      const { runId, memberId } = req.params
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(runId) || !uuidRegex.test(memberId)) {
+        return badRequestResponse(res, 'Invalid run or member ID format')
+      }
+
+      // Auth: employees can only access their own
+      if (req.user.role === 'candidate') {
+        const { data: membership } = await supabase
+          .from('organization_members')
+          .select('id')
+          .eq('profile_id', req.user.id)
+          .eq('organization_id', req.user.organizationId)
+          .single()
+        if (!membership || membership.id !== memberId) {
+          return errorResponse(res, 'You can only access your own invoice', 403)
+        }
+      }
+
+      const { pdfBuffer, memberName } = await invoiceGenerationService.generatePerEmployeeInvoicePdf(
+        runId, memberId, req.user.organizationId
+      )
+
+      const safeName = (memberName || memberId).replace(/[^a-zA-Z0-9_\- ]/g, '_')
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `inline; filename="employee-invoice-${safeName}.pdf"`)
+      return res.send(pdfBuffer)
+    } catch (error) {
+      console.error('[PayrollController] DownloadPerEmployeeInvoicePdf error:', error)
+      if (error.statusCode === 404) return notFoundResponse(res, 'Per-employee invoice not found')
+      if (error.statusCode === 400) return badRequestResponse(res, 'Unable to generate per-employee invoice')
+      return errorResponse(res, 'Failed to generate per-employee invoice PDF', 500)
     }
   },
 

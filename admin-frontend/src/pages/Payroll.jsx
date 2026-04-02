@@ -162,6 +162,17 @@ function PayrollDetail() {
     }
   }
 
+  const handleSaveEmployerEdit = async (itemId, updates) => {
+    try {
+      await payrollService.employerEditItem(itemId, updates)
+      toast.success('Employer payroll item updated')
+      setEditItem(null)
+      fetchDetail()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update')
+    }
+  }
+
   const handleResolveReview = async () => {
     if (!resolveItem) return
     setActionLoading(true)
@@ -317,7 +328,8 @@ function PayrollDetail() {
       )}
 
       {/* Modals */}
-      {editItem && <EditEmployeeModal item={editItem} onClose={() => setEditItem(null)} onSave={handleSaveItem} />}
+      {editItem && activeTab === 'employer' && <EmployerEditModal item={editItem} invoice={invoice} onClose={() => setEditItem(null)} onSave={handleSaveEmployerEdit} />}
+      {editItem && activeTab === 'payout' && <EditEmployeeModal item={editItem} onClose={() => setEditItem(null)} onSave={handleSaveItem} />}
       {confirmOpen && <ConfirmDialog run={run} items={items} loading={actionLoading} onConfirm={handleConfirm} onClose={() => setConfirmOpen(false)} />}
       {rejectOpen && <RejectDialog notes={rejectNotes} setNotes={setRejectNotes} loading={actionLoading} onReject={handleReject} onClose={() => setRejectOpen(false)} />}
       {resolveItem && <ResolveReviewModal item={resolveItem} notes={resolveNotes} setNotes={setResolveNotes} loading={actionLoading} onResolve={handleResolveReview} onClose={() => setResolveItem(null)} />}
@@ -677,6 +689,285 @@ function RejectDialog({ notes, setNotes, loading, onReject, onClose }) {
           <button onClick={onClose} className="px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 rounded-lg">Cancel</button>
           <button onClick={onReject} disabled={loading} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50">
             {loading ? 'Rejecting...' : 'Reject'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Shared input field (must be outside modal to keep stable reference)
+// ============================================================
+function ModalInputField({ label, value, onChange, readOnly, suffix }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-text-secondary mb-1">{label}</label>
+      <div className="relative">
+        <input
+          type="text"
+          inputMode={readOnly ? undefined : 'numeric'}
+          value={readOnly ? value : (value ?? '')}
+          onChange={onChange ? (e) => {
+            const raw = e.target.value.replace(/[^0-9]/g, '')
+            onChange(raw === '' ? '' : raw)
+          } : undefined}
+          readOnly={readOnly}
+          className={`w-full px-3 py-2 rounded-lg border text-sm ${
+            readOnly
+              ? 'bg-gray-50 text-text-secondary border-gray-200 cursor-default'
+              : 'bg-white border-border-main focus:ring-2 focus:ring-primary/20 focus:border-primary'
+          }`}
+        />
+        {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary">{suffix}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// EMPLOYER EDIT MODAL (salary, days, live cost preview)
+// ============================================================
+function EmployerEditModal({ item, invoice, onClose, onSave }) {
+  const member = item.member || {}
+  const profile = member.profile || {}
+  const empName = profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || '—'
+
+  // Config from invoice snapshot
+  const config = invoice?.config_snapshot || {}
+  const employerSsfRate = parseFloat(config.employer_ssf_rate) || 0.20
+  const employeeSsfRate = parseFloat(config.employee_ssf_rate) || 0.11
+  const exchangeRate = parseFloat(config.exchange_rate) || parseFloat(invoice?.exchange_rate) || 0
+  const platformFeePerEmployee = config.platform_fee_amount || 0
+  const periodsPerYear = config.periods_per_year || 12
+  const calendarDays = item.calendar_days || 30
+
+  const [form, setForm] = useState({
+    salary_amount: Number(member.salary_amount ?? (item.gross_salary * periodsPerYear) ?? 0),
+    payable_days: Number(item.payable_days ?? calendarDays),
+    paid_leave_days: Number(item.paid_leave_days ?? 0),
+    unpaid_leave_days: Number(item.unpaid_leave_days ?? 0),
+  })
+  const [resolveReview, setResolveReview] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const handleChange = (field, value) => {
+    const num = value === '' ? 0 : Number(value)
+    if (isNaN(num)) return
+    setForm(prev => {
+      const next = { ...prev, [field]: num }
+      // When unpaid leave changes, recalculate payable days
+      if (field === 'unpaid_leave_days') {
+        next.payable_days = Math.max(0, calendarDays - num)
+      }
+      // When payable days changes, recalculate unpaid leave days
+      if (field === 'payable_days') {
+        next.unpaid_leave_days = Math.max(0, calendarDays - num)
+      }
+      return next
+    })
+  }
+
+  // Live recalculation (same formula as backend regeneratePayrollRun)
+  const fullMonthlyGrossLocal = Math.round((form.salary_amount / periodsPerYear) * 100)
+  const deductionDays = Math.max(0, calendarDays - form.payable_days)
+
+  let monthlyGrossLocal = fullMonthlyGrossLocal
+  if (deductionDays > 0 && calendarDays > 0) {
+    const dailyRate = Math.round(fullMonthlyGrossLocal / calendarDays)
+    monthlyGrossLocal = dailyRate * form.payable_days
+  }
+
+  const employerSsfLocal = Math.round(monthlyGrossLocal * employerSsfRate)
+  const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
+  const totalCostLocal = monthlyGrossLocal + employerSsfLocal
+  const totalCostNpr = totalCostLocal / 100
+  const totalCostUsd = totalCostNpr * exchangeRate
+  const costUsdCents = Math.round(totalCostUsd * 100)
+  const invoiceLineTotal = costUsdCents + platformFeePerEmployee
+
+  const monthlyGrossNpr = fullMonthlyGrossLocal / 100
+  const proratedGrossNpr = monthlyGrossLocal / 100
+  const monthlyGrossUsd = monthlyGrossNpr * exchangeRate
+
+  // Review context
+  const hasPendingReview = item.review_status === 'pending'
+  const reviewEntry = hasPendingReview && item.review_notes?.length > 0
+    ? item.review_notes.find(n => n.issue_type || n.description) || item.review_notes[0]
+    : null
+
+  const issueLabels = {
+    incorrect_salary: 'Incorrect Salary',
+    wrong_leave: 'Wrong Leave Count',
+    missing_bonus: 'Missing Bonus/Allowance',
+    wrong_deduction: 'Wrong Deduction',
+    other: 'Other'
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave(item.id, { ...form, resolve_review: resolveReview })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-border-main flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">Edit Employer View</h2>
+            <p className="text-sm text-text-secondary">{empName} {member.job_title ? `— ${member.job_title}` : ''}</p>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+            <span className="material-icons text-text-secondary">close</span>
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-6">
+          {/* Section 1: Salary & Rates */}
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+              <span className="material-icons text-[16px] text-primary">payments</span>
+              Salary & Rates
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <ModalInputField
+                label="Annual Salary (NPR)"
+                value={form.salary_amount}
+                onChange={(v) => handleChange('salary_amount', v)}
+              />
+              <ModalInputField label="Monthly Gross (NPR)" value={monthlyGrossNpr.toLocaleString()} readOnly />
+              <ModalInputField label="Exchange Rate (NPR→USD)" value={exchangeRate} readOnly />
+              <ModalInputField label="Monthly Gross (USD)" value={`$${monthlyGrossUsd.toFixed(2)}`} readOnly />
+            </div>
+          </div>
+
+          {/* Section 2: Day Count */}
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+              <span className="material-icons text-[16px] text-primary">calendar_month</span>
+              Day Count
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <ModalInputField label="Calendar Days" value={calendarDays} readOnly />
+              <ModalInputField
+                label="Payable Days"
+                value={form.payable_days}
+                onChange={(v) => handleChange('payable_days', v)}
+              />
+              <ModalInputField label="Deduction Days" value={deductionDays} readOnly />
+              <ModalInputField
+                label="Paid Leave Days"
+                value={form.paid_leave_days}
+                onChange={(v) => handleChange('paid_leave_days', v)}
+              />
+              <ModalInputField
+                label="Unpaid Leave Days"
+                value={form.unpaid_leave_days}
+                onChange={(v) => handleChange('unpaid_leave_days', v)}
+              />
+            </div>
+          </div>
+
+          {/* Section 3: Cost Breakdown Preview */}
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+              <span className="material-icons text-[16px] text-primary">calculate</span>
+              Cost Breakdown Preview
+            </h3>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+              {deductionDays > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-secondary">Prorated Gross (NPR)</span>
+                  <span className="font-medium">{proratedGrossNpr.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Employer SSF ({(employerSsfRate * 100).toFixed(0)}%)</span>
+                <span className="font-medium">NPR {(employerSsfLocal / 100).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Employee SSF ({(employeeSsfRate * 100).toFixed(0)}%)</span>
+                <span className="font-medium">NPR {(employeeSsfLocal / 100).toLocaleString()}</span>
+              </div>
+              <div className="border-t border-gray-200 my-1" />
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Total Cost (NPR)</span>
+                <span className="font-semibold">{totalCostNpr.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Total Cost (USD)</span>
+                <span className="font-semibold">${totalCostUsd.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Platform Fee</span>
+                <span className="font-medium">${(platformFeePerEmployee / 100).toFixed(2)}</span>
+              </div>
+              <div className="border-t border-gray-200 my-1" />
+              <div className="flex justify-between text-sm">
+                <span className="text-text-primary font-semibold">Invoice Line Total</span>
+                <span className="text-emerald-600 font-bold text-base">${(invoiceLineTotal / 100).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Review Context */}
+          {hasPendingReview && (
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <span className="material-icons text-[16px] text-amber-500">rate_review</span>
+                Pending Review Request
+              </h3>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                {reviewEntry && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                        {issueLabels[reviewEntry.issue_type] || reviewEntry.issue_type || 'Review'}
+                      </span>
+                      {reviewEntry.submitted_at && (
+                        <span className="text-xs text-text-secondary">
+                          {new Date(reviewEntry.submitted_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    {reviewEntry.description && (
+                      <p className="text-sm text-amber-900">{reviewEntry.description}</p>
+                    )}
+                  </>
+                )}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={resolveReview}
+                    onChange={(e) => setResolveReview(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/20"
+                  />
+                  <span className="text-sm font-medium text-amber-800">Resolve this review when saving</span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border-main flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || form.salary_amount <= 0 || form.payable_days > calendarDays || form.payable_days < 0}
+            className="px-6 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>

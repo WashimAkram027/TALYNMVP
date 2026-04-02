@@ -87,6 +87,7 @@ async function run() {
     .eq('organization_id', orgId)
     .eq('status', 'active')
     .neq('member_role', 'owner')
+    .neq('member_role', 'authorized_user')
 
   if (!members || members.length === 0) {
     console.error('No active employees found. Invite at least one employee first.')

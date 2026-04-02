@@ -1,4 +1,4 @@
-// frontend/src/components/FinancialDocuments.jsx
+// ../frontend/src/components/FinancialDocuments.jsx
 import { useState } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 var BRAND = "#1a73e8";

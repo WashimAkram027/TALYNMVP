@@ -9,6 +9,7 @@ import api from '../services/api';
 import { invoicesService } from '../services/invoicesService';
 import InvoiceCostBreakdown from '../components/features/InvoiceCostBreakdown';
 import PayrollDetailsSection from '../components/features/PayrollDetailsSection';
+import PdfViewerModal from '../components/features/PdfViewerModal';
 
 // --- Utility Functions ---
 
@@ -41,6 +42,8 @@ export default function BillingInvoices() {
   const [loading, setLoading] = useState(true);
   const [expandedInvoice, setExpandedInvoice] = useState(null);
   const [approving, setApproving] = useState(null);
+  const [pdfViewer, setPdfViewer] = useState({ open: false, blobUrl: null, fileName: '', title: '' });
+  const [loadingPdf, setLoadingPdf] = useState(null);
 
   useEffect(() => {
     fetchInvoices();
@@ -89,31 +92,41 @@ export default function BillingInvoices() {
     }
   };
 
-  const handleDownloadPdf = async (invoiceId) => {
+  const handleViewInvoice = async (invoiceId, invoiceNumber) => {
+    const key = `invoice-${invoiceId}`;
     try {
+      setLoadingPdf(key);
       const blob = await invoicesService.downloadInvoicePdf(invoiceId, 'detail');
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'invoice.pdf';
-      a.click();
-      URL.revokeObjectURL(url);
+      setPdfViewer({
+        open: true,
+        blobUrl: url,
+        fileName: `${invoiceNumber || 'invoice'}.pdf`,
+        title: `Invoice ${invoiceNumber || ''}`,
+      });
     } catch (err) {
-      toast.error('Failed to download PDF');
+      toast.error('Failed to load invoice');
+    } finally {
+      setLoadingPdf(null);
     }
   };
 
-  const handleDownloadReceipt = async (invoiceId) => {
+  const handleViewReceipt = async (invoiceId, invoiceNumber) => {
+    const key = `receipt-${invoiceId}`;
     try {
+      setLoadingPdf(key);
       const blob = await invoicesService.downloadReceiptPdf(invoiceId, 'detail');
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'receipt.pdf';
-      a.click();
-      URL.revokeObjectURL(url);
+      setPdfViewer({
+        open: true,
+        blobUrl: url,
+        fileName: `${invoiceNumber || 'receipt'}-receipt.pdf`,
+        title: `Receipt ${invoiceNumber || ''}`,
+      });
     } catch (err) {
-      toast.error('Failed to download receipt');
+      toast.error('Failed to load receipt');
+    } finally {
+      setLoadingPdf(null);
     }
   };
 
@@ -260,17 +273,19 @@ export default function BillingInvoices() {
                       {expandedInvoice === invoice.id ? 'Collapse' : 'Preview'}
                     </button>
                     <button
-                      onClick={() => handleDownloadPdf(invoice.id)}
-                      className="px-3 py-1.5 text-xs rounded-md border border-gray-200 hover:bg-gray-50"
+                      onClick={() => handleViewInvoice(invoice.id, invoice.invoice_number)}
+                      disabled={loadingPdf === `invoice-${invoice.id}`}
+                      className="px-3 py-1.5 text-xs rounded-md border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
                     >
-                      PDF
+                      {loadingPdf === `invoice-${invoice.id}` ? 'Loading...' : 'View invoice'}
                     </button>
                     {invoice.status === 'paid' && (
                       <button
-                        onClick={() => handleDownloadReceipt(invoice.id)}
-                        className="px-3 py-1.5 text-xs rounded-md border border-green-200 text-green-600 hover:bg-green-50"
+                        onClick={() => handleViewReceipt(invoice.id, invoice.invoice_number)}
+                        disabled={loadingPdf === `receipt-${invoice.id}`}
+                        className="px-3 py-1.5 text-xs rounded-md border border-green-200 text-green-600 hover:bg-green-50 disabled:opacity-50"
                       >
-                        Receipt
+                        {loadingPdf === `receipt-${invoice.id}` ? 'Loading...' : 'View receipt'}
                       </button>
                     )}
                   </div>
@@ -299,6 +314,14 @@ export default function BillingInvoices() {
 
       {/* Payroll details — self-contained, fetches its own data */}
       <PayrollDetailsSection />
+
+      <PdfViewerModal
+        isOpen={pdfViewer.open}
+        onClose={() => setPdfViewer({ open: false, blobUrl: null, fileName: '', title: '' })}
+        blobUrl={pdfViewer.blobUrl}
+        fileName={pdfViewer.fileName}
+        title={pdfViewer.title}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
 import { invoicesService } from '../services/invoicesService';
 import { payrollService } from '../services/payrollService';
+import PdfViewerModal from '../components/features/PdfViewerModal';
 
 const ReviewRequestModal = ({ isOpen, onClose, employee, period, onSubmit }) => {
   const [issueType, setIssueType] = useState('');
@@ -150,6 +151,8 @@ export default function Payroll() {
   const [expandedRun, setExpandedRun] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reviewModal, setReviewModal] = useState({ open: false, employee: null, runId: null });
+  const [pdfViewer, setPdfViewer] = useState({ open: false, blobUrl: null, fileName: '', title: '' });
+  const [loadingPdf, setLoadingPdf] = useState(null);
 
   useEffect(() => {
     fetchPayrollRuns();
@@ -174,31 +177,36 @@ export default function Payroll() {
     });
   };
 
-  const handleDownloadSummary = async (invoiceId) => {
+  const handleViewSummary = async (invoiceId) => {
+    const key = `summary-${invoiceId}`;
     try {
+      setLoadingPdf(key);
       const blob = await invoicesService.downloadInvoicePdf(invoiceId, 'summary');
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'payroll-summary.pdf';
-      a.click();
-      window.URL.revokeObjectURL(url);
+      setPdfViewer({ open: true, blobUrl: url, fileName: 'payroll-summary.pdf', title: 'Payroll Summary' });
     } catch (err) {
-      toast.error('Failed to download summary');
+      toast.error('Failed to load summary');
+    } finally {
+      setLoadingPdf(null);
     }
   };
 
-  const handleDownloadBreakdown = async (runId, memberId, memberName) => {
+  const handleViewBreakdown = async (runId, memberId, memberName) => {
+    const key = `breakdown-${runId}-${memberId}`;
     try {
-      const blob = await payrollService.downloadPayslipPdf(runId, memberId);
+      setLoadingPdf(key);
+      const blob = await payrollService.downloadEmployeeInvoicePdf(runId, memberId);
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `breakdown-${memberName || 'employee'}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+      setPdfViewer({
+        open: true,
+        blobUrl: url,
+        fileName: `invoice-${memberName || 'employee'}.pdf`,
+        title: `Employee Invoice — ${memberName || 'Employee'}`,
+      });
     } catch (err) {
-      toast.error('Failed to download breakdown');
+      toast.error('Failed to load employee invoice');
+    } finally {
+      setLoadingPdf(null);
     }
   };
 
@@ -310,10 +318,11 @@ export default function Payroll() {
                     )}
                     {run.invoice_id && (
                       <button
-                        onClick={() => handleDownloadSummary(run.invoice_id)}
-                        className="px-3 py-1.5 text-xs rounded-md border border-gray-200 hover:bg-gray-50"
+                        onClick={() => handleViewSummary(run.invoice_id)}
+                        disabled={loadingPdf === `summary-${run.invoice_id}`}
+                        className="px-3 py-1.5 text-xs rounded-md border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
                       >
-                        Download summary
+                        {loadingPdf === `summary-${run.invoice_id}` ? 'Loading...' : 'View summary'}
                       </button>
                     )}
                     <button
@@ -392,11 +401,14 @@ export default function Payroll() {
                   </div>
                   <div className="flex gap-1.5 justify-end">
                     <button
-                      title="Download breakdown"
-                      className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                      onClick={() => handleDownloadBreakdown(run.id, item.member_id, memberName)}
+                      title="View employee invoice"
+                      disabled={loadingPdf === `breakdown-${run.id}-${item.member_id}`}
+                      className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                      onClick={() => handleViewBreakdown(run.id, item.member_id, memberName)}
                     >
-                      <span className="material-icons-outlined text-base">download</span>
+                      <span className="material-icons-outlined text-base">
+                        {loadingPdf === `breakdown-${run.id}-${item.member_id}` ? 'hourglass_empty' : 'visibility'}
+                      </span>
                     </button>
                     <button
                       title={item.review_status ? 'Review ' + item.review_status : 'Request review'}
@@ -441,6 +453,14 @@ export default function Payroll() {
             )
           : ''}
         onSubmit={handleReviewRequest}
+      />
+
+      <PdfViewerModal
+        isOpen={pdfViewer.open}
+        onClose={() => setPdfViewer({ open: false, blobUrl: null, fileName: '', title: '' })}
+        blobUrl={pdfViewer.blobUrl}
+        fileName={pdfViewer.fileName}
+        title={pdfViewer.title}
       />
     </div>
   );
