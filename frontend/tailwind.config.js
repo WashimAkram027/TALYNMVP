@@ -31,9 +31,9 @@ export default {
         "border-dark": "#374151",
       },
       fontFamily: {
-        display: ["Inter", "sans-serif"],
-        body: ["Inter", "sans-serif"],
-        sans: ["Inter", "sans-serif"],
+        display: ['"DM Serif Display"', "serif"],
+        body: ['"DM Sans"', "sans-serif"],
+        sans: ['"DM Sans"', "sans-serif"],
       },
       borderRadius: {
         DEFAULT: "0.5rem",
