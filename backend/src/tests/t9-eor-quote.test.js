@@ -105,42 +105,48 @@ describe('T9-3: Quote calculation logic', () => {
     console.log('    Config retrieved: ' + config.country_name)
   })
 
-  it('calculates correctly for NPR 1,200,000 annual salary', async () => {
+  it('calculates correctly for NPR 1,200,000 annual salary (60% basic SSF basis)', async () => {
     const config = await quoteService.getCostConfig('NPL')
 
     const annualSalary = 1200000  // NPR 1,200,000
     const periodsPerYear = config.periods_per_year  // 12
+    const basicSalaryRatio = parseFloat(config.basic_salary_ratio ?? 0.6)
 
     // Monthly gross in minor units (paisa): 1,200,000 / 12 * 100 = 10,000,000
     const monthlyGross = Math.round((annualSalary / periodsPerYear) * 100)
     assert.equal(monthlyGross, 10000000, 'Monthly gross should be 10,000,000 paisa')
 
-    // Employer SSF: 10,000,000 * 0.20 = 2,000,000
-    const employerSsf = Math.round(monthlyGross * parseFloat(config.employer_ssf_rate))
-    assert.equal(employerSsf, 2000000, 'Employer SSF should be 2,000,000 paisa')
+    // Basic salary: 10,000,000 * 0.60 = 6,000,000
+    const basicSalary = Math.round(monthlyGross * basicSalaryRatio)
+    assert.equal(basicSalary, 6000000, 'Basic salary should be 6,000,000 paisa (60% of gross)')
 
-    // Employee SSF: 10,000,000 * 0.11 = 1,100,000
-    const employeeSsf = Math.round(monthlyGross * parseFloat(config.employee_ssf_rate))
-    assert.equal(employeeSsf, 1100000, 'Employee SSF should be 1,100,000 paisa')
+    // Employer SSF: 6,000,000 * 0.20 = 1,200,000 (12% effective)
+    const employerSsf = Math.round(basicSalary * parseFloat(config.employer_ssf_rate))
+    assert.equal(employerSsf, 1200000, 'Employer SSF should be 1,200,000 paisa (20% of 60% basic)')
 
-    // Estimated net salary: monthlyGross - employeeSsf = 8,900,000
+    // Employee SSF: 6,000,000 * 0.11 = 660,000 (6.6% effective)
+    const employeeSsf = Math.round(basicSalary * parseFloat(config.employee_ssf_rate))
+    assert.equal(employeeSsf, 660000, 'Employee SSF should be 660,000 paisa (11% of 60% basic)')
+
+    // Severance: 6,000,000 / 12 = 500,000 (5% effective)
+    const severance = Math.round(basicSalary / periodsPerYear)
+    assert.equal(severance, 500000, 'Severance should be 500,000 paisa (basic / 12)')
+
+    // Estimated net salary: monthlyGross - employeeSsf = 9,340,000
     const estimatedNet = monthlyGross - employeeSsf
-    assert.equal(estimatedNet, 8900000, 'Estimated net should be 8,900,000 paisa')
+    assert.equal(estimatedNet, 9340000, 'Estimated net should be 9,340,000 paisa')
 
-    // Total monthly cost to employer: monthlyGross + employerSsf = 12,000,000
-    const totalMonthlyCost = monthlyGross + employerSsf
-    assert.equal(totalMonthlyCost, 12000000, 'Total monthly cost should be 12,000,000 paisa')
+    // Total monthly cost to employer: monthlyGross + employerSsf + severance = 11,700,000
+    const totalMonthlyCost = monthlyGross + employerSsf + severance
+    assert.equal(totalMonthlyCost, 11700000, 'Total monthly cost should be 11,700,000 paisa')
 
-    // Total annual cost: 12,000,000 * 12 = 144,000,000
-    const totalAnnualCost = totalMonthlyCost * periodsPerYear
-    assert.equal(totalAnnualCost, 144000000, 'Total annual cost should be 144,000,000 paisa')
-
-    console.log('    Monthly gross:      NPR ' + (monthlyGross / 100).toLocaleString())
-    console.log('    Employer SSF (20%): NPR ' + (employerSsf / 100).toLocaleString())
-    console.log('    Employee SSF (11%): NPR ' + (employeeSsf / 100).toLocaleString())
-    console.log('    Estimated net:      NPR ' + (estimatedNet / 100).toLocaleString())
-    console.log('    Total monthly cost: NPR ' + (totalMonthlyCost / 100).toLocaleString())
-    console.log('    Total annual cost:  NPR ' + (totalAnnualCost / 100).toLocaleString())
+    console.log('    Monthly gross:                 NPR ' + (monthlyGross / 100).toLocaleString())
+    console.log('    Basic salary (60%):            NPR ' + (basicSalary / 100).toLocaleString())
+    console.log('    Employer SSF (20% of basic):   NPR ' + (employerSsf / 100).toLocaleString())
+    console.log('    Employee SSF (11% of basic):   NPR ' + (employeeSsf / 100).toLocaleString())
+    console.log('    Severance (basic / 12):        NPR ' + (severance / 100).toLocaleString())
+    console.log('    Estimated net:                 NPR ' + (estimatedNet / 100).toLocaleString())
+    console.log('    Total monthly cost:            NPR ' + (totalMonthlyCost / 100).toLocaleString())
   })
 
   it('generateQuoteNumber produces sequential TQ-YYYY-NNN format', async () => {

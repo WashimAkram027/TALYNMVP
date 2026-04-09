@@ -132,7 +132,7 @@ function formatNPR(n) {
   const rest = int.slice(0, -3);
   const formatted =
     rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + (rest ? "," : "") + lastThree;
-  return `रू${formatted}.${dec}`;
+  return `${formatted}.${dec}`;
 }
 
 function formatRate(rate) {
@@ -143,74 +143,94 @@ function formatRate(rate) {
 
 function DocHeader({ logoSrc, docType, docNumber, date, validUntil, quoteTitle }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: 32,
-      }}
-    >
-      <div>
-        <TalynLogo logoSrc={logoSrc} height={240} />
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 11,
-            textTransform: "uppercase",
-            letterSpacing: 2,
-            fontWeight: 700,
-            color: BRAND,
-          }}
-        >
-          {docType}
-        </div>
-      </div>
-      <div style={{ textAlign: "right", fontSize: 12, color: GRAY }}>
-        <div style={{ marginBottom: 6 }}>
-          <span style={{ color: "#9ca3af" }}>Quote # </span>
-          <span style={{ color: DARK, fontWeight: 600 }}>{docNumber}</span>
-        </div>
-        <div style={{ marginBottom: 4 }}>
-          <span style={{ color: "#9ca3af" }}>Date </span>
-          <span style={{ color: DARK }}>{date}</span>
-        </div>
-        <div>
-          <span style={{ color: "#9ca3af" }}>Valid until </span>
-          <span style={{ color: DARK }}>{validUntil}</span>
-        </div>
-      </div>
-    </div>
+    <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
+      <tbody>
+        <tr>
+          <td style={{ verticalAlign: "top" }}>
+            <TalynLogo logoSrc={logoSrc} height={44} />
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: 2,
+                fontWeight: 600,
+                color: BRAND,
+              }}
+            >
+              {docType}
+            </div>
+          </td>
+          <td style={{ textAlign: "right", verticalAlign: "top", fontSize: 12, color: GRAY }}>
+            <div style={{ marginBottom: 6 }}>
+              <span style={{ color: "#9ca3af" }}>Quote # </span>
+              <span style={{ color: DARK, fontWeight: 600 }}>{docNumber}</span>
+            </div>
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: "#9ca3af" }}>Date </span>
+              <span style={{ color: DARK }}>{date}</span>
+            </div>
+            <div>
+              <span style={{ color: "#9ca3af" }}>Valid until </span>
+              <span style={{ color: DARK }}>{validUntil}</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
 function InfoGrid({ rows, columns = 2 }) {
+  // Pair rows into groups of `columns` for table layout
+  const rowGroups = [];
+  for (let i = 0; i < rows.length; i += columns) {
+    rowGroups.push(rows.slice(i, i + columns));
+  }
+  const colWidth = `${Math.floor(100 / columns)}%`;
+
   return (
-    <div
+    <table
       style={{
+        width: "100%",
+        borderCollapse: "collapse",
         background: LIGHT_GRAY,
         borderRadius: 8,
-        padding: "16px 20px",
         marginBottom: 24,
-        display: "grid",
-        gridTemplateColumns: `repeat(${columns}, 1fr)`,
-        gap: "8px 32px",
       }}
     >
-      {rows.map(([label, value], i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 12,
-          }}
-        >
-          <span style={{ color: GRAY }}>{label}</span>
-          <span style={{ fontWeight: 500, color: DARK }}>{value || "—"}</span>
-        </div>
-      ))}
-    </div>
+      <tbody>
+        {rowGroups.map((group, gi) => (
+          <tr key={gi}>
+            {group.map(([label, value], ci) => (
+              <td
+                key={ci}
+                style={{
+                  width: colWidth,
+                  padding: "6px 20px",
+                  fontSize: 12,
+                  verticalAlign: "top",
+                }}
+              >
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ color: GRAY, textAlign: "left" }}>{label}</td>
+                      <td style={{ fontWeight: 400, color: DARK, textAlign: "right" }}>{value || "—"}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            ))}
+            {/* Fill empty cells if last group is short */}
+            {group.length < columns &&
+              Array.from({ length: columns - group.length }).map((_, ei) => (
+                <td key={`empty-${ei}`} style={{ width: colWidth }} />
+              ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -261,7 +281,7 @@ function CostTable({ rows, header, accentColor = BRAND }) {
                 style={{
                   padding: "10px 12px",
                   fontSize: row.isTotal ? 15 : 13,
-                  fontWeight: row.isTotal ? 700 : 500,
+                  fontWeight: row.isTotal ? 700 : 400,
                   textAlign: "right",
                   color: DARK,
                   borderBottom: row.isTotal
@@ -343,17 +363,20 @@ function DocFooter({ refNumber }) {
         Act 2018. Actual costs may vary based on regulatory changes. This quote does
         not constitute a binding contract.
       </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: 11,
-          color: "#9ca3af",
-        }}
-      >
-        <div>Talyn Global LLC (DBA Talyn LLC) · Tyler, TX 75701</div>
-        {refNumber && <div>Ref: {refNumber}</div>}
-      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <tbody>
+          <tr>
+            <td style={{ fontSize: 11, color: "#9ca3af", textAlign: "left" }}>
+              Talyn Global LLC (DBA Talyn LLC) · Tyler, TX 75701
+            </td>
+            {refNumber && (
+              <td style={{ fontSize: 11, color: "#9ca3af", textAlign: "right" }}>
+                Ref: {refNumber}
+              </td>
+            )}
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -384,15 +407,23 @@ function DocFooter({ refNumber }) {
  * @param {Object} props.costs - All in display-ready numbers (major units)
  * @param {string} props.costs.currency - e.g. "NPR"
  * @param {number} props.costs.monthlyGross
+ * @param {number} props.costs.basicSalaryRatio - e.g. 0.60
  * @param {number} props.costs.employerSsf
  * @param {string} props.costs.employerSsfRate - e.g. "0.20"
- * @param {number} props.costs.subtotalLocal - monthlyGross + employerSsf
- * @param {number} props.costs.platformFee - in USD (e.g. 599)
+ * @param {number} props.costs.severance - monthly severance accrual
+ * @param {number} props.costs.subtotalLocal - monthlyGross + employerSsf + severance
+ * @param {number} props.costs.platformFee - in USD (e.g. 499)
  * @param {number} props.costs.employeeSsf
  * @param {string} props.costs.employeeSsfRate - e.g. "0.11"
  * @param {number} props.costs.estimatedNetSalary
+ * @param {number} [props.costs.exchangeRate] - NPR-to-USD rate
+ * @param {number} [props.costs.monthlyGrossUsd] - monthly gross in USD
+ * @param {number} [props.costs.monthlyCostUsd] - total monthly cost in USD (incl. platform fee)
+ * @param {number} [props.costs.totalAnnualCostUsd] - total annual cost in USD
  * @param {number} props.costs.annualCostLocal
  * @param {number} props.costs.annualPlatformFee - in USD
+ * @param {number} [props.costs.thirteenthMonth] - 13th month amount (local)
+ * @param {number} [props.costs.documentHandlingFee] - annual doc fee in USD
  *
  * @param {'draft'|'accepted'|'expired'} [props.status]
  * @param {string} [props.refNumber]
@@ -419,7 +450,7 @@ export function QuoteDocument({
       : { text: "Draft", bg: "#f3f4f6", color: GRAY };
 
   return (
-    <div style={{ ...baseFont, maxWidth: 680, margin: "0 auto", padding: 40 }}>
+    <div style={{ ...baseFont, maxWidth: 680, margin: "0 auto", padding: "24px 32px" }}>
       {/* Header */}
       <DocHeader
         logoSrc={logoSrc}
@@ -430,49 +461,49 @@ export function QuoteDocument({
       />
 
       {/* Prepared For + Status */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 24,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 10,
-              textTransform: "uppercase",
-              letterSpacing: 1.5,
-              color: "#9ca3af",
-              fontWeight: 600,
-              marginBottom: 4,
-            }}
-          >
-            Prepared for
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 600, color: DARK }}>
-            {orgName}
-          </div>
-          <div style={{ fontSize: 12, color: GRAY, marginTop: 2 }}>
-            Generated by: {generatedBy}
-          </div>
-        </div>
-        <div
-          style={{
-            padding: "6px 16px",
-            background: statusBadge.bg,
-            color: statusBadge.color,
-            borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: 1,
-          }}
-        >
-          {statusBadge.text}
-        </div>
-      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24 }}>
+        <tbody>
+          <tr>
+            <td style={{ verticalAlign: "middle" }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: 1.5,
+                  color: "#9ca3af",
+                  fontWeight: 600,
+                  marginBottom: 4,
+                }}
+              >
+                Prepared for
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: DARK }}>
+                {orgName}
+              </div>
+              <div style={{ fontSize: 12, color: GRAY, marginTop: 2 }}>
+                Generated by: {generatedBy}
+              </div>
+            </td>
+            <td style={{ textAlign: "right", verticalAlign: "middle" }}>
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "6px 16px",
+                  background: statusBadge.bg,
+                  color: statusBadge.color,
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                }}
+              >
+                {statusBadge.text}
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       {/* Divider */}
       <hr style={{ border: "none", borderTop: `1px solid ${BORDER}`, margin: "0 0 24px" }} />
@@ -509,20 +540,31 @@ export function QuoteDocument({
         rows={[
           {
             label: "Employee gross salary",
-            amount: `${cur} ${formatNPR(costs.monthlyGross).replace("रू", "")}`,
+            amount: `${cur} ${formatNPR(costs.monthlyGross)}`,
           },
           {
             label: "Employer SSF contribution",
-            detail: `(${formatRate(costs.employerSsfRate)})`,
-            amount: `${cur} ${formatNPR(costs.employerSsf).replace("रू", "")}`,
+            detail: `(${formatRate(costs.employerSsfRate)} of ${costs.basicSalaryRatio ? (costs.basicSalaryRatio * 100).toFixed(0) + '% basic' : '60% basic'})`,
+            amount: `${cur} ${formatNPR(costs.employerSsf)}`,
           },
+          ...(costs.severance ? [{
+            label: "Severance accrual",
+            detail: "(basic salary / 12)",
+            amount: `${cur} ${formatNPR(costs.severance)}`,
+          }] : []),
           {
-            label: "Subtotal (local currency)",
-            amount: `${cur} ${formatNPR(costs.subtotalLocal).replace("रू", "")}`,
+            label: "Total monthly company cost",
+            amount: `${cur} ${formatNPR(costs.subtotalLocal)}`,
             isTotal: true,
           },
+          ...(costs.monthlyCostUsd ? [{
+            label: "Total monthly company cost (USD)",
+            amount: `USD $${formatMoney(costs.monthlyCostUsd)}`,
+            isTotal: true,
+          }] : []),
           {
             label: "Talyn platform fee",
+            detail: "(included in USD total above)",
             amount: `USD $${formatMoney(costs.platformFee)} /mo`,
           },
         ]}
@@ -535,29 +577,61 @@ export function QuoteDocument({
         rows={[
           {
             label: "Employee SSF deduction",
-            detail: `(${formatRate(costs.employeeSsfRate)})`,
-            amount: `${cur} ${formatNPR(costs.employeeSsf).replace("रू", "")}`,
+            detail: `(${formatRate(costs.employeeSsfRate)} of ${costs.basicSalaryRatio ? (costs.basicSalaryRatio * 100).toFixed(0) + '% basic' : '60% basic'})`,
+            amount: `${cur} ${formatNPR(costs.employeeSsf)}`,
           },
           {
             label: "Estimated net salary (before income tax)",
-            amount: `${cur} ${formatNPR(costs.estimatedNetSalary).replace("रू", "")}`,
+            amount: `${cur} ${formatNPR(costs.estimatedNetSalary)}`,
           },
         ]}
       />
 
-      {/* Annual Estimates */}
-      <AnnualEstimateBox
-        items={[
+      {/* Annual Cost Breakdown */}
+      <CostTable
+        header="Annual cost estimate"
+        rows={[
           {
-            label: "Annual estimate (local)",
-            amount: `${cur} ${formatNPR(costs.annualCostLocal).replace("रू", "")}`,
+            label: "Annual salary + SSF + severance",
+            amount: `${cur} ${formatNPR(costs.annualCostLocal)}`,
           },
+          ...(costs.thirteenthMonth ? [{
+            label: "13th month salary",
+            amount: `${cur} ${formatNPR(costs.thirteenthMonth)}`,
+          }] : []),
           {
             label: "Annual platform fee",
             amount: `USD $${formatMoney(costs.annualPlatformFee)}`,
           },
+          ...(costs.documentHandlingFee ? [{
+            label: "Document handling fee",
+            detail: "(annual)",
+            amount: `USD $${formatMoney(costs.documentHandlingFee)}`,
+          }] : []),
+          ...(costs.totalAnnualCostUsd ? [{
+            label: "Total annual company cost",
+            amount: `USD $${formatMoney(costs.totalAnnualCostUsd)}`,
+            isTotal: true,
+          }] : []),
         ]}
       />
+
+      {/* Exchange rate note */}
+      {costs.exchangeRate && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "#9ca3af",
+            marginBottom: 16,
+            padding: "8px 12px",
+            background: LIGHT_GRAY,
+            borderRadius: 6,
+          }}
+        >
+          Exchange rate: 1 NPR = {Number(costs.exchangeRate).toFixed(6)} USD.
+          USD amounts are estimates and may vary with exchange rate fluctuations.
+        </div>
+      )}
 
       <DocFooter refNumber={refNumber} />
     </div>
@@ -590,15 +664,23 @@ export default function QuotePreview() {
         costs={{
           currency: "NPR",
           monthlyGross: 65000,
-          employerSsf: 13000,
+          basicSalaryRatio: 0.60,
+          employerSsf: 7800,
           employerSsfRate: "0.20",
-          subtotalLocal: 78000,
-          platformFee: 599,
-          employeeSsf: 7150,
+          severance: 3250,
+          subtotalLocal: 76050,
+          platformFee: 499,
+          employeeSsf: 4290,
           employeeSsfRate: "0.11",
-          estimatedNetSalary: 57850,
-          annualCostLocal: 936000,
-          annualPlatformFee: 7188,
+          estimatedNetSalary: 60710,
+          exchangeRate: 0.0074,
+          monthlyGrossUsd: 481,
+          monthlyCostUsd: 1061.77,
+          totalAnnualCostUsd: 13302.24,
+          annualCostLocal: 912600,
+          annualPlatformFee: 5988,
+          thirteenthMonth: 65000,
+          documentHandlingFee: 80,
         }}
         status="draft"
       />

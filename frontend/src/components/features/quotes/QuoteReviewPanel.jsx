@@ -35,15 +35,23 @@ export default function QuoteReviewPanel({ quote, onBack, onAccept, onDownloadPd
           costs={{
             currency: quote.salary_currency || 'NPR',
             monthlyGross: (quote.monthly_gross_salary || 0) / 100,
+            basicSalaryRatio: quote.basic_salary_ratio ? parseFloat(quote.basic_salary_ratio) : 0.6,
             employerSsf: (quote.employer_ssf_amount || 0) / 100,
             employerSsfRate: quote.employer_ssf_rate,
+            severance: (quote.severance_amount || 0) / 100,
             subtotalLocal: (quote.total_monthly_cost_local || 0) / 100,
             platformFee: (quote.platform_fee_amount || 0) / 100,
             employeeSsf: (quote.employee_ssf_amount || 0) / 100,
             employeeSsfRate: quote.employee_ssf_rate,
             estimatedNetSalary: (quote.estimated_net_salary || 0) / 100,
+            exchangeRate: quote.exchange_rate ? parseFloat(quote.exchange_rate) : null,
+            monthlyGrossUsd: quote.monthly_gross_usd_cents ? quote.monthly_gross_usd_cents / 100 : null,
+            monthlyCostUsd: quote.monthly_cost_usd_cents ? quote.monthly_cost_usd_cents / 100 : null,
+            totalAnnualCostUsd: quote.total_annual_cost_usd_cents ? quote.total_annual_cost_usd_cents / 100 : null,
             annualCostLocal: (quote.total_annual_cost_local || 0) / 100,
             annualPlatformFee: ((quote.platform_fee_amount || 0) * 12) / 100,
+            thirteenthMonth: (quote.thirteenth_month_amount || 0) / 100 || null,
+            documentHandlingFee: quote.document_handling_fee ? quote.document_handling_fee / 100 : null,
           }}
           status={quote.status || 'draft'}
         />

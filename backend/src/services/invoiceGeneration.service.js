@@ -118,9 +118,10 @@ export const invoiceGenerationService = {
     if (isNaN(exchangeRate) || exchangeRate < 0.001 || exchangeRate > 0.05) {
       throw new BadRequestError(`Exchange rate ${config.exchange_rate} is outside safe bounds (0.001–0.05, i.e. 20–1000 NPR/USD). Admin must verify.`)
     }
+    const basicSalaryRatio = parseFloat(config.basic_salary_ratio ?? 0.6)
     const employerSsfRate = parseFloat(config.employer_ssf_rate)
     const employeeSsfRate = parseFloat(config.employee_ssf_rate)
-    const platformFeePerEmployee = config.platform_fee_amount // in USD cents (59900 = $599)
+    const platformFeePerEmployee = config.platform_fee_amount // in USD cents
     const periodsPerYear = config.periods_per_year
 
     // Build line items for each active employee (with day-count adjustment)
@@ -146,9 +147,11 @@ export const invoiceGenerationService = {
         dayCount = null
       }
 
-      const employerSsfLocal = Math.round(monthlyGrossLocal * employerSsfRate)
-      const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
-      const totalCostLocal = monthlyGrossLocal + employerSsfLocal
+      const basicSalaryLocal = Math.round(monthlyGrossLocal * basicSalaryRatio)
+      const employerSsfLocal = Math.round(basicSalaryLocal * employerSsfRate)
+      const employeeSsfLocal = Math.round(basicSalaryLocal * employeeSsfRate)
+      const severanceLocal = Math.round(basicSalaryLocal / periodsPerYear)
+      const totalCostLocal = monthlyGrossLocal + employerSsfLocal + severanceLocal
 
       // Convert local cost to USD cents (explicit 3-step: paisa → NPR → USD → cents)
       const totalCostNpr = totalCostLocal / 100          // paisa → NPR
@@ -169,8 +172,10 @@ export const invoiceGenerationService = {
         annual_salary: annualSalary,
         full_monthly_gross_local: fullMonthlyGrossLocal,
         monthly_gross_local: monthlyGrossLocal,
+        basic_salary_local: basicSalaryLocal,
         employer_ssf_local: employerSsfLocal,
         employee_ssf_local: employeeSsfLocal,
+        severance_local: severanceLocal,
         total_cost_local: totalCostLocal,
         cost_usd_cents: costUsdCents,
         platform_fee_cents: platformFeePerEmployee,
@@ -200,6 +205,7 @@ export const invoiceGenerationService = {
     const configSnapshot = {
       country_code: config.country_code,
       country_name: config.country_name,
+      basic_salary_ratio: basicSalaryRatio,
       employer_ssf_rate: config.employer_ssf_rate,
       employee_ssf_rate: config.employee_ssf_rate,
       platform_fee_amount: config.platform_fee_amount,
@@ -552,8 +558,15 @@ export const invoiceGenerationService = {
     const exchangeRate = parseFloat(invoice.exchange_rate) || 0
     const baseSalaryNPR = parseFloat(item.base_salary) || 0
     const employerSsfNPR = parseFloat(item.employer_ssf) || 0
+    const memberLineItem = (invoice.line_items || []).find(li => li.member_id === memberId)
 
     // Build line items
+    const ssfRateLabel = invoice.config_snapshot?.employer_ssf_rate
+      ? (invoice.config_snapshot.employer_ssf_rate * 100).toFixed(0) + '%'
+      : '20%'
+    const basicRatioLabel = invoice.config_snapshot?.basic_salary_ratio
+      ? (invoice.config_snapshot.basic_salary_ratio * 100).toFixed(0) + '%'
+      : '60%'
     const lineItems = [
       {
         description: 'Monthly salary',
@@ -562,15 +575,26 @@ export const invoiceGenerationService = {
         amountUSD: Math.round(baseSalaryNPR * exchangeRate * 100) / 100,
       },
       {
-        description: `Employer SSF (${invoice.config_snapshot?.employer_ssf_rate ? (invoice.config_snapshot.employer_ssf_rate * 100).toFixed(0) + '%' : '20%'})`,
+        description: `Employer SSF (${ssfRateLabel} of ${basicRatioLabel} basic)`,
         detail: 'Social Security Fund — employer contribution',
         amountNPR: employerSsfNPR,
         amountUSD: Math.round(employerSsfNPR * exchangeRate * 100) / 100,
       },
     ]
 
+    // Add severance line from invoice line_items if available
+    const severanceLocal = memberLineItem?.severance_local || 0
+    if (severanceLocal > 0) {
+      const severanceNPR = severanceLocal / 100
+      lineItems.push({
+        description: `Severance accrual (basic / ${invoice.config_snapshot?.periods_per_year || 12})`,
+        detail: 'Monthly severance provision',
+        amountNPR: severanceNPR,
+        amountUSD: Math.round(severanceNPR * exchangeRate * 100) / 100,
+      })
+    }
+
     // Add platform fee from invoice line_items if available
-    const memberLineItem = (invoice.line_items || []).find(li => li.member_id === memberId)
     const platformFeeCents = memberLineItem?.platform_fee_cents || 0
     if (platformFeeCents > 0) {
       lineItems.push({

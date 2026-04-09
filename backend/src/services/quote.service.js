@@ -94,17 +94,43 @@ export const quoteService = {
     }
 
     const periodsPerYear = config.periods_per_year
-    // Monthly gross in minor units (paisa)
+    const basicSalaryRatio = parseFloat(config.basic_salary_ratio ?? 0.6)
+    if (!isFinite(basicSalaryRatio) || basicSalaryRatio < 0 || basicSalaryRatio > 1) {
+      throw new BadRequestError('Invalid basic_salary_ratio in config')
+    }
+    const employerSsfRate = parseFloat(config.employer_ssf_rate)
+    const employeeSsfRate = parseFloat(config.employee_ssf_rate)
+
+    // MONTHLY (all in paisa = NPR x 100)
     const monthlyGross = Math.round((annualSalary / periodsPerYear) * 100)
-
-    // SSF calculations on monthly gross (already in minor units)
-    const employerSsfAmount = Math.round(monthlyGross * parseFloat(config.employer_ssf_rate))
-    const employeeSsfAmount = Math.round(monthlyGross * parseFloat(config.employee_ssf_rate))
+    const basicSalaryAmount = Math.round(monthlyGross * basicSalaryRatio)
+    const employerSsfAmount = Math.round(basicSalaryAmount * employerSsfRate)
+    const employeeSsfAmount = Math.round(basicSalaryAmount * employeeSsfRate)
+    const severanceAmount = Math.round(basicSalaryAmount / periodsPerYear)
     const estimatedNetSalary = monthlyGross - employeeSsfAmount
+    const totalMonthlyCostLocal = monthlyGross + employerSsfAmount + severanceAmount
 
-    // Total monthly cost to employer in local currency (salary + employer SSF)
-    const totalMonthlyCostLocal = monthlyGross + employerSsfAmount
-    const totalAnnualCostLocal = totalMonthlyCostLocal * periodsPerYear
+    // ANNUAL (computed from annual figures to avoid rounding drift)
+    const annualSalaryMinor = Math.round(annualSalary * 100)
+    const annualBasicSalary = Math.round(annualSalaryMinor * basicSalaryRatio)
+    const annualEmployerSsf = Math.round(annualBasicSalary * employerSsfRate)
+    const annualSeverance = Math.round(annualBasicSalary / periodsPerYear) * periodsPerYear
+    const annualCostLocal = annualSalaryMinor + annualEmployerSsf + annualSeverance
+    const thirteenthMonthAmount = config.thirteenth_month_included !== false ? monthlyGross : 0
+    const totalAnnualCostLocal = annualCostLocal + thirteenthMonthAmount
+
+    // USD conversions (when exchange rate is set)
+    const exchangeRate = config.exchange_rate ? parseFloat(config.exchange_rate) : null
+    let monthlyGrossUsdCents = null
+    let monthlyCostUsdCents = null
+    let totalAnnualCostUsdCents = null
+    if (exchangeRate && isFinite(exchangeRate) && exchangeRate >= 0.001 && exchangeRate <= 0.05) {
+      monthlyGrossUsdCents = Math.round((monthlyGross / 100) * exchangeRate * 100)
+      monthlyCostUsdCents = Math.round((totalMonthlyCostLocal / 100) * exchangeRate * 100) + config.platform_fee_amount
+      const docFee = config.document_handling_fee ?? 8000
+      totalAnnualCostUsdCents = Math.round((totalAnnualCostLocal / 100) * exchangeRate * 100)
+        + (config.platform_fee_amount * periodsPerYear) + docFee
+    }
 
     // Quote valid for 30 days
     const validUntil = new Date()
@@ -128,29 +154,45 @@ export const quoteService = {
         employment_type: employeeData.employmentType || 'full_time',
         start_date: employeeData.startDate || null,
 
-        annual_salary: Math.round(annualSalary * 100), // store in minor units
+        annual_salary: annualSalaryMinor,
         salary_currency: employeeData.salaryCurrency || 'NPR',
         pay_frequency: employeeData.payFrequency || 'monthly',
         periods_per_year: periodsPerYear,
         monthly_gross_salary: monthlyGross,
 
+        basic_salary_ratio: basicSalaryRatio,
+        basic_salary_amount: basicSalaryAmount,
         employer_ssf_rate: config.employer_ssf_rate,
         employer_ssf_amount: employerSsfAmount,
         employee_ssf_rate: config.employee_ssf_rate,
         employee_ssf_amount: employeeSsfAmount,
+        severance_amount: severanceAmount,
         estimated_net_salary: estimatedNetSalary,
         platform_fee_amount: config.platform_fee_amount,
         platform_fee_currency: config.platform_fee_currency,
         total_monthly_cost_local: totalMonthlyCostLocal,
         total_annual_cost_local: totalAnnualCostLocal,
 
+        exchange_rate: exchangeRate,
+        monthly_gross_usd_cents: monthlyGrossUsdCents,
+        monthly_cost_usd_cents: monthlyCostUsdCents,
+        total_annual_cost_usd_cents: totalAnnualCostUsdCents,
+        thirteenth_month_amount: thirteenthMonthAmount,
+        document_handling_fee: config.document_handling_fee ?? 8000,
+        document_handling_fee_currency: config.document_handling_fee_currency || 'USD',
+
         config_snapshot: {
           country_code: config.country_code,
           country_name: config.country_name,
+          basic_salary_ratio: basicSalaryRatio,
           employer_ssf_rate: config.employer_ssf_rate,
           employee_ssf_rate: config.employee_ssf_rate,
           platform_fee_amount: config.platform_fee_amount,
           platform_fee_currency: config.platform_fee_currency,
+          document_handling_fee: config.document_handling_fee,
+          document_handling_fee_currency: config.document_handling_fee_currency,
+          thirteenth_month_included: config.thirteenth_month_included,
+          exchange_rate: exchangeRate,
           effective_from: config.effective_from
         },
         country_code: config.country_code,
@@ -454,17 +496,12 @@ export const quoteService = {
       return { pdfBuffer: pdfData, pdfUrl: null }
     }
 
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('documents')
-      .getPublicUrl(storagePath)
-
-    // Update quote record with PDF URL
+    // Store the storage path (not a public URL) for security — PDFs are served through authenticated endpoints
     await supabase
       .from('eor_quotes')
-      .update({ pdf_url: publicUrl, updated_at: new Date().toISOString() })
+      .update({ pdf_url: storagePath, updated_at: new Date().toISOString() })
       .eq('id', quoteId)
 
-    return { pdfBuffer: pdfData, pdfUrl: publicUrl, quoteNumber: quote.quote_number }
+    return { pdfBuffer: pdfData, pdfUrl: storagePath, quoteNumber: quote.quote_number }
   }
 }

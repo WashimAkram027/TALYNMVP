@@ -1505,7 +1505,7 @@ const sampleEmployees = [
       },
       {
         description: "Employer Contributions: Social Security",
-        detail: "ER — Social Security (SSF 20%)",
+        detail: "ER — Social Security (SSF 20% of 60% basic)",
         amountNPR: 7800,
         amountUSD: 55.39,
       },
@@ -1532,7 +1532,7 @@ const sampleEmployees = [
       },
       {
         description: "Employer Contributions: Social Security",
-        detail: "ER — Social Security (SSF 20%)",
+        detail: "ER — Social Security (SSF 20% of 60% basic)",
         amountNPR: 10000,
         amountUSD: 71.01,
       },
@@ -1748,9 +1748,10 @@ export default function FinancialDocumentsPreview() {
             period="March 1, 2026 to March 31, 2026"
             lineItems={[
               { description: "Salary", detail: "Monthly gross salary — regular work", amountNPR: 65000, amountUSD: 461.57 },
-              { description: "Employer Contributions: Social Security", detail: "ER — Social Security (SSF 20%)", amountNPR: 13000, amountUSD: 92.31 },
+              { description: "Employer Contributions: Social Security", detail: "ER — Social Security (SSF 20% of 60% basic)", amountNPR: 7800, amountUSD: 55.39 },
+              { description: "Severance accrual", detail: "Monthly severance provision", amountNPR: 3250, amountUSD: 23.08 },
             ]}
-            totalDue={553.88}
+            totalDue={540.04}
             paymentDetails={{ exchangeFrom: "NPR", exchangeTo: "USD", exchangeRate: "0.0071010" }}
             refNumber="TLN-ei-7f8a"
           />
@@ -1767,9 +1768,10 @@ export default function FinancialDocumentsPreview() {
             period="March 1, 2026 to March 31, 2026"
             lineItems={[
               { description: "Salary", detail: "Monthly gross salary — regular work", amountNPR: 65000, amountUSD: 461.57 },
-              { description: "Employer Contributions: Social Security", detail: "ER — Social Security (SSF 20%)", amountNPR: 13000, amountUSD: 92.31 },
+              { description: "Employer Contributions: Social Security", detail: "ER — Social Security (SSF 20% of 60% basic)", amountNPR: 7800, amountUSD: 55.39 },
+              { description: "Severance accrual", detail: "Monthly severance provision", amountNPR: 3250, amountUSD: 23.08 },
             ]}
-            totalPaid={553.88}
+            totalPaid={540.04}
             paymentDetails={{ exchangeFrom: "NPR", exchangeTo: "USD", exchangeRate: "0.0071010" }}
             refNumber="TLN-er-7f8a"
           />

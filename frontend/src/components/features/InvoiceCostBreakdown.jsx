@@ -41,10 +41,11 @@ export default function InvoiceCostBreakdown({ invoice, isExpanded }) {
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[2fr_1.2fr_1.2fr_0.8fr_1.2fr_1fr] px-4 py-2 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-200">
+      <div className="grid grid-cols-[2fr_1fr_1fr_0.8fr_0.8fr_1fr_1fr] px-4 py-2 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-200">
         <div>Employee</div>
         <div>Gross salary</div>
-        <div>Employer SSF (20%)</div>
+        <div>Employer SSF</div>
+        <div>Severance</div>
         <div>Days</div>
         <div>Total cost</div>
         <div className="text-right">Platform fee</div>
@@ -54,7 +55,7 @@ export default function InvoiceCostBreakdown({ invoice, isExpanded }) {
       {lineItems.map((li, idx) => (
         <div
           key={li.member_id || idx}
-          className="grid grid-cols-[2fr_1.2fr_1.2fr_0.8fr_1.2fr_1fr] items-center px-4 py-2.5 text-sm border-b border-gray-100 last:border-b-0"
+          className="grid grid-cols-[2fr_1fr_1fr_0.8fr_0.8fr_1fr_1fr] items-center px-4 py-2.5 text-sm border-b border-gray-100 last:border-b-0"
         >
           {/* Name + role */}
           <div>
@@ -74,6 +75,18 @@ export default function InvoiceCostBreakdown({ invoice, isExpanded }) {
             <div className="text-xs text-gray-400">{formatNprFromPaisa(li.employer_ssf_local)}</div>
           </div>
 
+          {/* Severance USD + NPR */}
+          <div>
+            {li.severance_local > 0 ? (
+              <>
+                <div>{formatUsd(Math.round((li.severance_local / 100) * exchangeRate * 100))}</div>
+                <div className="text-xs text-gray-400">{formatNprFromPaisa(li.severance_local)}</div>
+              </>
+            ) : (
+              <div className="text-gray-400">-</div>
+            )}
+          </div>
+
           {/* Days */}
           <div className="text-gray-600">{li.payable_days}/{li.calendar_days}</div>
 
@@ -86,8 +99,9 @@ export default function InvoiceCostBreakdown({ invoice, isExpanded }) {
       ))}
 
       {/* Totals row */}
-      <div className="grid grid-cols-[2fr_1.2fr_1.2fr_0.8fr_1.2fr_1fr] items-center px-4 py-3 text-sm bg-white border-t border-gray-200">
+      <div className="grid grid-cols-[2fr_1fr_1fr_0.8fr_0.8fr_1fr_1fr] items-center px-4 py-3 text-sm bg-white border-t border-gray-200">
         <div className="font-medium">Total ({lineItems.length} employees)</div>
+        <div></div>
         <div></div>
         <div></div>
         <div></div>

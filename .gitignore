@@ -13,6 +13,7 @@ nul
 *.resolved
 !README.md
 generated-pdfs/
+test-output/
 invoicesandreceiptsandpayslip/
 
 # Git worktrees

@@ -430,6 +430,7 @@ export const adminPayrollService = {
       config = await quoteService.getCostConfig('NPL')
     }
 
+    const basicSalaryRatio = parseFloat(config.basic_salary_ratio ?? 0.6)
     const employerSsfRate = parseFloat(config.employer_ssf_rate)
     const employeeSsfRate = parseFloat(config.employee_ssf_rate)
     const exchangeRate = parseFloat(config.exchange_rate)
@@ -455,8 +456,9 @@ export const adminPayrollService = {
       monthlyGrossLocal = dailyRate * payableDays
     }
 
-    const employerSsfLocal = Math.round(monthlyGrossLocal * employerSsfRate)
-    const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
+    const basicSalaryLocal = Math.round(monthlyGrossLocal * basicSalaryRatio)
+    const employerSsfLocal = Math.round(basicSalaryLocal * employerSsfRate)
+    const employeeSsfLocal = Math.round(basicSalaryLocal * employeeSsfRate)
 
     // Update organization_members.salary_amount if salary changed
     if (filteredUpdates.salary_amount !== undefined && filteredUpdates.salary_amount !== item.member.salary_amount) {
@@ -556,8 +558,9 @@ export const adminPayrollService = {
         console.warn('[AdminPayrollService] Invoice sync skipped: exchange rate is 0')
         return
       }
-      const employerSsfRate = parseFloat(config.employer_ssf_rate) || 0
+      const basicSalaryRatio = parseFloat(config.basic_salary_ratio ?? 0.6)
       const platformFeePerEmployee = config.platform_fee_amount || 0
+      const periodsPerYear = config.periods_per_year || 12
 
       // Fetch all current payroll items for this run
       const { data: items } = await supabase
@@ -578,9 +581,11 @@ export const adminPayrollService = {
       const lineItems = items.map(item => {
         const monthlyGrossLocal = Math.round((item.base_salary || 0) * 100) // NPR → paisa
         const fullMonthlyGrossLocal = Math.round((item.gross_salary || 0) * 100)
+        const basicSalaryLocal = Math.round(monthlyGrossLocal * basicSalaryRatio)
         const employerSsfLocal = Math.round((item.employer_ssf || 0) * 100)
         const employeeSsfLocal = Math.round((item.employee_ssf || 0) * 100)
-        const totalCostLocal = monthlyGrossLocal + employerSsfLocal
+        const severanceLocal = Math.round(basicSalaryLocal / periodsPerYear)
+        const totalCostLocal = monthlyGrossLocal + employerSsfLocal + severanceLocal
 
         const totalCostNpr = totalCostLocal / 100
         const totalCostUsd = totalCostNpr * exchangeRate
@@ -597,8 +602,10 @@ export const adminPayrollService = {
           annual_salary: item.member?.salary_amount || 0,
           full_monthly_gross_local: fullMonthlyGrossLocal,
           monthly_gross_local: monthlyGrossLocal,
+          basic_salary_local: basicSalaryLocal,
           employer_ssf_local: employerSsfLocal,
           employee_ssf_local: employeeSsfLocal,
+          severance_local: severanceLocal,
           total_cost_local: totalCostLocal,
           cost_usd_cents: costUsdCents,
           platform_fee_cents: platformFeePerEmployee,
@@ -697,6 +704,7 @@ export const adminPayrollService = {
     if (isNaN(exchangeRate) || exchangeRate < 0.001 || exchangeRate > 0.05) {
       throw new BadRequestError(`Exchange rate ${config.exchange_rate} is outside safe bounds`)
     }
+    const basicSalaryRatio = parseFloat(config.basic_salary_ratio ?? 0.6)
     const employerSsfRate = parseFloat(config.employer_ssf_rate)
     const employeeSsfRate = parseFloat(config.employee_ssf_rate)
     const platformFeePerEmployee = config.platform_fee_amount
@@ -721,9 +729,11 @@ export const adminPayrollService = {
         dayCount = null
       }
 
-      const employerSsfLocal = Math.round(monthlyGrossLocal * employerSsfRate)
-      const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
-      const totalCostLocal = monthlyGrossLocal + employerSsfLocal
+      const basicSalaryLocal = Math.round(monthlyGrossLocal * basicSalaryRatio)
+      const employerSsfLocal = Math.round(basicSalaryLocal * employerSsfRate)
+      const employeeSsfLocal = Math.round(basicSalaryLocal * employeeSsfRate)
+      const severanceLocal = Math.round(basicSalaryLocal / periodsPerYear)
+      const totalCostLocal = monthlyGrossLocal + employerSsfLocal + severanceLocal
       const totalCostNpr = totalCostLocal / 100
       const totalCostUsd = totalCostNpr * exchangeRate
       const costUsdCents = Math.round(totalCostUsd * 100)
@@ -741,8 +751,10 @@ export const adminPayrollService = {
         annual_salary: annualSalary,
         full_monthly_gross_local: fullMonthlyGrossLocal,
         monthly_gross_local: monthlyGrossLocal,
+        basic_salary_local: basicSalaryLocal,
         employer_ssf_local: employerSsfLocal,
         employee_ssf_local: employeeSsfLocal,
+        severance_local: severanceLocal,
         total_cost_local: totalCostLocal,
         cost_usd_cents: costUsdCents,
         platform_fee_cents: platformFeePerEmployee,
@@ -790,8 +802,9 @@ export const adminPayrollService = {
         }
         recalcLeaveDeduction = item.full_monthly_gross_local - recalcBase
       }
-      const recalcEmployerSsf = Math.round(recalcBase * employerSsfRate)
-      const recalcEmployeeSsf = Math.round(recalcBase * employeeSsfRate)
+      const recalcBasicSalary = Math.round(recalcBase * basicSalaryRatio)
+      const recalcEmployerSsf = Math.round(recalcBasicSalary * employerSsfRate)
+      const recalcEmployeeSsf = Math.round(recalcBasicSalary * employeeSsfRate)
 
       return {
         ...(existing?.id ? { id: existing.id } : {}),

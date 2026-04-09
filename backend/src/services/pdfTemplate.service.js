@@ -103,11 +103,10 @@ export function buildInvoiceHtml(invoice, organization, variant = 'detail') {
       exchangeTo: 'USD',
       exchangeRate: exchangeRate.toFixed(7),
     } : undefined,
-    employees: lineItems.map(item => ({
-      name: item.member_name,
-      role: item.job_title,
-      period: `${formatDate(invoice.billing_period_start)} to ${formatDate(invoice.billing_period_end)}`,
-      lineItems: [
+    employees: lineItems.map(item => {
+      const ssfLabel = config.employer_ssf_rate ? formatRate(config.employer_ssf_rate) : '20%'
+      const basicLabel = config.basic_salary_ratio ? `${(parseFloat(config.basic_salary_ratio) * 100).toFixed(0)}%` : '60%'
+      const empLineItems = [
         {
           description: 'Salary',
           detail: 'Monthly gross salary — regular work',
@@ -115,14 +114,28 @@ export function buildInvoiceHtml(invoice, organization, variant = 'detail') {
           amountUSD: Math.round((item.monthly_gross_local || 0) * exchangeRate) / 100,
         },
         {
-          description: `Employer SSF (${config.employer_ssf_rate ? formatRate(config.employer_ssf_rate) : '20%'})`,
+          description: `Employer SSF (${ssfLabel} of ${basicLabel} basic)`,
           detail: 'Social Security Fund',
           amountNPR: (item.employer_ssf_local || 0) / 100,
           amountUSD: Math.round((item.employer_ssf_local || 0) * exchangeRate) / 100,
         },
-      ],
-      total: (item.cost_usd_cents || 0) / 100,
-    })),
+      ]
+      if (item.severance_local > 0) {
+        empLineItems.push({
+          description: 'Severance accrual',
+          detail: 'Monthly severance provision',
+          amountNPR: (item.severance_local || 0) / 100,
+          amountUSD: Math.round((item.severance_local || 0) * exchangeRate) / 100,
+        })
+      }
+      return {
+        name: item.member_name,
+        role: item.job_title,
+        period: `${formatDate(invoice.billing_period_start)} to ${formatDate(invoice.billing_period_end)}`,
+        lineItems: empLineItems,
+        total: (item.cost_usd_cents || 0) / 100,
+      }
+    }),
     platformFees: lineItems.map(item => ({
       name: item.member_name,
       role: item.job_title,
@@ -177,11 +190,10 @@ export function buildReceiptHtml(invoice, organization, paymentDate, variant = '
       exchangeTo: 'USD',
       exchangeRate: exchangeRate.toFixed(7),
     } : undefined,
-    employees: lineItems.map(item => ({
-      name: item.member_name,
-      role: item.job_title,
-      period: `${formatDate(invoice.billing_period_start)} to ${formatDate(invoice.billing_period_end)}`,
-      lineItems: [
+    employees: lineItems.map(item => {
+      const ssfLabel = config.employer_ssf_rate ? formatRate(config.employer_ssf_rate) : '20%'
+      const basicLabel = config.basic_salary_ratio ? `${(parseFloat(config.basic_salary_ratio) * 100).toFixed(0)}%` : '60%'
+      const empLineItems = [
         {
           description: 'Salary',
           detail: 'Monthly gross salary — regular work',
@@ -189,14 +201,28 @@ export function buildReceiptHtml(invoice, organization, paymentDate, variant = '
           amountUSD: Math.round((item.monthly_gross_local || 0) * exchangeRate) / 100,
         },
         {
-          description: `Employer SSF (${config.employer_ssf_rate ? formatRate(config.employer_ssf_rate) : '20%'})`,
+          description: `Employer SSF (${ssfLabel} of ${basicLabel} basic)`,
           detail: 'Social Security Fund',
           amountNPR: (item.employer_ssf_local || 0) / 100,
           amountUSD: Math.round((item.employer_ssf_local || 0) * exchangeRate) / 100,
         },
-      ],
-      total: (item.cost_usd_cents || 0) / 100,
-    })),
+      ]
+      if (item.severance_local > 0) {
+        empLineItems.push({
+          description: 'Severance accrual',
+          detail: 'Monthly severance provision',
+          amountNPR: (item.severance_local || 0) / 100,
+          amountUSD: Math.round((item.severance_local || 0) * exchangeRate) / 100,
+        })
+      }
+      return {
+        name: item.member_name,
+        role: item.job_title,
+        period: `${formatDate(invoice.billing_period_start)} to ${formatDate(invoice.billing_period_end)}`,
+        lineItems: empLineItems,
+        total: (item.cost_usd_cents || 0) / 100,
+      }
+    }),
     platformFees: lineItems.map(item => ({
       name: item.member_name,
       role: item.job_title,
@@ -458,15 +484,23 @@ export function buildQuoteHtml(quote, organization, generatedByUser) {
     costs: {
       currency: quote.salary_currency || 'NPR',
       monthlyGross: (quote.monthly_gross_salary || 0) / 100,
+      basicSalaryRatio: quote.basic_salary_ratio ? parseFloat(quote.basic_salary_ratio) : 0.6,
       employerSsf: (quote.employer_ssf_amount || 0) / 100,
       employerSsfRate: quote.employer_ssf_rate,
+      severance: (quote.severance_amount || 0) / 100,
       subtotalLocal: (quote.total_monthly_cost_local || 0) / 100,
       platformFee: (quote.platform_fee_amount || 0) / 100,
       employeeSsf: (quote.employee_ssf_amount || 0) / 100,
       employeeSsfRate: quote.employee_ssf_rate,
       estimatedNetSalary: (quote.estimated_net_salary || 0) / 100,
+      exchangeRate: quote.exchange_rate ? parseFloat(quote.exchange_rate) : null,
+      monthlyGrossUsd: quote.monthly_gross_usd_cents ? quote.monthly_gross_usd_cents / 100 : null,
+      monthlyCostUsd: quote.monthly_cost_usd_cents ? quote.monthly_cost_usd_cents / 100 : null,
+      totalAnnualCostUsd: quote.total_annual_cost_usd_cents ? quote.total_annual_cost_usd_cents / 100 : null,
       annualCostLocal: (quote.total_annual_cost_local || 0) / 100,
       annualPlatformFee: ((quote.platform_fee_amount || 0) * 12) / 100,
+      thirteenthMonth: (quote.thirteenth_month_amount || 0) / 100 || null,
+      documentHandlingFee: quote.document_handling_fee ? quote.document_handling_fee / 100 : null,
     },
     status: quote.status || 'draft',
   }

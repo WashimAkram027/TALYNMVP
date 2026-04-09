@@ -62,7 +62,7 @@ const ReviewRequestModal = ({ isOpen, onClose, employee, period, onSubmit }) => 
                 <span className="font-medium">{formatUsd(employee.grossUsd)}</span>
               </div>
               <div className="flex justify-between text-sm py-1">
-                <span className="text-gray-500">SSF deduction (11%)</span>
+                <span className="text-gray-500">SSF deduction (11% of 60% basic)</span>
                 <span className="font-medium">{formatUsd(employee.deductionsUsd)}</span>
               </div>
               <div className="flex justify-between text-sm py-1">

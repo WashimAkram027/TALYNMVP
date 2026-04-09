@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 var BRAND = "#1a73e8";
-var BRAND_DARK = "#0f4f9e";
 var CYAN = "#00e5ff";
 var DARK = "#111827";
 var GRAY = "#6b7280";
@@ -102,85 +101,81 @@ function formatNPR(n) {
   const lastThree = int.slice(-3);
   const rest = int.slice(0, -3);
   const formatted = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + (rest ? "," : "") + lastThree;
-  return `\u0930\u0942${formatted}.${dec}`;
+  return `${formatted}.${dec}`;
 }
 function formatRate(rate) {
   return `${(parseFloat(rate) * 100).toFixed(0)}%`;
 }
 function DocHeader({ logoSrc, docType, docNumber, date, validUntil, quoteTitle }) {
-  return /* @__PURE__ */ jsxs(
-    "div",
-    {
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: 32
-      },
-      children: [
-        /* @__PURE__ */ jsxs("div", { children: [
-          /* @__PURE__ */ jsx(TalynLogo, { logoSrc, height: 240 }),
-          /* @__PURE__ */ jsx(
-            "div",
-            {
-              style: {
-                marginTop: 12,
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: 2,
-                fontWeight: 700,
-                color: BRAND
-              },
-              children: docType
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxs("div", { style: { textAlign: "right", fontSize: 12, color: GRAY }, children: [
-          /* @__PURE__ */ jsxs("div", { style: { marginBottom: 6 }, children: [
-            /* @__PURE__ */ jsx("span", { style: { color: "#9ca3af" }, children: "Quote # " }),
-            /* @__PURE__ */ jsx("span", { style: { color: DARK, fontWeight: 600 }, children: docNumber })
-          ] }),
-          /* @__PURE__ */ jsxs("div", { style: { marginBottom: 4 }, children: [
-            /* @__PURE__ */ jsx("span", { style: { color: "#9ca3af" }, children: "Date " }),
-            /* @__PURE__ */ jsx("span", { style: { color: DARK }, children: date })
-          ] }),
-          /* @__PURE__ */ jsxs("div", { children: [
-            /* @__PURE__ */ jsx("span", { style: { color: "#9ca3af" }, children: "Valid until " }),
-            /* @__PURE__ */ jsx("span", { style: { color: DARK }, children: validUntil })
-          ] })
-        ] })
-      ]
-    }
-  );
-}
-function InfoGrid({ rows, columns = 2 }) {
-  return /* @__PURE__ */ jsx(
-    "div",
-    {
-      style: {
-        background: LIGHT_GRAY,
-        borderRadius: 8,
-        padding: "16px 20px",
-        marginBottom: 24,
-        display: "grid",
-        gridTemplateColumns: `repeat(${columns}, 1fr)`,
-        gap: "8px 32px"
-      },
-      children: rows.map(([label, value], i) => /* @__PURE__ */ jsxs(
+  return /* @__PURE__ */ jsx("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 16 }, children: /* @__PURE__ */ jsx("tbody", { children: /* @__PURE__ */ jsxs("tr", { children: [
+    /* @__PURE__ */ jsxs("td", { style: { verticalAlign: "top" }, children: [
+      /* @__PURE__ */ jsx(TalynLogo, { logoSrc, height: 44 }),
+      /* @__PURE__ */ jsx(
         "div",
         {
           style: {
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 12
+            marginTop: 6,
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 2,
+            fontWeight: 600,
+            color: BRAND
           },
-          children: [
-            /* @__PURE__ */ jsx("span", { style: { color: GRAY }, children: label }),
-            /* @__PURE__ */ jsx("span", { style: { fontWeight: 500, color: DARK }, children: value || "\u2014" })
-          ]
-        },
-        i
-      ))
+          children: docType
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxs("td", { style: { textAlign: "right", verticalAlign: "top", fontSize: 12, color: GRAY }, children: [
+      /* @__PURE__ */ jsxs("div", { style: { marginBottom: 6 }, children: [
+        /* @__PURE__ */ jsx("span", { style: { color: "#9ca3af" }, children: "Quote # " }),
+        /* @__PURE__ */ jsx("span", { style: { color: DARK, fontWeight: 600 }, children: docNumber })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { style: { marginBottom: 4 }, children: [
+        /* @__PURE__ */ jsx("span", { style: { color: "#9ca3af" }, children: "Date " }),
+        /* @__PURE__ */ jsx("span", { style: { color: DARK }, children: date })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("span", { style: { color: "#9ca3af" }, children: "Valid until " }),
+        /* @__PURE__ */ jsx("span", { style: { color: DARK }, children: validUntil })
+      ] })
+    ] })
+  ] }) }) });
+}
+function InfoGrid({ rows, columns = 2 }) {
+  const rowGroups = [];
+  for (let i = 0; i < rows.length; i += columns) {
+    rowGroups.push(rows.slice(i, i + columns));
+  }
+  const colWidth = `${Math.floor(100 / columns)}%`;
+  return /* @__PURE__ */ jsx(
+    "table",
+    {
+      style: {
+        width: "100%",
+        borderCollapse: "collapse",
+        background: LIGHT_GRAY,
+        borderRadius: 8,
+        marginBottom: 24
+      },
+      children: /* @__PURE__ */ jsx("tbody", { children: rowGroups.map((group, gi) => /* @__PURE__ */ jsxs("tr", { children: [
+        group.map(([label, value], ci) => /* @__PURE__ */ jsx(
+          "td",
+          {
+            style: {
+              width: colWidth,
+              padding: "6px 20px",
+              fontSize: 12,
+              verticalAlign: "top"
+            },
+            children: /* @__PURE__ */ jsx("table", { style: { width: "100%", borderCollapse: "collapse" }, children: /* @__PURE__ */ jsx("tbody", { children: /* @__PURE__ */ jsxs("tr", { children: [
+              /* @__PURE__ */ jsx("td", { style: { color: GRAY, textAlign: "left" }, children: label }),
+              /* @__PURE__ */ jsx("td", { style: { fontWeight: 400, color: DARK, textAlign: "right" }, children: value || "\u2014" })
+            ] }) }) })
+          },
+          ci
+        )),
+        group.length < columns && Array.from({ length: columns - group.length }).map((_, ei) => /* @__PURE__ */ jsx("td", { style: { width: colWidth } }, `empty-${ei}`))
+      ] }, gi)) })
     }
   );
 }
@@ -231,7 +226,7 @@ function CostTable({ rows, header, accentColor = BRAND }) {
               style: {
                 padding: "10px 12px",
                 fontSize: row.isTotal ? 15 : 13,
-                fontWeight: row.isTotal ? 700 : 500,
+                fontWeight: row.isTotal ? 700 : 400,
                 textAlign: "right",
                 color: DARK,
                 borderBottom: row.isTotal ? `2px solid ${DARK}` : `1px solid #f3f4f6`,
@@ -245,59 +240,6 @@ function CostTable({ rows, header, accentColor = BRAND }) {
     )
   ] });
 }
-function AnnualEstimateBox({ items }) {
-  return /* @__PURE__ */ jsx(
-    "div",
-    {
-      style: {
-        display: "flex",
-        gap: 16,
-        marginBottom: 28
-      },
-      children: items.map((item, i) => /* @__PURE__ */ jsxs(
-        "div",
-        {
-          style: {
-            flex: 1,
-            padding: "16px 20px",
-            background: i === 0 ? BRAND_BG : LIGHT_GRAY,
-            borderRadius: 8,
-            border: `1px solid ${i === 0 ? "#bfdbfe" : BORDER}`
-          },
-          children: [
-            /* @__PURE__ */ jsx(
-              "div",
-              {
-                style: {
-                  fontSize: 10,
-                  textTransform: "uppercase",
-                  letterSpacing: 1.5,
-                  color: i === 0 ? BRAND_DARK : GRAY,
-                  fontWeight: 600,
-                  marginBottom: 6
-                },
-                children: item.label
-              }
-            ),
-            /* @__PURE__ */ jsx(
-              "div",
-              {
-                style: {
-                  fontSize: 22,
-                  fontWeight: 700,
-                  color: i === 0 ? BRAND_DARK : DARK,
-                  letterSpacing: -0.5
-                },
-                children: item.amount
-              }
-            )
-          ]
-        },
-        i
-      ))
-    }
-  );
-}
 function DocFooter({ refNumber }) {
   return /* @__PURE__ */ jsxs(
     "div",
@@ -309,24 +251,13 @@ function DocFooter({ refNumber }) {
       },
       children: [
         /* @__PURE__ */ jsx("div", { style: { fontSize: 11, color: "#9ca3af", lineHeight: 1.6, marginBottom: 12 }, children: "This quote is valid for 30 days from the date of issue. Rates are based on current Nepal Social Security Fund (SSF) regulations under the Social Security Act 2018. Actual costs may vary based on regulatory changes. This quote does not constitute a binding contract." }),
-        /* @__PURE__ */ jsxs(
-          "div",
-          {
-            style: {
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 11,
-              color: "#9ca3af"
-            },
-            children: [
-              /* @__PURE__ */ jsx("div", { children: "Talyn Global LLC (DBA Talyn LLC) \xB7 Tyler, TX 75701" }),
-              refNumber && /* @__PURE__ */ jsxs("div", { children: [
-                "Ref: ",
-                refNumber
-              ] })
-            ]
-          }
-        )
+        /* @__PURE__ */ jsx("table", { style: { width: "100%", borderCollapse: "collapse" }, children: /* @__PURE__ */ jsx("tbody", { children: /* @__PURE__ */ jsxs("tr", { children: [
+          /* @__PURE__ */ jsx("td", { style: { fontSize: 11, color: "#9ca3af", textAlign: "left" }, children: "Talyn Global LLC (DBA Talyn LLC) \xB7 Tyler, TX 75701" }),
+          refNumber && /* @__PURE__ */ jsxs("td", { style: { fontSize: 11, color: "#9ca3af", textAlign: "right" }, children: [
+            "Ref: ",
+            refNumber
+          ] })
+        ] }) }) })
       ]
     }
   );
@@ -345,7 +276,7 @@ function QuoteDocument({
 }) {
   const cur = costs.currency || "NPR";
   const statusBadge = status === "accepted" ? { text: "Accepted", bg: "#059669", color: "#fff" } : status === "expired" ? { text: "Expired", bg: "#dc2626", color: "#fff" } : { text: "Draft", bg: "#f3f4f6", color: GRAY };
-  return /* @__PURE__ */ jsxs("div", { style: { ...baseFont, maxWidth: 680, margin: "0 auto", padding: 40 }, children: [
+  return /* @__PURE__ */ jsxs("div", { style: { ...baseFont, maxWidth: 680, margin: "0 auto", padding: "24px 32px" }, children: [
     /* @__PURE__ */ jsx(
       DocHeader,
       {
@@ -356,56 +287,46 @@ function QuoteDocument({
         validUntil
       }
     ),
-    /* @__PURE__ */ jsxs(
-      "div",
-      {
-        style: {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 24
-        },
-        children: [
-          /* @__PURE__ */ jsxs("div", { children: [
-            /* @__PURE__ */ jsx(
-              "div",
-              {
-                style: {
-                  fontSize: 10,
-                  textTransform: "uppercase",
-                  letterSpacing: 1.5,
-                  color: "#9ca3af",
-                  fontWeight: 600,
-                  marginBottom: 4
-                },
-                children: "Prepared for"
-              }
-            ),
-            /* @__PURE__ */ jsx("div", { style: { fontSize: 18, fontWeight: 600, color: DARK }, children: orgName }),
-            /* @__PURE__ */ jsxs("div", { style: { fontSize: 12, color: GRAY, marginTop: 2 }, children: [
-              "Generated by: ",
-              generatedBy
-            ] })
-          ] }),
-          /* @__PURE__ */ jsx(
-            "div",
-            {
-              style: {
-                padding: "6px 16px",
-                background: statusBadge.bg,
-                color: statusBadge.color,
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: 1
-              },
-              children: statusBadge.text
-            }
-          )
-        ]
-      }
-    ),
+    /* @__PURE__ */ jsx("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 24 }, children: /* @__PURE__ */ jsx("tbody", { children: /* @__PURE__ */ jsxs("tr", { children: [
+      /* @__PURE__ */ jsxs("td", { style: { verticalAlign: "middle" }, children: [
+        /* @__PURE__ */ jsx(
+          "div",
+          {
+            style: {
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: 1.5,
+              color: "#9ca3af",
+              fontWeight: 600,
+              marginBottom: 4
+            },
+            children: "Prepared for"
+          }
+        ),
+        /* @__PURE__ */ jsx("div", { style: { fontSize: 18, fontWeight: 600, color: DARK }, children: orgName }),
+        /* @__PURE__ */ jsxs("div", { style: { fontSize: 12, color: GRAY, marginTop: 2 }, children: [
+          "Generated by: ",
+          generatedBy
+        ] })
+      ] }),
+      /* @__PURE__ */ jsx("td", { style: { textAlign: "right", verticalAlign: "middle" }, children: /* @__PURE__ */ jsx(
+        "div",
+        {
+          style: {
+            display: "inline-block",
+            padding: "6px 16px",
+            background: statusBadge.bg,
+            color: statusBadge.color,
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: 1
+          },
+          children: statusBadge.text
+        }
+      ) })
+    ] }) }) }),
     /* @__PURE__ */ jsx("hr", { style: { border: "none", borderTop: `1px solid ${BORDER}`, margin: "0 0 24px" } }),
     /* @__PURE__ */ jsx(
       "div",
@@ -443,20 +364,31 @@ function QuoteDocument({
         rows: [
           {
             label: "Employee gross salary",
-            amount: `${cur} ${formatNPR(costs.monthlyGross).replace("\u0930\u0942", "")}`
+            amount: `${cur} ${formatNPR(costs.monthlyGross)}`
           },
           {
             label: "Employer SSF contribution",
-            detail: `(${formatRate(costs.employerSsfRate)})`,
-            amount: `${cur} ${formatNPR(costs.employerSsf).replace("\u0930\u0942", "")}`
+            detail: `(${formatRate(costs.employerSsfRate)} of ${costs.basicSalaryRatio ? (costs.basicSalaryRatio * 100).toFixed(0) + "% basic" : "60% basic"})`,
+            amount: `${cur} ${formatNPR(costs.employerSsf)}`
           },
+          ...costs.severance ? [{
+            label: "Severance accrual",
+            detail: "(basic salary / 12)",
+            amount: `${cur} ${formatNPR(costs.severance)}`
+          }] : [],
           {
-            label: "Subtotal (local currency)",
-            amount: `${cur} ${formatNPR(costs.subtotalLocal).replace("\u0930\u0942", "")}`,
+            label: "Total monthly company cost",
+            amount: `${cur} ${formatNPR(costs.subtotalLocal)}`,
             isTotal: true
           },
+          ...costs.monthlyCostUsd ? [{
+            label: "Total monthly company cost (USD)",
+            amount: `USD $${formatMoney(costs.monthlyCostUsd)}`,
+            isTotal: true
+          }] : [],
           {
             label: "Talyn platform fee",
+            detail: "(included in USD total above)",
             amount: `USD $${formatMoney(costs.platformFee)} /mo`
           }
         ]
@@ -470,28 +402,61 @@ function QuoteDocument({
         rows: [
           {
             label: "Employee SSF deduction",
-            detail: `(${formatRate(costs.employeeSsfRate)})`,
-            amount: `${cur} ${formatNPR(costs.employeeSsf).replace("\u0930\u0942", "")}`
+            detail: `(${formatRate(costs.employeeSsfRate)} of ${costs.basicSalaryRatio ? (costs.basicSalaryRatio * 100).toFixed(0) + "% basic" : "60% basic"})`,
+            amount: `${cur} ${formatNPR(costs.employeeSsf)}`
           },
           {
             label: "Estimated net salary (before income tax)",
-            amount: `${cur} ${formatNPR(costs.estimatedNetSalary).replace("\u0930\u0942", "")}`
+            amount: `${cur} ${formatNPR(costs.estimatedNetSalary)}`
           }
         ]
       }
     ),
     /* @__PURE__ */ jsx(
-      AnnualEstimateBox,
+      CostTable,
       {
-        items: [
+        header: "Annual cost estimate",
+        rows: [
           {
-            label: "Annual estimate (local)",
-            amount: `${cur} ${formatNPR(costs.annualCostLocal).replace("\u0930\u0942", "")}`
+            label: "Annual salary + SSF + severance",
+            amount: `${cur} ${formatNPR(costs.annualCostLocal)}`
           },
+          ...costs.thirteenthMonth ? [{
+            label: "13th month salary",
+            amount: `${cur} ${formatNPR(costs.thirteenthMonth)}`
+          }] : [],
           {
             label: "Annual platform fee",
             amount: `USD $${formatMoney(costs.annualPlatformFee)}`
-          }
+          },
+          ...costs.documentHandlingFee ? [{
+            label: "Document handling fee",
+            detail: "(annual)",
+            amount: `USD $${formatMoney(costs.documentHandlingFee)}`
+          }] : [],
+          ...costs.totalAnnualCostUsd ? [{
+            label: "Total annual company cost",
+            amount: `USD $${formatMoney(costs.totalAnnualCostUsd)}`,
+            isTotal: true
+          }] : []
+        ]
+      }
+    ),
+    costs.exchangeRate && /* @__PURE__ */ jsxs(
+      "div",
+      {
+        style: {
+          fontSize: 11,
+          color: "#9ca3af",
+          marginBottom: 16,
+          padding: "8px 12px",
+          background: LIGHT_GRAY,
+          borderRadius: 6
+        },
+        children: [
+          "Exchange rate: 1 NPR = ",
+          Number(costs.exchangeRate).toFixed(6),
+          " USD. USD amounts are estimates and may vary with exchange rate fluctuations."
         ]
       }
     ),
@@ -520,15 +485,23 @@ function QuotePreview() {
       costs: {
         currency: "NPR",
         monthlyGross: 65e3,
-        employerSsf: 13e3,
+        basicSalaryRatio: 0.6,
+        employerSsf: 7800,
         employerSsfRate: "0.20",
-        subtotalLocal: 78e3,
-        platformFee: 599,
-        employeeSsf: 7150,
+        severance: 3250,
+        subtotalLocal: 76050,
+        platformFee: 499,
+        employeeSsf: 4290,
         employeeSsfRate: "0.11",
-        estimatedNetSalary: 57850,
-        annualCostLocal: 936e3,
-        annualPlatformFee: 7188
+        estimatedNetSalary: 60710,
+        exchangeRate: 74e-4,
+        monthlyGrossUsd: 481,
+        monthlyCostUsd: 1061.77,
+        totalAnnualCostUsd: 13302.24,
+        annualCostLocal: 912600,
+        annualPlatformFee: 5988,
+        thirteenthMonth: 65e3,
+        documentHandlingFee: 80
       },
       status: "draft"
     }

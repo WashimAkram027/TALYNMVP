@@ -744,6 +744,7 @@ function EmployerEditModal({ item, invoice, liveExchangeRate, onClose, onSave })
 
   // Config from invoice snapshot
   const config = invoice?.config_snapshot || {}
+  const basicSalaryRatio = parseFloat(config.basic_salary_ratio ?? 0.6)
   const employerSsfRate = parseFloat(config.employer_ssf_rate) || 0.20
   const employeeSsfRate = parseFloat(config.employee_ssf_rate) || 0.11
   const snapshotRate = parseFloat(config.exchange_rate) || parseFloat(invoice?.exchange_rate) || 0
@@ -790,9 +791,11 @@ function EmployerEditModal({ item, invoice, liveExchangeRate, onClose, onSave })
     monthlyGrossLocal = dailyRate * form.payable_days
   }
 
-  const employerSsfLocal = Math.round(monthlyGrossLocal * employerSsfRate)
-  const employeeSsfLocal = Math.round(monthlyGrossLocal * employeeSsfRate)
-  const totalCostLocal = monthlyGrossLocal + employerSsfLocal
+  const basicSalaryLocal = Math.round(monthlyGrossLocal * basicSalaryRatio)
+  const employerSsfLocal = Math.round(basicSalaryLocal * employerSsfRate)
+  const employeeSsfLocal = Math.round(basicSalaryLocal * employeeSsfRate)
+  const severanceLocal = Math.round(basicSalaryLocal / periodsPerYear)
+  const totalCostLocal = monthlyGrossLocal + employerSsfLocal + severanceLocal
   const totalCostNpr = totalCostLocal / 100
   const totalCostUsd = totalCostNpr * exchangeRate
   const costUsdCents = Math.round(totalCostUsd * 100)
@@ -907,12 +910,16 @@ function EmployerEditModal({ item, invoice, liveExchangeRate, onClose, onSave })
                 </div>
               )}
               <div className="flex justify-between text-sm">
-                <span className="text-text-secondary">Employer SSF ({(employerSsfRate * 100).toFixed(0)}%)</span>
+                <span className="text-text-secondary">Employer SSF ({(employerSsfRate * 100).toFixed(0)}% of {(basicSalaryRatio * 100).toFixed(0)}% basic)</span>
                 <span className="font-medium">NPR {(employerSsfLocal / 100).toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-text-secondary">Employee SSF ({(employeeSsfRate * 100).toFixed(0)}%)</span>
+                <span className="text-text-secondary">Employee SSF ({(employeeSsfRate * 100).toFixed(0)}% of {(basicSalaryRatio * 100).toFixed(0)}% basic)</span>
                 <span className="font-medium">NPR {(employeeSsfLocal / 100).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Severance accrual (basic / {periodsPerYear})</span>
+                <span className="font-medium">NPR {(severanceLocal / 100).toLocaleString()}</span>
               </div>
               <div className="border-t border-gray-200 my-1" />
               <div className="flex justify-between text-sm">

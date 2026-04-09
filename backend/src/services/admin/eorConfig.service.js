@@ -56,6 +56,10 @@ export const adminEorConfigService = {
         employee_ssf_rate: configData.employeeSsfRate || 0,
         platform_fee_amount: configData.platformFeeAmount || 0,
         platform_fee_currency: configData.platformFeeCurrency || 'USD',
+        basic_salary_ratio: configData.basicSalaryRatio ?? 0.6,
+        document_handling_fee: configData.documentHandlingFee ?? 8000,
+        document_handling_fee_currency: configData.documentHandlingFeeCurrency || 'USD',
+        thirteenth_month_included: configData.thirteenthMonthIncluded !== false,
         periods_per_year: configData.periodsPerYear || 12,
         is_active: configData.isActive !== false,
         effective_from: configData.effectiveFrom || null,
@@ -101,6 +105,22 @@ export const adminEorConfigService = {
     if (configData.isActive !== undefined) updates.is_active = configData.isActive
     if (configData.effectiveFrom !== undefined) updates.effective_from = configData.effectiveFrom
     if (configData.effectiveTo !== undefined) updates.effective_to = configData.effectiveTo
+    if (configData.basicSalaryRatio !== undefined) {
+      const ratio = parseFloat(configData.basicSalaryRatio)
+      if (!isFinite(ratio) || ratio < 0 || ratio > 1) {
+        throw new BadRequestError('Basic salary ratio must be between 0 and 1')
+      }
+      updates.basic_salary_ratio = ratio
+    }
+    if (configData.documentHandlingFee !== undefined) {
+      const fee = parseInt(configData.documentHandlingFee, 10)
+      if (!isFinite(fee) || fee < 0) {
+        throw new BadRequestError('Document handling fee must be >= 0')
+      }
+      updates.document_handling_fee = fee
+    }
+    if (configData.documentHandlingFeeCurrency !== undefined) updates.document_handling_fee_currency = configData.documentHandlingFeeCurrency
+    if (configData.thirteenthMonthIncluded !== undefined) updates.thirteenth_month_included = configData.thirteenthMonthIncluded
 
     // Fetch previous state for audit trail
     const existing = updates.exchange_rate !== undefined ? await this.getById(id) : null
