@@ -1,8 +1,12 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+html {
+  font-size: 112.5%; /* 18px base = +2pt from default 16px */
+}
+
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'DM Sans', sans-serif;
 }
 
 /* Custom scrollbar for webkit browsers */
